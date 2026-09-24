@@ -1,0 +1,116 @@
+/*
+ * Wanderloop design tokens — Carto edition.
+ *
+ * The family core is fixed. Carto retunes only the accent hue:
+ * oklch(0.73 0.13 230) — map-water cyan, same L/C as every family accent.
+ *
+ * Declared with `@theme static` so every token is always emitted as a CSS
+ * variable (usable from scoped component styles via var(--…)) and also
+ * generates Tailwind utilities (bg-base, text-faint, border-line, …).
+ */
+@theme static {
+	/* ── family core ─────────────────────────────── */
+	--color-base: #08080a;
+	--color-surface: #0c0c10;
+	--color-map-ink: #0a0a0d;
+	--color-bar-track: #3a3a44;
+
+	--color-text: #e6e6ea;
+	--color-text-secondary: #9a9aa4;
+	--color-text-tertiary: #7a7a84;
+	--color-text-label: #6a6a74;
+	--color-text-faint: #54545e;
+	--color-text-dim: #45454e;
+	--color-text-ui: #c9c9d0;
+
+	--color-danger: #d06a6a;
+	--color-danger-line: rgba(208, 106, 106, 0.4);
+	--color-warn: #d0a24c;
+
+	/* hairlines & hover fills */
+	--color-line-faint: rgba(255, 255, 255, 0.05);
+	--color-line: rgba(255, 255, 255, 0.09);
+	--color-line-strong: rgba(255, 255, 255, 0.14);
+	--color-line-control: rgba(255, 255, 255, 0.18);
+	--color-lift: rgba(255, 255, 255, 0.03);
+
+	/* ── Carto accent (the one per-product variable) ── */
+	--color-accent: #36b6e9;
+	--color-accent-muted: #2b85aa;
+	--color-accent-tint: rgba(54, 182, 233, 0.1);
+	--color-accent-tint-faint: rgba(54, 182, 233, 0.045);
+
+	/* ── type ────────────────────────────────────── */
+	--font-mono: 'Spline Sans Mono', ui-monospace, monospace;
+	--font-sans: var(--font-mono);
+
+	--text-micro: 9px;
+	--text-meta: 10px;
+	--text-small: 11px;
+	--text-body: 12px;
+	--text-content: 13px;
+	--text-title: 14px;
+	--text-list: 16px;
+	--text-brand: 15px;
+	--text-screen: 23px;
+	--text-display: 44px;
+
+	--tracking-label: 0.16em;
+	--tracking-micro: 0.1em;
+	--tracking-title: 0.05em;
+
+	/* ── structure ───────────────────────────────── */
+	--radius-*: initial;
+	--shadow-*: initial;
+	--shadow-float: 0 16px 48px rgba(0, 0, 0, 0.7);
+
+	--spacing-gutter: 24px;
+	--spacing-gutter-mobile: 16px;
+	--container-content: 1120px;
+
+	/* ── motion ──────────────────────────────────── */
+	--ease-draw: cubic-bezier(0.16, 1, 0.3, 1);
+	--animate-rise-in: rise-in 0.5s ease both;
+	--animate-bar-draw: bar-draw 0.8s var(--ease-draw) both;
+	--animate-caret: caret 1s steps(1) infinite;
+	--animate-pulse-ring: pulse-ring 2s ease-out infinite;
+
+	@keyframes rise-in {
+		from {
+			opacity: 0;
+			transform: translateY(7px);
+		}
+		to {
+			opacity: 1;
+			transform: none;
+		}
+	}
+	@keyframes bar-draw {
+		from {
+			transform: scaleX(0);
+		}
+		to {
+			transform: scaleX(1);
+		}
+	}
+	@keyframes caret {
+		0%,
+		49% {
+			opacity: 1;
+		}
+		50%,
+		100% {
+			opacity: 0;
+		}
+	}
+	@keyframes pulse-ring {
+		0% {
+			transform: scale(0.5);
+			opacity: 0.8;
+		}
+		100% {
+			transform: scale(2.6);
+			opacity: 0;
+		}
+	}
+}
