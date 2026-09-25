@@ -7,6 +7,9 @@
 <script lang="ts">
 	import * as maplibregl from 'maplibre-gl';
 	import 'maplibre-gl/dist/maplibre-gl.css';
+	// maplibre looks for its worker next to its own module, which doesn't exist once it's bundled
+	// into an app chunk. Bundle the worker (it imports a shared chunk) and point maplibre at it.
+	import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 	import { onMount } from 'svelte';
 	import type { TileMeta, LngLatBounds } from '$lib/dem/store.svelte';
 	import {
@@ -105,6 +108,7 @@
 	}
 
 	onMount(() => {
+		maplibregl.setWorkerUrl(workerUrl);
 		const m = new maplibregl.Map({
 			container,
 			// OpenFreeMap: free vector basemap, no key.
