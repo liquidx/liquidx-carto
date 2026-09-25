@@ -26,3 +26,6 @@ test-results
 
 # Sample Data
 /sample/
+
+# Downloaded transit data
+/data/

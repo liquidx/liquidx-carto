@@ -14,7 +14,9 @@
 		"format": "prettier --write .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run && npm run test:e2e",
-		"test:e2e": "playwright install && playwright test"
+		"test:e2e": "playwright install && playwright test",
+		"odpt": "node --env-file-if-exists=.env scripts/odpt.ts",
+		"ekispert": "node --env-file-if-exists=.env scripts/ekispert.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
