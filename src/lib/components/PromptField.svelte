@@ -11,7 +11,7 @@
 		placeholder?: string;
 		hint?: string;
 		onsubmit?: (value: string) => void;
-	} & Omit<HTMLInputAttributes, 'value'>;
+	} & Omit<HTMLInputAttributes, 'value' | 'onsubmit'>;
 
 	let { value = $bindable(''), placeholder, hint, onsubmit, ...rest }: Props = $props();
 
