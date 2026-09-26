@@ -5,7 +5,7 @@
 	import ContourPreview from '$lib/components/ContourPreview.svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
 	import NumberField from '$lib/components/NumberField.svelte';
-	import PromptField from '$lib/components/PromptField.svelte';
+	import PlaceSearch from '$lib/components/PlaceSearch.svelte';
 	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -33,7 +33,7 @@
 		type Frame
 	} from '$lib/contour/mercator';
 	import { encodeBmp, encodeBmp1, encodeTiff, hexToRgb } from '$lib/contour/raster-encode';
-	import { searchPlaces, type Place } from '$lib/contour/geocode';
+	import type { Place } from '$lib/contour/geocode';
 	import { DEFAULT_STYLE, findStyle, STYLES } from '$lib/contour/styles';
 	import { BASEMAP_OPTIONS, type BasemapId } from '$lib/contour/basemaps';
 	import { findProvider, PROVIDERS, sampleApiGrid } from '$lib/contour/terrain-api';
@@ -139,32 +139,11 @@
 
 	// ── place search ────────────────────────────────────
 
-	let query = $state('');
-	let places = $state<Place[]>([]);
-	let searching = $state(false);
-	let searchError = $state('');
-
-	async function search(q: string) {
-		if (!q.trim() || searching) return;
-		searching = true;
-		searchError = '';
-		try {
-			places = await searchPlaces(q);
-			if (!places.length) searchError = 'no places found';
-		} catch (e) {
-			searchError = (e as Error).message;
-		} finally {
-			searching = false;
-		}
-	}
-
 	/** Centre the frame on a place, keeping its ground size, and bring it into view. */
 	async function goTo(place: Place) {
 		// Keep the ground width: mercator units shrink or grow with latitude.
 		const ground = frame ? frame.w * metresPerUnit(yToLat(frame.cy)) : 18_000;
 		frame = frameAt(place.lon, place.lat, ground);
-		places = [];
-		query = place.name;
 		await tick();
 		map?.showFrame();
 	}
@@ -465,25 +444,7 @@
 	<div class="body">
 		<div class="map-bar">
 			<div class="search">
-				<PromptField
-					placeholder="search places"
-					hint={searching ? 'searching…' : '⏎ find'}
-					bind:value={query}
-					onsubmit={search}
-				/>
-				{#if places.length}
-					<ul class="places">
-						{#each places as place, i (i)}
-							<li>
-								<button type="button" onclick={() => goTo(place)}>
-									<span class="place-name">{place.name}</span>
-									<span class="place-detail">{place.detail}</span>
-								</button>
-							</li>
-						{/each}
-					</ul>
-				{/if}
-				{#if searchError}<div class="error">{searchError}</div>{/if}
+				<PlaceSearch onselect={goTo} />
 			</div>
 			<div class="basemap">
 				<Segmented label="basemap" options={BASEMAP_OPTIONS} bind:value={basemap} />
@@ -754,45 +715,6 @@
 	.search {
 		flex: 1 1 320px;
 		max-width: 560px;
-		display: flex;
-		flex-direction: column;
-		gap: 10px;
-	}
-	.places {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: flex;
-		flex-direction: column;
-	}
-	.places button {
-		display: flex;
-		flex-direction: column;
-		align-items: flex-start;
-		gap: 2px;
-		width: 100%;
-		padding: 8px 14px;
-		font: inherit;
-		text-align: left;
-		background: none;
-		border: 0;
-		cursor: pointer;
-	}
-	.place-name {
-		font-size: var(--text-content);
-		color: var(--color-text);
-	}
-	.place-detail {
-		font-size: var(--text-meta);
-		color: var(--color-text-faint);
-	}
-	@media (hover: hover) {
-		.places button:hover {
-			background: var(--color-lift);
-		}
-		.places button:hover .place-name {
-			color: var(--color-accent);
-		}
 	}
 	.map {
 		height: 480px;

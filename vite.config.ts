@@ -9,7 +9,15 @@ export default defineConfig({
 		port: 12222
 	},
 	// maplibre-gl 6 loads its worker as a separate module; the dep optimizer breaks it.
-	optimizeDeps: { exclude: ['maplibre-gl'], include: ['fflate'] },
+	optimizeDeps: {
+		exclude: ['maplibre-gl'],
+		include: [
+			'fflate',
+			'three',
+			'three/addons/controls/OrbitControls.js',
+			'three/addons/exporters/GLTFExporter.js'
+		]
+	},
 	worker: { format: 'es' },
 	plugins: [
 		tailwindcss(),

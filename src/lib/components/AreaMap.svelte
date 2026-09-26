@@ -1,8 +1,9 @@
 <!--
 	MapLibre map for choosing an area. Shows a switchable basemap (dark OpenFreeMap with optional
 	global hillshade, or a raster street / topo / satellite map), hillshaded DEM tiles, and an
-	aspect-locked frame. While `drawing`, drag to draw
-	a new frame; otherwise drag inside the frame to move it.
+	aspect-locked frame. While `drawing`, drag to draw a new frame; otherwise drag inside the
+	frame to move it, or its edge to resize it. With `shape="circle"` the frame is a square and
+	the circle inscribed in it is shown instead: draw from the centre out, resize at the rim.
 -->
 <script lang="ts">
 	import * as maplibregl from 'maplibre-gl';
@@ -25,8 +26,9 @@
 
 	type Props = {
 		frame?: Frame | null;
-		/** Output width / height; the frame always has this aspect. */
-		aspect: number;
+		/** Output width / height; the frame always has this aspect. Ignored for circles. */
+		aspect?: number;
+		shape?: 'rect' | 'circle';
 		drawing?: boolean;
 		demTiles?: TileMeta[];
 		/** Show hillshade from global terrain tiles (for the API source, `terrain` basemap only). */
@@ -36,7 +38,8 @@
 
 	let {
 		frame = $bindable(null),
-		aspect,
+		aspect: rectAspect = 1,
+		shape = 'rect',
 		drawing = $bindable(false),
 		demTiles = [],
 		terrain = true,
@@ -44,6 +47,9 @@
 	}: Props = $props();
 
 	const ACCENT = '#36b6e9';
+
+	const circle = $derived(shape === 'circle');
+	const aspect = $derived(circle ? 1 : rectAspect);
 
 	let container: HTMLDivElement;
 	let map: maplibregl.Map | null = $state.raw(null);
@@ -93,6 +99,28 @@
 			[b.x0, b.y1],
 			[b.x0, b.y0]
 		].map(([x, y]) => [xToLon(x), yToLat(y)]);
+	/** The circle inscribed in a square box, closed. */
+	const circleRing = (b: MercatorBox, n = 128): [number, number][] => {
+		const cx = (b.x0 + b.x1) / 2;
+		const cy = (b.y0 + b.y1) / 2;
+		const r = (b.x1 - b.x0) / 2;
+		return Array.from({ length: n + 1 }, (_, i) => {
+			const t = (i / n) * Math.PI * 2;
+			return [xToLon(cx + r * Math.cos(t)), yToLat(cy + r * Math.sin(t))];
+		});
+	};
+	/** Grip positions: box corners, or the circle's compass points. */
+	const grips = (b: MercatorBox): [number, number][] => {
+		if (!circle) return ring(b).slice(0, 4);
+		const cx = (b.x0 + b.x1) / 2;
+		const cy = (b.y0 + b.y1) / 2;
+		return [
+			[cx, b.y0],
+			[b.x1, cy],
+			[cx, b.y1],
+			[b.x0, cy]
+		].map(([x, y]) => [xToLon(x), yToLat(y)]);
+	};
 
 	export function fitBounds(b: LngLatBounds) {
 		map?.fitBounds([b.west, b.south, b.east, b.north], { padding: 48, duration: 600 });
@@ -204,6 +232,7 @@
 
 		const inside = (p: { x: number; y: number }) => {
 			if (!frame) return false;
+			if (circle) return Math.hypot(p.x - frame.cx, p.y - frame.cy) <= frame.w / 2;
 			const b = frameBox(frame, aspect);
 			return p.x >= b.x0 && p.x <= b.x1 && p.y >= b.y0 && p.y <= b.y1;
 		};
@@ -212,9 +241,19 @@
 		const hitHandle = (pt: maplibregl.Point, touch: boolean): Handle => {
 			if (!frame) return '';
 			const b = frameBox(frame, aspect);
+			const tol = touch ? 14 : 6;
+			if (circle) {
+				const c = m.project([xToLon(frame.cx), yToLat(frame.cy)]);
+				const r = m.project([xToLon(b.x1), yToLat(frame.cy)]).x - c.x;
+				const dx = pt.x - c.x;
+				const dy = pt.y - c.y;
+				if (Math.abs(Math.hypot(dx, dy) - r) > tol) return '';
+				// The compass direction of the rim point, for the cursor.
+				const octant = Math.round(Math.atan2(dy, dx) / (Math.PI / 4));
+				return (['w', 'nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'] as const)[octant + 4];
+			}
 			const tl = m.project([xToLon(b.x0), yToLat(b.y0)]);
 			const br = m.project([xToLon(b.x1), yToLat(b.y1)]);
-			const tol = touch ? 14 : 6;
 			const inX = pt.x >= tl.x - tol && pt.x <= br.x + tol;
 			const inY = pt.y >= tl.y - tol && pt.y <= br.y + tol;
 			const v =
@@ -231,7 +270,11 @@
 			if (!frame) return;
 			const b = frameBox(frame, aspect);
 			const min = minWidth();
-			if (handle.length === 2) {
+			if (circle) {
+				// The centre stays put; the rim follows the pointer.
+				const w = Math.max(min, 2 * Math.hypot(p.x - frame.cx, p.y - frame.cy));
+				frame = { cx: frame.cx, cy: frame.cy, w };
+			} else if (handle.length === 2) {
 				// Corner: anchor is the opposite corner; grow towards the handle's direction.
 				const sx = handle.includes('e') ? 1 : -1;
 				const sy = handle.includes('s') ? 1 : -1;
@@ -285,6 +328,9 @@
 				frame = { cx: p.x + grab.dx, cy: p.y + grab.dy, w: frame.w };
 			} else if (mode === 'resize') {
 				resize(p);
+			} else if (mode === 'draw' && circle) {
+				const w = 2 * Math.hypot(p.x - anchor.x, p.y - anchor.y);
+				if (w > 0) frame = { cx: anchor.x, cy: anchor.y, w };
 			} else if (mode === 'draw') {
 				const dx = p.x - anchor.x;
 				const dy = p.y - anchor.y;
@@ -401,8 +447,8 @@
 			maskSrc.setData({ type: 'FeatureCollection', features: [] });
 			return;
 		}
-		const r = ring(b);
-		r.slice(0, 4).forEach((ll, k) => corners[k].setLngLat(ll).addTo(map!));
+		const r = circle ? circleRing(b) : ring(b);
+		grips(b).forEach((ll, k) => corners[k].setLngLat(ll).addTo(map!));
 		frameSrc.setData({
 			type: 'Feature',
 			properties: {},
