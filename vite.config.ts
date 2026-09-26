@@ -6,7 +6,7 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
 	server: {
-		port: 15555
+		port: 12222
 	},
 	// maplibre-gl 6 loads its worker as a separate module; the dep optimizer breaks it.
 	optimizeDeps: { exclude: ['maplibre-gl'], include: ['fflate'] },
