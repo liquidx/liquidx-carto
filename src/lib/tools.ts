@@ -15,12 +15,6 @@ export const tools: Tool[] = [
 		summary: 'trace contour lines from elevation data at any interval.'
 	},
 	{
-		slug: 'image-format-conversion',
-		title: 'Image Format Conversion',
-		date: '2026-09-25',
-		summary: 'convert map imagery and elevation tiles between formats, in the browser.'
-	},
-	{
 		slug: 'diorama',
 		title: 'Mountain Diorama',
 		date: '2026-09-25',
