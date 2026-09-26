@@ -21,10 +21,10 @@ export const tools: Tool[] = [
 		summary: 'convert map imagery and elevation tiles between formats, in the browser.'
 	},
 	{
-		slug: '3d-mountain-diorama',
-		title: '3D Mountain Diorama',
+		slug: 'diorama',
+		title: 'Mountain Diorama',
 		date: '2026-09-25',
-		summary: 'extrude terrain into a boxed 3d diorama for screen or print.'
+		summary: 'extrude terrain into a circular 3d diorama for screen or print.'
 	}
 ];
 
