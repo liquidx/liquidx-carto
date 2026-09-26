@@ -1,0 +1,54 @@
+/* MapLibre chrome, quieted to match the page. Applies inside any `.carto-map` container. */
+.carto-map {
+	background: var(--color-map-ink);
+}
+.carto-map .maplibregl-ctrl-group {
+	background: var(--color-surface);
+	border-radius: 0;
+	box-shadow: none;
+	border: 1px solid var(--color-line-strong);
+}
+.carto-map .maplibregl-ctrl-group button + button {
+	border-top: 1px solid var(--color-line);
+}
+.carto-map .maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+	filter: invert(0.8);
+}
+.carto-map .maplibregl-ctrl-scale {
+	background: rgba(8, 8, 10, 0.6);
+	color: var(--color-text-tertiary);
+	border-color: var(--color-text-faint);
+	font-family: var(--font-mono);
+	font-size: var(--text-micro);
+}
+.carto-map .maplibregl-ctrl-attrib {
+	background: rgba(8, 8, 10, 0.6);
+	color: var(--color-text-faint);
+	font-family: var(--font-mono);
+	font-size: var(--text-micro);
+}
+.carto-map .maplibregl-ctrl-attrib a {
+	color: var(--color-text-tertiary);
+}
+/* Popups: surface box, hairline, square, no tip. */
+.carto-map .maplibregl-popup-content {
+	background: var(--color-surface);
+	color: var(--color-text);
+	border: 1px solid var(--color-line-strong);
+	border-radius: 0;
+	box-shadow: var(--shadow-float);
+	padding: 14px 16px;
+	font-family: var(--font-mono);
+}
+.carto-map .maplibregl-popup-tip {
+	display: none;
+}
+.carto-map .maplibregl-popup-close-button {
+	color: var(--color-text-faint);
+	font-size: var(--text-title);
+	padding: 2px 8px;
+}
+.carto-map .maplibregl-popup-close-button:hover {
+	background: none;
+	color: var(--color-text);
+}

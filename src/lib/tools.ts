@@ -25,6 +25,12 @@ export const tools: Tool[] = [
 		title: 'Mountain Diorama',
 		date: '2026-09-25',
 		summary: 'extrude terrain into a circular 3d diorama for screen or print.'
+	},
+	{
+		slug: 'ev-jp',
+		title: 'EV Charging Japan',
+		date: '2026-09-26',
+		summary: 'fast-charger coverage and blackspots for touring japan by ev, starting with hokkaido.'
 	}
 ];
 

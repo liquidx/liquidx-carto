@@ -3,6 +3,7 @@
 	import AreaMap from '$lib/components/AreaMap.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import DioramaView from '$lib/components/DioramaView.svelte';
+	import DataCredits from '$lib/components/DataCredits.svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
 	import NumberField from '$lib/components/NumberField.svelte';
 	import PlaceSearch from '$lib/components/PlaceSearch.svelte';
@@ -12,7 +13,7 @@
 	import Slider from '$lib/components/Slider.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { DemStore } from '$lib/dem/store.svelte';
-	import { BASEMAP_OPTIONS, type BasemapId } from '$lib/contour/basemaps';
+	import { BASEMAP_OPTIONS, type BasemapId } from '$lib/map/basemaps';
 	import type { Place } from '$lib/contour/geocode';
 	import {
 		frameAt,
@@ -32,6 +33,8 @@
 		type MeshParams
 	} from '$lib/diorama/geometry';
 	import { gridSampler, type Sampler } from '$lib/diorama/sampler';
+
+	import { TERRAIN_TOOL_CREDITS } from '$lib/credits';
 
 	let { data } = $props();
 
@@ -464,6 +467,8 @@
 		</div>
 	</section>
 </div>
+
+<DataCredits credits={TERRAIN_TOOL_CREDITS} />
 
 <style>
 	.head {

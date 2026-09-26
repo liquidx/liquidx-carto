@@ -40,6 +40,12 @@
 	--color-accent-tint: rgba(54, 182, 233, 0.1);
 	--color-accent-tint-faint: rgba(54, 182, 233, 0.045);
 
+	/* ── data series ─────────────────────────────── */
+	/* Categorical pair for charts, validated for CVD separation on --color-base.
+	   Use in this order; never as text. */
+	--color-series-1: #2b9fd0;
+	--color-series-2: #cc7550;
+
 	/* ── type ────────────────────────────────────── */
 	--font-mono: 'Spline Sans Mono', ui-monospace, monospace;
 	--font-sans: var(--font-mono);

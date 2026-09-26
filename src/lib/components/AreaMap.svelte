@@ -7,10 +7,6 @@
 -->
 <script lang="ts">
 	import * as maplibregl from 'maplibre-gl';
-	import 'maplibre-gl/dist/maplibre-gl.css';
-	// maplibre looks for its worker next to its own module, which doesn't exist once it's bundled
-	// into an app chunk. Bundle the worker (it imports a shared chunk) and point maplibre at it.
-	import workerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url';
 	import { onMount } from 'svelte';
 	import type { TileMeta, LngLatBounds } from '$lib/dem/store.svelte';
 	import {
@@ -22,7 +18,8 @@
 		type Frame,
 		type MercatorBox
 	} from '$lib/contour/mercator';
-	import { RASTER_BASEMAPS, type BasemapId } from '$lib/contour/basemaps';
+	import { installBasemaps, showBasemap, type BasemapId, type Basemaps } from '$lib/map/basemaps';
+	import { createMap } from '$lib/map/create';
 
 	type Props = {
 		frame?: Frame | null;
@@ -54,8 +51,7 @@
 	let container: HTMLDivElement;
 	let map: maplibregl.Map | null = $state.raw(null);
 	let ready = $state(false);
-	/** Layers of the OpenFreeMap style itself, captured before ours are added. */
-	let styleLayers: { id: string; type: string }[] = [];
+	let basemaps: Basemaps | undefined;
 	// Square grips on the frame corners. Purely visual: pointer events go to the map, which
 	// hit-tests edges and corners itself.
 	const corners = Array.from({ length: 4 }, () => {
@@ -78,17 +74,6 @@
 		nw: 'nwse-resize',
 		se: 'nwse-resize'
 	};
-
-	type PaintProperty = Parameters<maplibregl.Map['setPaintProperty']>[1];
-	/** Paint overrides for the OpenFreeMap dark style. */
-	const BASE_PAINT: [layer: string, prop: PaintProperty, value: string][] = [
-		['background', 'background-color', '#27272c'],
-		['water', 'fill-color', '#18222b'],
-		['waterway', 'line-color', '#18222b'],
-		['landcover_wood', 'fill-color', '#2f2f34'],
-		['landuse_park', 'fill-color', '#2f2f34'],
-		['building', 'fill-color', '#202024']
-	];
 
 	const toMerc = (ll: maplibregl.LngLat) => ({ x: lonToX(ll.lng), y: latToY(ll.lat) });
 	const ring = (b: MercatorBox): [number, number][] =>
@@ -136,74 +121,10 @@
 	}
 
 	onMount(() => {
-		maplibregl.setWorkerUrl(workerUrl);
-		const m = new maplibregl.Map({
-			container,
-			// OpenFreeMap: free vector basemap, no key.
-			style: 'https://tiles.openfreemap.org/styles/dark',
-			center: [138.7274, 35.3606],
-			zoom: 10,
-			attributionControl: { compact: true }
-		});
-		m.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-		m.addControl(new maplibregl.ScaleControl({ unit: 'metric' }), 'bottom-left');
+		const m = createMap(container, { center: [138.7274, 35.3606], zoom: 10 });
 
 		m.on('load', () => {
-			// The stock dark style is near-black; lift it so terrain shading reads clearly.
-			for (const [id, prop, value] of BASE_PAINT)
-				if (m.getLayer(id)) m.setPaintProperty(id, prop, value);
-			// Light labels with a dark halo stay legible over the brighter hillshade.
-			for (const l of m.getStyle().layers) {
-				if (l.type !== 'symbol' || !l.layout?.['text-field']) continue;
-				m.setPaintProperty(l.id, 'text-color', '#c9c9d0');
-				m.setPaintProperty(l.id, 'text-halo-color', 'rgba(8, 8, 10, 0.85)');
-				m.setPaintProperty(l.id, 'text-halo-width', 1.2);
-			}
-			styleLayers = m.getStyle().layers.map((l) => ({ id: l.id, type: l.type }));
-			const firstSymbol = styleLayers.find((l) => l.type === 'symbol')?.id;
-			// Raster basemaps sit over the vector fills but under its labels; only one is shown.
-			for (const b of RASTER_BASEMAPS) {
-				m.addSource(`base-${b.id}`, {
-					type: 'raster',
-					tiles: b.tiles,
-					tileSize: b.tileSize,
-					maxzoom: b.maxzoom,
-					attribution: b.attribution
-				});
-				m.addLayer(
-					{
-						id: `base-${b.id}`,
-						type: 'raster',
-						source: `base-${b.id}`,
-						layout: { visibility: 'none' }
-					},
-					firstSymbol
-				);
-			}
-			// Global hillshade from terrain tiles, under the basemap labels.
-			m.addSource('dem', {
-				type: 'raster-dem',
-				tiles: ['https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png'],
-				encoding: 'terrarium',
-				tileSize: 256,
-				maxzoom: 15,
-				attribution: 'Terrain Tiles · Mapzen'
-			});
-			m.addLayer(
-				{
-					id: 'hillshade',
-					type: 'hillshade',
-					source: 'dem',
-					layout: { visibility: terrain ? 'visible' : 'none' },
-					paint: {
-						'hillshade-exaggeration': 0.8,
-						'hillshade-shadow-color': '#050506',
-						'hillshade-highlight-color': '#f2f2f5',
-						'hillshade-accent-color': '#000000'
-					}
-				},
-				firstSymbol
-			);
+			basemaps = installBasemaps(m);
 			const empty = { type: 'FeatureCollection' as const, features: [] };
 			m.addSource('frame', { type: 'geojson', data: empty });
 			m.addSource('mask', { type: 'geojson', data: empty });
@@ -358,7 +279,6 @@
 		m.getCanvas().addEventListener('mouseleave', end);
 
 		map = m;
-		if (import.meta.env.DEV) (window as unknown as { __map: maplibregl.Map }).__map = m;
 		return () => {
 			m.remove();
 			map = null;
@@ -373,20 +293,8 @@
 	});
 
 	$effect(() => {
-		if (!map || !ready) return;
-		const m = map;
-		const vis = (on: boolean) => (on ? 'visible' : 'none');
-		const raster = RASTER_BASEMAPS.find((b) => b.id === basemap);
-		for (const b of RASTER_BASEMAPS)
-			m.setLayoutProperty(`base-${b.id}`, 'visibility', vis(b === raster));
-		// A raster basemap replaces the vector style, except labels where the raster has none.
-		for (const l of styleLayers)
-			m.setLayoutProperty(
-				l.id,
-				'visibility',
-				vis(!raster || (raster.labels && l.type === 'symbol'))
-			);
-		m.setLayoutProperty('hillshade', 'visibility', vis(terrain && !raster));
+		if (!map || !ready || !basemaps) return;
+		showBasemap(map, basemaps, basemap, terrain);
 	});
 
 	// Hillshaded DEM tiles as image sources, below the mask.
@@ -474,47 +382,17 @@
 	});
 </script>
 
-<div class="map" bind:this={container}></div>
+<div class="map carto-map" bind:this={container}></div>
 
 <style>
 	.map {
 		width: 100%;
 		height: 100%;
-		background: var(--color-map-ink);
 	}
 	.map :global(.frame-grip) {
 		width: 8px;
 		height: 8px;
 		background: var(--color-accent);
 		pointer-events: none;
-	}
-	/* Quiet the MapLibre chrome to match the page. */
-	.map :global(.maplibregl-ctrl-group) {
-		background: var(--color-surface);
-		border-radius: 0;
-		box-shadow: none;
-		border: 1px solid var(--color-line-strong);
-	}
-	.map :global(.maplibregl-ctrl-group button + button) {
-		border-top: 1px solid var(--color-line);
-	}
-	.map :global(.maplibregl-ctrl-group button .maplibregl-ctrl-icon) {
-		filter: invert(0.8);
-	}
-	.map :global(.maplibregl-ctrl-scale) {
-		background: rgba(8, 8, 10, 0.6);
-		color: var(--color-text-tertiary);
-		border-color: var(--color-text-faint);
-		font-family: var(--font-mono);
-		font-size: var(--text-micro);
-	}
-	.map :global(.maplibregl-ctrl-attrib) {
-		background: rgba(8, 8, 10, 0.6);
-		color: var(--color-text-faint);
-		font-family: var(--font-mono);
-		font-size: var(--text-micro);
-	}
-	.map :global(.maplibregl-ctrl-attrib a) {
-		color: var(--color-text-tertiary);
 	}
 </style>

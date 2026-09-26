@@ -3,6 +3,7 @@
 	import AreaMap from '$lib/components/AreaMap.svelte';
 	import Button from '$lib/components/Button.svelte';
 	import ContourPreview from '$lib/components/ContourPreview.svelte';
+	import DataCredits from '$lib/components/DataCredits.svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
 	import NumberField from '$lib/components/NumberField.svelte';
 	import PlaceSearch from '$lib/components/PlaceSearch.svelte';
@@ -35,10 +36,12 @@
 	import { encodeBmp, encodeBmp1, encodeTiff, hexToRgb } from '$lib/contour/raster-encode';
 	import type { Place } from '$lib/contour/geocode';
 	import { DEFAULT_STYLE, findStyle, STYLES } from '$lib/contour/styles';
-	import { BASEMAP_OPTIONS, type BasemapId } from '$lib/contour/basemaps';
+	import { BASEMAP_OPTIONS, type BasemapId } from '$lib/map/basemaps';
 	import { findProvider, PROVIDERS, sampleApiGrid } from '$lib/contour/terrain-api';
 	import { ContourTracer } from '$lib/contour/tracer';
 	import type { ContourPath } from '$lib/contour/worker';
+
+	import { TERRAIN_TOOL_CREDITS } from '$lib/credits';
 
 	let { data } = $props();
 
@@ -625,6 +628,8 @@
 		</div>
 	</div>
 </section>
+
+<DataCredits credits={TERRAIN_TOOL_CREDITS} />
 
 <style>
 	.head {

@@ -45,6 +45,8 @@
 		['text/secondary', '--color-text-secondary', 'body'],
 		['text/tertiary', '--color-text-tertiary', 'secondary meta'],
 		['text/faint', '--color-text-faint', 'dates, labels'],
+		['series-1', '--color-series-1', 'chart series, first'],
+		['series-2', '--color-series-2', 'chart series, second'],
 		['warn', '--color-warn', 'pending, caution'],
 		['danger', '--color-danger', 'destructive']
 	];
