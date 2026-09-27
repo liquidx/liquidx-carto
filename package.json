@@ -17,7 +17,8 @@
 		"test:e2e": "playwright install && playwright test",
 		"odpt": "node --env-file-if-exists=.env tools/odpt.ts",
 		"ekispert": "node --env-file-if-exists=.env tools/ekispert.ts",
-		"ev-jp": "node tools/ev-jp.ts"
+		"ev-jp": "node tools/ev-jp.ts",
+		"japan-train-lines": "node tools/japan-train-lines.ts"
 	},
 	"devDependencies": {
 		"@eslint/js": "^10.0.1",
@@ -34,6 +35,7 @@
 		"eslint-config-prettier": "^10.1.8",
 		"eslint-plugin-svelte": "^3.19.0",
 		"globals": "^17.6.0",
+		"open-data-jp-prefectures-geojson": "^1.1.0",
 		"playwright": "^1.60.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
@@ -49,6 +51,7 @@
 	},
 	"dependencies": {
 		"@liquidx/diorama": "workspace:*",
+		"@lucide/svelte": "^1.48.0",
 		"fflate": "^0.8.3",
 		"maplibre-gl": "^6.11.1",
 		"three": "^0.186.0"

@@ -9,22 +9,35 @@ export type Tool = {
 /** Every tool/experiment listed on the index, in display order. */
 export const tools: Tool[] = [
 	{
-		slug: 'contour-maps',
-		title: 'Contour Maps',
-		date: '2026-09-25',
-		summary: 'trace contour lines from elevation data at any interval.'
-	},
-	{
 		slug: 'diorama',
 		title: 'Mountain Diorama',
 		date: '2026-09-25',
 		summary: 'extrude terrain into a circular 3d diorama for screen or print.'
 	},
 	{
+		slug: 'contour-maps',
+		title: 'Contour Maps',
+		date: '2026-09-21',
+		summary: 'trace contour lines from elevation data at any interval.'
+	},
+	{
 		slug: 'ev-jp',
 		title: 'EV Charging Japan',
-		date: '2026-09-26',
+		date: '2026-08-30',
 		summary: 'fast-charger coverage and blackspots for touring japan by ev, starting with hokkaido.'
+	},
+	{
+		slug: 'japan-train-lines-3d',
+		title: 'Japan Train Lines 3D',
+		date: '2026-07-05',
+		summary: 'tokyo rail network in 3d with approximate tunnel depths and a simulated timetable.'
+	},
+	{
+		slug: 'japan-train-lines-flat',
+		title: 'Japan Train Lines',
+		date: '2026-05-21',
+		summary:
+			'every railway line in japan, by region and operator, as a map or a straightened schematic.'
 	}
 ];
 

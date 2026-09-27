@@ -34,6 +34,13 @@ export default defineConfig(
 		}
 	},
 	{
+		// Ported untyped JS from liquidx-japan-train-lines opts out of type checking.
+		files: ['src/lib/train-lines/**'],
+		rules: {
+			'@typescript-eslint/ban-ts-comment': ['error', { 'ts-nocheck': 'allow-with-description' }]
+		}
+	},
+	{
 		// Override or add rule settings here, such as:
 		// 'svelte/button-has-type': 'error'
 		rules: {}

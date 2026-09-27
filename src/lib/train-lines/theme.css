@@ -1,0 +1,135 @@
+/*
+ * Japan Train Lines theme.
+ *
+ * The flat and 3d maps carry their own dark/light theme, applied by a
+ * `.theme-dark` / `.theme-light` class on their root. Variables are prefixed
+ * `--tl-` (and utilities `*-tl-*`) so they never shadow the carto tokens.
+ * The dark theme is carto's palette; the light theme is the original.
+ */
+
+.theme-dark {
+	color-scheme: dark;
+	--tl-app-bg: var(--color-base);
+	--tl-header-bg: rgb(12 12 16 / 0.85);
+	--tl-map-bg: var(--color-map-ink);
+	--tl-panel-bg: var(--color-surface);
+	--tl-panel-muted: rgb(12 12 16 / 0.4);
+	--tl-panel-strong: rgb(12 12 16 / 0.9);
+	--tl-surface: rgb(8 8 10 / 0.75);
+	--tl-surface-soft: rgb(255 255 255 / 0.04);
+	--tl-surface-hover: rgb(255 255 255 / 0.06);
+	--tl-border: var(--color-line);
+	--tl-border-soft: var(--color-line-faint);
+	--tl-text-primary: var(--color-text);
+	--tl-text-secondary: var(--color-text-secondary);
+	--tl-text-muted: var(--color-text-tertiary);
+	--tl-text-faint: var(--color-text-faint);
+	--tl-accent-primary: var(--color-accent);
+	--tl-accent-primary-soft: var(--color-accent-tint);
+	--tl-accent-primary-border: rgb(54 182 233 / 0.28);
+	--tl-accent-secondary: var(--color-accent);
+	--tl-accent-secondary-soft: var(--color-accent-tint);
+	--tl-accent-secondary-border: rgb(54 182 233 / 0.25);
+	--tl-accent-tertiary: var(--color-accent-muted);
+	--tl-switch-off: var(--color-bar-track);
+	--tl-switch-knob: var(--color-text);
+	--tl-map-grid: rgb(255 255 255 / 0.02);
+	--tl-map-land-fill: #17171c;
+	--tl-map-land-stroke: #2a2a31;
+	--tl-map-line-mono: #888888;
+	--tl-map-station-mono: var(--color-text);
+	--tl-shadow-panel: var(--shadow-float);
+}
+
+.theme-light {
+	color-scheme: light;
+	--tl-app-bg: #eef3f7;
+	--tl-header-bg: rgb(255 255 255 / 0.88);
+	--tl-map-bg: #e9eef3;
+	--tl-panel-bg: #f8fafc;
+	--tl-panel-muted: rgb(255 255 255 / 0.56);
+	--tl-panel-strong: rgb(255 255 255 / 0.92);
+	--tl-surface: rgb(255 255 255 / 0.86);
+	--tl-surface-soft: rgb(15 23 42 / 0.04);
+	--tl-surface-hover: rgb(15 23 42 / 0.06);
+	--tl-border: rgba(202, 205, 212, 0.778);
+	--tl-border-soft: rgba(176, 184, 201, 0.895);
+	--tl-text-primary: #111827;
+	--tl-text-secondary: #334155;
+	--tl-text-muted: #64748b;
+	--tl-text-faint: #94a3b8;
+	--tl-accent-primary: #0369a1;
+	--tl-accent-primary-soft: rgb(3 105 161 / 0.1);
+	--tl-accent-primary-border: rgb(3 105 161 / 0.24);
+	--tl-accent-secondary: #0369a1;
+	--tl-accent-secondary-soft: rgb(3 105 161 / 0.1);
+	--tl-accent-secondary-border: rgb(3 105 161 / 0.24);
+	--tl-accent-tertiary: #0e7490;
+	--tl-switch-off: #cbd5e1;
+	--tl-switch-knob: #ffffff;
+	--tl-map-grid: rgb(15 23 42 / 0.06);
+	--tl-map-land-fill: #d7e0e8;
+	--tl-map-land-stroke: rgba(27, 39, 69, 0.11);
+	--tl-map-line-mono: #333c49;
+	--tl-map-station-mono: #1f2937;
+	--tl-shadow-panel: 0 12px 30px -14px rgb(15 23 42 / 0.38);
+}
+
+@theme inline {
+	--color-tl-background: var(--tl-app-bg);
+	--color-tl-panel-background: var(--tl-header-bg);
+	--color-tl-primary: var(--tl-text-primary);
+	--color-tl-secondary: var(--tl-text-secondary);
+	--color-tl-muted: var(--tl-text-muted);
+	--color-tl-very-muted: var(--tl-text-faint);
+	--color-tl-accent-primary: var(--tl-accent-primary);
+	--color-tl-accent-secondary: var(--tl-accent-secondary);
+	--color-tl-selected-background: var(--tl-accent-primary-soft);
+	--color-tl-chip-background: var(--tl-accent-secondary-soft);
+	--color-tl-border: var(--tl-border);
+}
+
+.map-viewport {
+	background-color: var(--tl-map-bg);
+	background-image:
+		linear-gradient(var(--tl-map-grid) 1px, transparent 1px),
+		linear-gradient(90deg, var(--tl-map-grid) 1px, transparent 1px);
+	background-position: center;
+	background-size: 30px 30px;
+}
+
+#svg-content-wrapper svg {
+	pointer-events: auto;
+	width: 100%;
+	height: 100%;
+	max-width: none;
+	max-height: none;
+	display: block;
+}
+
+#svg-content-wrapper path {
+	transition:
+		stroke 0.15s ease,
+		filter 0.15s ease;
+	cursor: pointer;
+}
+
+#svg-content-wrapper .japan-outline-path {
+	vector-effect: non-scaling-stroke;
+}
+
+#svg-content-wrapper g.segment path:hover {
+	filter: drop-shadow(0 0 4px rgba(255, 0, 0, 0.6));
+}
+
+#svg-content-wrapper .station-dot {
+	cursor: pointer;
+	transition:
+		fill 0.15s ease,
+		stroke 0.15s ease,
+		filter 0.15s ease;
+}
+
+#svg-content-wrapper .station-dot:hover {
+	filter: drop-shadow(0 0 4px rgba(54, 182, 233, 0.7));
+}

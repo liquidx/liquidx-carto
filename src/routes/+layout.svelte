@@ -7,15 +7,22 @@
 
 	let { children } = $props();
 
-	const crumb = $derived(page.params.slug ? findTool(page.params.slug)?.title : undefined);
+	// Full-bleed pages (a load returning `fullBleed: true`) fill the viewport
+	// below the header and carry no heading of their own, so the crumb names them.
+	const bleed = $derived(page.data.fullBleed === true);
+	const crumb = $derived(
+		page.params.slug ? findTool(page.params.slug)?.title : bleed ? page.data.tool?.title : undefined
+	);
 </script>
 
 <svelte:head><link rel="icon" href={favicon} /></svelte:head>
 
-<SiteHeader {crumb} />
-<main>
-	{@render children()}
-</main>
+<div class="shell" class:bleed>
+	<SiteHeader {crumb} />
+	<main>
+		{@render children()}
+	</main>
+</div>
 
 <style>
 	main {
@@ -23,9 +30,25 @@
 		margin: 0 auto;
 		padding: 0 var(--spacing-gutter) 120px;
 	}
+	.bleed {
+		display: flex;
+		flex-direction: column;
+		height: 100dvh;
+	}
+	.bleed main {
+		position: relative;
+		flex: 1;
+		min-height: 0;
+		width: 100%;
+		max-width: none;
+		padding: 0;
+	}
 	@media (max-width: 719px) {
 		main {
 			padding: 0 var(--spacing-gutter-mobile) 80px;
+		}
+		.bleed main {
+			padding: 0;
 		}
 	}
 </style>

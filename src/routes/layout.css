@@ -1,5 +1,6 @@
 @import 'tailwindcss';
 @import '../lib/styles/tokens.css';
+@import '../lib/train-lines/theme.css';
 
 @layer base {
 	html {
