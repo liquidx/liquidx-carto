@@ -29,3 +29,7 @@ test-results
 
 # Downloaded transit data
 /data/
+
+# Built packages
+packages/*/dist
+packages/*/.svelte-kit

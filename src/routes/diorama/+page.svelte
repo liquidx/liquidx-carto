@@ -195,7 +195,7 @@
 		if (!view || !circle) return;
 		exporting = true;
 		try {
-			const blob = await view.glb();
+			const blob = await view.glb({ lon: circle.lon, lat: circle.lat });
 			if (!blob) return;
 			const name = `diorama_${circle.lat.toFixed(4)}_${circle.lon.toFixed(4)}_${Math.round(circle.radius)}m.glb`;
 			const a = document.createElement('a');
