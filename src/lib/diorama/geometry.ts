@@ -32,6 +32,8 @@ export interface DioramaData {
 	elev: Float32Array;
 	/** 1 = vertex sits on the base plane. */
 	isBase: Uint8Array;
+	/** Per vertex, the top-disc vertex whose height is the terrain surface above it. */
+	surfaceOf: Uint32Array;
 	minZ: number;
 	maxZ: number;
 	radius: number;
@@ -59,6 +61,11 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 	const colors = new Float32Array(total * 3);
 	const elev = new Float32Array(total);
 	const isBase = new Uint8Array(total);
+	// 1 on the top disc, 0 on the wall and bottom so contours only draw on the terrain surface.
+	const contourMask = new Float32Array(total);
+	contourMask.fill(1, 0, topCount);
+	const surfaceOf = new Uint32Array(total);
+	for (let i = 0; i < topCount; i++) surfaceOf[i] = i;
 
 	const topElev = new Float32Array(topCount);
 	let minZ = Infinity,
@@ -124,6 +131,8 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 		positions[b * 3 + 2] = positions[src * 3 + 2];
 		elev[b] = minZ;
 		isBase[b] = 1;
+		surfaceOf[t] = src;
+		surfaceOf[b] = src;
 		for (let k = 0; k < 3; k++) {
 			colors[t * 3 + k] = wallColor[k];
 			colors[b * 3 + k] = wallColor[k] * 0.8;
@@ -142,6 +151,7 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 		positions[v * 3 + 2] = positions[src * 3 + 2];
 		elev[v] = minZ;
 		isBase[v] = 1;
+		surfaceOf[v] = src;
 		for (let k = 0; k < 3; k++) colors[v * 3 + k] = wallColor[k] * 0.7;
 	}
 
@@ -189,12 +199,15 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 	geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 	geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 	geometry.setAttribute('elevation', new THREE.BufferAttribute(elev, 1));
+	geometry.setAttribute('contourMask', new THREE.BufferAttribute(contourMask, 1));
+	geometry.setAttribute('surfaceY', new THREE.BufferAttribute(new Float32Array(total), 1));
 	geometry.setIndex(new THREE.BufferAttribute(idx, 1));
 
 	return {
 		geometry,
 		elev,
 		isBase,
+		surfaceOf,
 		minZ,
 		maxZ,
 		radius: R,
@@ -211,6 +224,11 @@ export function applyVertical(data: DioramaData, params: VerticalParams) {
 		arr[i * 3 + 1] = data.isBase[i] ? -params.baseDepth : (data.elev[i] - data.minZ) * scale;
 	}
 	pos.needsUpdate = true;
+	// Terrain height above each vertex, so the side texture can follow the surface.
+	const surf = data.geometry.getAttribute('surfaceY') as THREE.BufferAttribute;
+	const surfArr = surf.array as Float32Array;
+	for (let i = 0; i < data.elev.length; i++) surfArr[i] = arr[data.surfaceOf[i] * 3 + 1];
+	surf.needsUpdate = true;
 	data.geometry.computeVertexNormals();
 	data.geometry.computeBoundingSphere();
 }
