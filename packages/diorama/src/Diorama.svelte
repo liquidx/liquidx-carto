@@ -48,6 +48,16 @@
 		 * the default, a sun in the south-west at 48°.
 		 */
 		sun?: Partial<Sun>;
+		/**
+		 * Colour behind the model, as any CSS colour. Without it the background is transparent, or
+		 * whatever the `--diorama-background` custom property says.
+		 */
+		background?: string;
+		/**
+		 * How strongly `background` is shaded like a studio backdrop, brighter behind the model and
+		 * darker towards the edges: 0 is flat, 1 is strong.
+		 */
+		backgroundGradient?: number;
 		autoRotate?: boolean;
 		rotateSpeed?: number;
 		/** Called when a GLB from `src` has loaded. */
@@ -69,6 +79,8 @@
 		drapeResolution = 2048,
 		objectScale = 1,
 		sun,
+		background,
+		backgroundGradient = 0.5,
 		autoRotate = true,
 		rotateSpeed = 1.2,
 		onload,
@@ -76,6 +88,16 @@
 		class: className,
 		children
 	}: Props = $props();
+
+	// A glow a little below the middle, where the model stands, falling off to darker corners.
+	const backdrop = $derived.by(() => {
+		if (!background) return undefined;
+		const g = Math.min(1, Math.max(0, backgroundGradient));
+		if (!g) return background;
+		const mix = (other: string, amount: number) =>
+			`color-mix(in oklab, ${background}, ${other} ${(amount * g).toFixed(1)}%)`;
+		return `radial-gradient(ellipse 80% 70% at 50% 54%, ${mix('white', 24)} 0%, ${background} 55%, ${mix('black', 50)} 100%)`;
+	});
 
 	/** What is on the stage. `file` holds a GLB's own settings; a built mesh has none. */
 	type Model = { mesh: THREE.Mesh; terrain: TerrainMaterial | null; file: DioramaMeta | null };
@@ -241,7 +263,7 @@
 	}
 </script>
 
-<div class={['diorama', className]}>
+<div class={['diorama', className]} style:background={backdrop}>
 	<div class="canvas" bind:this={canvasHost}></div>
 	{#if context}
 		{#key context}{@render children?.()}{/key}

@@ -96,6 +96,8 @@
 	let showLabels = $state(true);
 	let sunAzimuth = $state(231);
 	let sunElevation = $state(48);
+	let background = $state('#24344d');
+	let backgroundGradient = $state(0.5);
 	let autoRotate = $state(true);
 	let model = $state.raw<DioramaData | null>(null);
 	let message = $state('');
@@ -161,6 +163,8 @@
 			{terrain}
 			{objectScale}
 			sun={{ azimuth: sunAzimuth, elevation: sunElevation }}
+			{background}
+			{backgroundGradient}
 			{autoRotate}
 		>
 			<Compass sun />
@@ -256,6 +260,18 @@
 			bind:value={sunElevation}
 			format={(v) => `${v}°`}
 		/>
+		<label class="control">
+			<span class="label">background</span>
+			<input class="swatch" type="color" bind:value={background} />
+		</label>
+		<Slider
+			label="background gradient"
+			min={0}
+			max={1}
+			step={0.05}
+			bind:value={backgroundGradient}
+			format={(v) => v.toFixed(2)}
+		/>
 		<Toggle label="labels" bind:checked={showLabels} />
 		<Toggle label="auto-rotate" bind:checked={autoRotate} />
 	</div>
@@ -330,6 +346,20 @@
 		letter-spacing: var(--tracking-label);
 		text-transform: uppercase;
 		color: var(--color-text-label);
+	}
+	.swatch {
+		width: 100%;
+		height: 20px;
+		padding: 0;
+		border: 1px solid var(--color-line-control);
+		background: none;
+		cursor: pointer;
+	}
+	.swatch::-webkit-color-swatch-wrapper {
+		padding: 0;
+	}
+	.swatch::-webkit-color-swatch {
+		border: 0;
 	}
 	.error {
 		font-size: var(--text-small);

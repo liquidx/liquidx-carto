@@ -39,26 +39,31 @@ no build step during development.
 The component fills its parent, so give the parent a height. It uses WebGL, so it only renders
 in the browser. It renders nothing during SSR and needs no `ssr = false`.
 
-| Prop              | Type                                    | Default         |
-| ----------------- | --------------------------------------- | --------------- |
-| `src`             | `string \| Blob \| ArrayBuffer \| null` |                 |
-| `data`            | a mesh from `buildDiorama`              |                 |
-| `exaggeration`    | relief of `data`                        | `1`             |
-| `baseDepth`       | base thickness of `data`, in radii      | `0.25`          |
-| `terrain`         | `'topo' \| 'snow' \| TerrainStyle`      | `'topo'`        |
-| `contourInterval` | metres, 0 disables                      | value from file |
-| `majorEvery`      | every nth contour heavier, 0 disables   | value from file |
-| `drapeResolution` | pixels across the overlay texture       | `2048`          |
-| `objectScale`     | enlarges objects placed on the terrain  | `1`             |
-| `sun`             | `{ azimuth, elevation, intensity }`     | south-west, 48° |
-| `autoRotate`      | `boolean`                               | `true`          |
-| `rotateSpeed`     | `number`                                | `1.2`           |
-| `onload`          | `(meta: DioramaMeta \| null) => void`   |                 |
-| `onerror`         | `(error: unknown) => void`              |                 |
-| `class`           | `string`                                |                 |
+| Prop                 | Type                                    | Default         |
+| -------------------- | --------------------------------------- | --------------- |
+| `src`                | `string \| Blob \| ArrayBuffer \| null` |                 |
+| `data`               | a mesh from `buildDiorama`              |                 |
+| `exaggeration`       | relief of `data`                        | `1`             |
+| `baseDepth`          | base thickness of `data`, in radii      | `0.25`          |
+| `terrain`            | `'topo' \| 'snow' \| TerrainStyle`      | `'topo'`        |
+| `contourInterval`    | metres, 0 disables                      | value from file |
+| `majorEvery`         | every nth contour heavier, 0 disables   | value from file |
+| `drapeResolution`    | pixels across the overlay texture       | `2048`          |
+| `objectScale`        | enlarges objects placed on the terrain  | `1`             |
+| `sun`                | `{ azimuth, elevation, intensity }`     | south-west, 48° |
+| `background`         | CSS colour behind the model             | transparent     |
+| `backgroundGradient` | backdrop shading, 0 to 1                | `0.5`           |
+| `autoRotate`         | `boolean`                               | `true`          |
+| `rotateSpeed`        | `number`                                | `1.2`           |
+| `onload`             | `(meta: DioramaMeta \| null) => void`   |                 |
+| `onerror`            | `(error: unknown) => void`              |                 |
+| `class`              | `string`                                |                 |
 
-Set the background with the `--diorama-background` CSS custom property. It defaults to
-transparent.
+The background is transparent unless you set it. Pass `background` (any CSS colour) for a
+backdrop shaded like a studio: brighter behind the model, darker towards the corners.
+`backgroundGradient` sets how strong that shading is, from 0 (flat) to 1; it defaults to 0.5.
+For anything else, such as an image, set the `--diorama-background` CSS custom property to any
+CSS background instead.
 
 Bind the component to call `glb()`, which returns the terrain on show as a GLB blob that `src`
 can load again. Layers are not part of the file.
