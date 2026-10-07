@@ -19,9 +19,12 @@ export interface DioramaMeta {
 	/** Centre of the circle in degrees. */
 	lon: number;
 	lat: number;
-	/** Layout of the top disc: a centre vertex, then `rings` rings of `segments` vertices. */
+	/**
+	 * Layout of the top disc: a centre vertex, then `rings` rings. Ring k holds 6k vertices,
+	 * unless `segments` is given: older files have that many on every ring.
+	 */
 	rings: number;
-	segments: number;
+	segments?: number;
 	exaggeration: number;
 	/** Base thickness as a fraction of the radius. */
 	baseDepth: number;
@@ -66,9 +69,10 @@ export interface LoadedDiorama {
 
 /**
  * Bring the stored settings up to the current version. Version 1 files did not record the
- * disc layout, which is recovered from the vertex counts (a disc of 1 + rings × segments
- * vertices, then 3 × segments + 1 for the wall and bottom). Null when the file has no usable
- * settings, such as a version 1 file exported without its centre.
+ * disc layout, which is recovered from the vertex counts: after the disc come three vertices
+ * for each one on its rim (wall top, wall bottom and bottom cap) and one for the middle of the
+ * bottom. Null when the file has no usable settings, such as a version 1 file exported
+ * without its centre.
  */
 function readMeta(mesh: THREE.Mesh): DioramaMeta | null {
 	const raw = mesh.userData[EXTRAS_KEY] as (Partial<DioramaMeta> & { version: number }) | undefined;
@@ -78,10 +82,17 @@ function readMeta(mesh: THREE.Mesh): DioramaMeta | null {
 	if (raw.version !== 1 || raw.lon === undefined || raw.lat === undefined || !mask) return null;
 	let top = 0;
 	while (top < mask.count && mask.getX(top) > 0.5) top++;
-	const segments = (mask.count - top - 1) / 3;
-	const rings = (top - 1) / segments;
-	if (!Number.isInteger(segments) || !Number.isInteger(rings) || rings < 1) return null;
-	return { ...(raw as DioramaMeta), version: 2, rings, segments };
+	const rim = (mask.count - top - 1) / 3;
+	if (!Number.isInteger(rim) || rim < 3) return null;
+	// 6k vertices on ring k: the rim holds 6 × rings and the disc 1 + 3 × rings × (rings + 1).
+	const even = rim / 6;
+	if (Number.isInteger(even) && top === 1 + 3 * even * (even + 1)) {
+		return { ...(raw as DioramaMeta), version: 2, rings: even };
+	}
+	// Otherwise the same number on every ring.
+	const rings = (top - 1) / rim;
+	if (!Number.isInteger(rings) || rings < 1) return null;
+	return { ...(raw as DioramaMeta), version: 2, rings, segments: rim };
 }
 
 /**

@@ -42,6 +42,8 @@
 		 * speck on a model several kilometres across.
 		 */
 		objectScale?: number;
+		/** Draw the triangle edges over the shaded surface. Not part of an exported GLB. */
+		wireframe?: boolean;
 		/**
 		 * Where the light comes from: `azimuth` as a compass bearing in degrees (90 is from the
 		 * east), `elevation` in degrees above the horizon, and `intensity`. Fields left out keep
@@ -78,6 +80,7 @@
 		majorEvery,
 		drapeResolution = 2048,
 		objectScale = 1,
+		wireframe = false,
 		sun,
 		background,
 		backgroundGradient = 0.5,
@@ -234,6 +237,32 @@
 
 	$effect(() => {
 		model?.terrain?.setStyle(resolveTerrainStyle(terrain));
+	});
+
+	// Triangle edges, on a second mesh sharing the geometry so that they are not exported.
+	$effect(() => {
+		const s = stage;
+		const m = model;
+		if (!s || !m || !wireframe) return;
+		const material = new THREE.MeshBasicMaterial({
+			color: 0x1a1208,
+			wireframe: true,
+			transparent: true,
+			opacity: 0.4,
+			depthWrite: false
+		});
+		const wire = new THREE.Mesh(m.mesh.geometry, material);
+		s.scene.add(wire);
+		// Push the surface back a little so the edges on it are not z-fighting with it.
+		const surface = m.mesh.material as THREE.Material;
+		surface.polygonOffset = true;
+		surface.polygonOffsetFactor = 1;
+		surface.polygonOffsetUnits = 1;
+		return () => {
+			surface.polygonOffset = false;
+			s.scene.remove(wire);
+			material.dispose();
+		};
 	});
 
 	$effect(() => {

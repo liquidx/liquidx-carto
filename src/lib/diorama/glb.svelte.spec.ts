@@ -8,14 +8,12 @@ import {
 	loadDioramaGlb,
 	type DioramaMeta
 } from '@liquidx/diorama';
+import { legacyGridGeometry } from './legacy-grid';
 
 describe('diorama glb', () => {
 	it('round-trips the shader attributes and settings', async () => {
 		const circle = { lon: 138.7, lat: 35.3, radius: 1000 };
-		const data = buildDiorama((lon) => (lon - circle.lon) * 10_000 + 500, circle, {
-			rings: 4,
-			segments: 8
-		});
+		const data = buildDiorama((lon) => (lon - circle.lon) * 10_000 + 500, circle, { rings: 4 });
 		applyVertical(data, { exaggeration: 1.5, baseDepth: 0.25 });
 		const mesh = new THREE.Mesh(data.geometry, createTerrainMaterial().material);
 		const meta = {
@@ -26,7 +24,6 @@ describe('diorama glb', () => {
 			lon: circle.lon,
 			lat: circle.lat,
 			rings: data.rings,
-			segments: data.segments,
 			exaggeration: 1.5,
 			baseDepth: 0.25,
 			contourInterval: 50,
@@ -50,26 +47,38 @@ describe('diorama glb', () => {
 		expect(mesh.userData).toEqual({});
 	});
 
+	const v1 = {
+		version: 1,
+		minZ: 500,
+		maxZ: 500,
+		radius: 1000,
+		lon: 138.7,
+		lat: 35.3,
+		exaggeration: 1,
+		baseDepth: 0.25,
+		contourInterval: 50,
+		majorEvery: 4
+	} as unknown as DioramaMeta;
+
 	it('recovers the disc layout of a version 1 file', async () => {
-		const circle = { lon: 138.7, lat: 35.3, radius: 1000 };
-		const data = buildDiorama(() => 500, circle, { rings: 4, segments: 8 });
+		const data = buildDiorama(() => 500, { lon: 138.7, lat: 35.3, radius: 1000 }, { rings: 4 });
 		applyVertical(data, { exaggeration: 1, baseDepth: 0.25 });
 		const mesh = new THREE.Mesh(data.geometry, createTerrainMaterial().material);
-		const v1 = {
-			version: 1,
-			minZ: 500,
-			maxZ: 500,
-			radius: 1000,
-			lon: circle.lon,
-			lat: circle.lat,
-			exaggeration: 1,
-			baseDepth: 0.25,
-			contourInterval: 50,
-			majorEvery: 4
-		};
 
-		const blob = await exportDioramaGlb(mesh, v1 as unknown as DioramaMeta);
-		const loaded = await loadDioramaGlb(blob);
+		const loaded = await loadDioramaGlb(await exportDioramaGlb(mesh, v1));
+
+		expect(loaded.meta).toMatchObject({ version: 2, rings: 4 });
+		expect(loaded.meta?.segments).toBeUndefined();
+		expect(loaded.surface).not.toBeNull();
+	});
+
+	it('recognises a version 1 file with the same vertex count on every ring', async () => {
+		const mesh = new THREE.Mesh(
+			legacyGridGeometry(4, 8, () => 0),
+			createTerrainMaterial().material
+		);
+
+		const loaded = await loadDioramaGlb(await exportDioramaGlb(mesh, v1));
 
 		expect(loaded.meta).toMatchObject({ version: 2, rings: 4, segments: 8 });
 		expect(loaded.surface).not.toBeNull();

@@ -26,9 +26,9 @@ export interface DioramaSurface {
 }
 
 /**
- * Build the mapping for a diorama geometry. Reads the top disc's polar grid of vertices, so
- * lookups cost the same however dense the mesh is. Heights follow the geometry as it is now;
- * build a new surface after changing its exaggeration.
+ * Build the mapping for a diorama geometry. Reads the top disc's rings of vertices, so lookups
+ * cost the same however dense the mesh is. Heights follow the geometry as it is now; build a
+ * new surface after changing its exaggeration.
  */
 export function createSurface(geometry: THREE.BufferGeometry, meta: DioramaMeta): DioramaSurface {
 	const { rings, segments, radius } = meta;
@@ -43,13 +43,98 @@ export function createSurface(geometry: THREE.BufferGeometry, meta: DioramaMeta)
 		-(p[1] - meta.lat) * perLat
 	];
 
-	// Top-disc vertex index: the centre, then `segments` vertices per ring.
-	const vertex = (ring: number, seg: number) =>
-		ring === 0 ? 0 : 1 + (ring - 1) * segments + (seg % segments);
-
-	// The triangle under (x, z) and its barycentric weights, written into `tri` and `w`.
+	// The triangle under (x, z) and its barycentric weights, kept in `tri` and `w`.
 	const tri = [0, 0, 0];
 	const w = [0, 0, 0];
+	/** Weigh (x, z) against a triangle; returns its smallest weight, negative when outside. */
+	function weigh(x: number, z: number, a: number, b: number, c: number) {
+		const ax = position.getX(a),
+			az = position.getZ(a);
+		const bx = position.getX(b) - ax,
+			bz = position.getZ(b) - az;
+		const cx = position.getX(c) - ax,
+			cz = position.getZ(c) - az;
+		const det = bx * cz - cx * bz || 1e-12;
+		const wb = ((x - ax) * cz - cx * (z - az)) / det;
+		const wc = (bx * (z - az) - (x - ax) * bz) / det;
+		tri[0] = a;
+		tri[1] = b;
+		tri[2] = c;
+		w[0] = 1 - wb - wc;
+		w[1] = wb;
+		w[2] = wc;
+		return Math.min(w[0], wb, wc);
+	}
+	/** Angle of (x, z) round the disc as a fraction of a turn, from east through south. */
+	const turn = (x: number, z: number) => (Math.atan2(z, x) / (Math.PI * 2) + 1) % 1;
+
+	/** Older files: `count` vertices on every ring, each cell split along one diagonal. */
+	function locateGrid(x: number, z: number, r: number, count: number) {
+		const vertex = (ring: number, seg: number) =>
+			ring === 0 ? 0 : 1 + (ring - 1) * count + (seg % count);
+		const fr = Math.min(r * rings, rings - 1e-9);
+		const ring = Math.floor(fr);
+		const fs = turn(x, z) * count;
+		const seg = Math.floor(fs) % count;
+		if (ring === 0) return weigh(x, z, 0, vertex(1, seg), vertex(1, seg + 1));
+		// The diagonal runs from the cell's inner-start corner to its outer-end corner.
+		const outerHalf = fr - ring > fs - Math.floor(fs);
+		return weigh(
+			x,
+			z,
+			vertex(ring, seg),
+			outerHalf ? vertex(ring + 1, seg) : vertex(ring, seg + 1),
+			vertex(ring + 1, seg + 1)
+		);
+	}
+
+	/**
+	 * Ring k holds 6k vertices, and the band between rings k and k + 1 is six sextants, each
+	 * zipped into 2k + 1 triangles. Rings are polygons, so near a ring the distance from the
+	 * centre does not settle which band a point is in: try the likely triangles and keep the
+	 * one that holds it, or failing that the nearest.
+	 */
+	const ringStart = (k: number) => 1 + 3 * k * (k - 1);
+	function locateEven(x: number, z: number, r: number) {
+		const sextant = Math.min(5, Math.floor(turn(x, z) * 6));
+		const along = turn(x, z) * 6 - sextant;
+		const guess = Math.min(rings - 1, Math.floor(r * rings));
+		let best = -Infinity;
+		let b0 = 0,
+			b1 = 0,
+			b2 = 0;
+		const consider = (a: number, b: number, c: number) => {
+			const fit = weigh(x, z, a, b, c);
+			if (fit > best) {
+				best = fit;
+				b0 = a;
+				b1 = b;
+				b2 = c;
+			}
+			return fit >= -1e-9;
+		};
+		for (const k of [guess, guess - 1, guess + 1]) {
+			if (k < 0 || k >= rings) continue;
+			const inner = (j: number) => (k === 0 ? 0 : ringStart(k) + (j % (k * 6)));
+			const outer = (j: number) => ringStart(k + 1) + (j % ((k + 1) * 6));
+			const i0 = sextant * k;
+			const o0 = sextant * (k + 1);
+			// Triangles with an edge on the outer ring, then those with an edge on the inner one.
+			const up = Math.min(k, Math.floor(along * (k + 1)));
+			for (const i of [up, up - 1, up + 1]) {
+				if (i < 0 || i > k) continue;
+				if (consider(inner(i0 + i), outer(o0 + i + 1), outer(o0 + i))) return;
+			}
+			const down = Math.min(k - 1, Math.floor(along * k));
+			for (const i of [down, down - 1, down + 1]) {
+				if (i < 0 || i >= k) continue;
+				if (consider(inner(i0 + i), inner(i0 + i + 1), outer(o0 + i + 1))) return;
+			}
+		}
+		// Outside every candidate (past the rim, say): fall back on the closest.
+		weigh(x, z, b0, b1, b2);
+	}
+
 	function locate(x: number, z: number) {
 		let r = Math.hypot(x, z);
 		if (r > 1) {
@@ -57,31 +142,8 @@ export function createSurface(geometry: THREE.BufferGeometry, meta: DioramaMeta)
 			z /= r;
 			r = 1;
 		}
-		const fr = Math.min(r * rings, rings - 1e-9);
-		const ring = Math.floor(fr);
-		const fs = ((Math.atan2(z, x) / (Math.PI * 2) + 1) % 1) * segments;
-		const seg = Math.floor(fs) % segments;
-		if (ring === 0) {
-			tri[0] = 0;
-			tri[1] = vertex(1, seg);
-			tri[2] = vertex(1, seg + 1);
-		} else {
-			// Each cell is split along the diagonal from its inner-start to its outer-end corner.
-			const outerHalf = fr - ring > fs - Math.floor(fs);
-			tri[0] = vertex(ring, seg);
-			tri[1] = outerHalf ? vertex(ring + 1, seg) : vertex(ring, seg + 1);
-			tri[2] = vertex(ring + 1, seg + 1);
-		}
-		const ax = position.getX(tri[0]),
-			az = position.getZ(tri[0]);
-		const bx = position.getX(tri[1]) - ax,
-			bz = position.getZ(tri[1]) - az;
-		const cx = position.getX(tri[2]) - ax,
-			cz = position.getZ(tri[2]) - az;
-		const det = bx * cz - cx * bz || 1e-12;
-		w[1] = ((x - ax) * cz - cx * (z - az)) / det;
-		w[2] = (bx * (z - az) - (x - ax) * bz) / det;
-		w[0] = 1 - w[1] - w[2];
+		if (segments) locateGrid(x, z, r, segments);
+		else locateEven(x, z, r);
 	}
 
 	const blend = (get: (i: number) => number) =>

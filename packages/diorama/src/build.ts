@@ -16,11 +16,12 @@ export interface Circle {
 }
 
 export interface MeshParams {
-	/** Radial rings on the disc. */
+	/** Rings from the centre to the rim; the ground spacing between vertices is radius / rings. */
 	rings: number;
-	/** Angular segments around the disc. */
-	segments: number;
 }
+
+/** First vertex of ring k (k >= 1) on the top disc; ring k holds 6k vertices. */
+const ringStart = (k: number) => 1 + 3 * k * (k - 1);
 
 export interface VerticalParams {
 	/** Vertical exaggeration. */
@@ -44,25 +45,28 @@ export interface DioramaData {
 	/** Centre of the circle in degrees. */
 	lon: number;
 	lat: number;
-	/** Layout of the top disc: a centre vertex, then `rings` rings of `segments` vertices. */
+	/** Rings on the top disc: a centre vertex, then 6k vertices on each ring k. */
 	rings: number;
-	segments: number;
 	nodataFraction: number;
 }
 
 /**
- * Build a cylindrical "core sample" of terrain: polar disc on top, wall, and bottom cap.
+ * Build a cylindrical "core sample" of terrain: disc on top, wall, and bottom cap.
+ * The disc is concentric rings with 6k vertices on ring k, so vertices are evenly spaced
+ * and the triangles close to equilateral from the centre out to the rim.
  * The result is normalised so the radius is 1 unit; heights are set by `applyVertical`.
  */
 export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): DioramaData {
-	const { rings, segments } = params;
+	const { rings } = params;
+	// Vertices around the rim, and so around the wall and bottom cap.
+	const segments = rings * 6;
 	const R = sel.radius;
 	const cosLat = Math.cos((sel.lat * Math.PI) / 180);
 	const degPerMx = 1 / (M_PER_DEG_LAT * cosLat);
 	const degPerMy = 1 / M_PER_DEG_LAT;
 
-	// --- top disc: centre + rings*segments vertices ---
-	const topCount = 1 + rings * segments;
+	// --- top disc: centre + 6k vertices on each ring k ---
+	const topCount = ringStart(rings + 1);
 	const wallCount = segments * 2;
 	const bottomCount = 1 + segments;
 	const total = topCount + wallCount + bottomCount;
@@ -82,21 +86,21 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 		maxZ = -Infinity,
 		nodata = 0;
 
-	// Sample elevations in polar layout (x east, z south so +z faces the viewer).
+	// Lay out the rings (x east, z south so +z faces the viewer); the centre stays at 0, 0.
 	const xy = new Float32Array(topCount * 2);
-	for (let i = 0; i < topCount; i++) {
-		let r = 0,
-			theta = 0;
-		if (i > 0) {
-			const ring = Math.floor((i - 1) / segments) + 1;
-			const seg = (i - 1) % segments;
-			r = ring / rings;
-			theta = (seg / segments) * Math.PI * 2;
+	for (let ring = 1, i = 1; ring <= rings; ring++) {
+		const r = ring / rings;
+		const count = ring * 6;
+		for (let j = 0; j < count; j++, i++) {
+			const theta = (j / count) * Math.PI * 2;
+			xy[i * 2] = Math.cos(theta) * r; // east, normalised
+			xy[i * 2 + 1] = Math.sin(theta) * r; // south
 		}
-		const px = Math.cos(theta) * r; // east, normalised
-		const pz = Math.sin(theta) * r; // south
-		xy[i * 2] = px;
-		xy[i * 2 + 1] = pz;
+	}
+	// Sample elevations.
+	for (let i = 0; i < topCount; i++) {
+		const px = xy[i * 2];
+		const pz = xy[i * 2 + 1];
 		const lon = sel.lon + px * R * degPerMx;
 		const lat = sel.lat - pz * R * degPerMy;
 		const z = sample(lon, lat);
@@ -137,7 +141,7 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 
 	// --- wall: duplicate outer ring (top) and add bottom ring ---
 	const wallStart = topCount;
-	const outerStart = 1 + (rings - 1) * segments;
+	const outerStart = ringStart(rings);
 	const wallColor = [0.62, 0.5, 0.4];
 	for (let s = 0; s < segments; s++) {
 		const src = outerStart + s;
@@ -175,27 +179,26 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 	}
 
 	// --- indices ---
-	const idx = new Uint32Array(segments * 3 * (2 * rings + 2));
+	const idx = new Uint32Array(3 * (6 * rings * rings + 3 * segments));
 	let n = 0;
 	const push = (...v: number[]) => {
 		for (const i of v) idx[n++] = i;
 	};
-	// centre fan (ring 1)
-	for (let s = 0; s < segments; s++) {
-		const a = 1 + s;
-		const b = 1 + ((s + 1) % segments);
-		push(0, b, a);
-	}
-	for (let ring = 1; ring < rings; ring++) {
-		const inner = 1 + (ring - 1) * segments;
-		const outer = 1 + ring * segments;
-		for (let s = 0; s < segments; s++) {
-			const s1 = (s + 1) % segments;
-			const a = inner + s,
-				b = inner + s1,
-				c = outer + s,
-				d = outer + s1;
-			push(a, d, c, a, b, d);
+	// Each band between ring k and k + 1 is six sextants; a sextant has k edges on the inside
+	// and k + 1 on the outside, zipped into 2k + 1 triangles. Ring 0 is the centre vertex.
+	for (let k = 0; k < rings; k++) {
+		const innerCount = k * 6;
+		const outerCount = (k + 1) * 6;
+		const outerStart = ringStart(k + 1);
+		const inner = (j: number) => (k === 0 ? 0 : ringStart(k) + (j % innerCount));
+		const outer = (j: number) => outerStart + (j % outerCount);
+		for (let sext = 0; sext < 6; sext++) {
+			const i0 = sext * k;
+			const o0 = sext * (k + 1);
+			for (let i = 0; i <= k; i++) {
+				push(inner(i0 + i), outer(o0 + i + 1), outer(o0 + i));
+				if (i < k) push(inner(i0 + i), inner(i0 + i + 1), outer(o0 + i + 1));
+			}
 		}
 	}
 	// wall
@@ -233,7 +236,6 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 		lon: sel.lon,
 		lat: sel.lat,
 		rings,
-		segments,
 		nodataFraction: nodata / topCount
 	};
 }
@@ -269,7 +271,6 @@ export function dioramaMeta(
 		lon: data.lon,
 		lat: data.lat,
 		rings: data.rings,
-		segments: data.segments,
 		exaggeration: settings.exaggeration,
 		baseDepth: settings.baseDepth,
 		contourInterval: settings.contourInterval,

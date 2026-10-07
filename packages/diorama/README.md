@@ -79,11 +79,7 @@ The relief can then be changed without rebuilding:
 
 	// Elevation in metres at a longitude and latitude, NaN where there is none.
 	const sample: Sampler = (lon, lat) => elevationAt(lon, lat);
-	const data = buildDiorama(
-		sample,
-		{ lon: 138.7274, lat: 35.3606, radius: 7000 },
-		{ rings: 220, segments: 512 }
-	);
+	const data = buildDiorama(sample, { lon: 138.7274, lat: 35.3606, radius: 7000 }, { rings: 220 });
 	let exaggeration = $state(1.5);
 </script>
 
@@ -326,8 +322,10 @@ custom vertex attributes for the shader:
 | `_SURFACEY`    | `surfaceY`    | height of the terrain surface above the vertex (for topsoil) |
 
 The mesh node's `extras.diorama` holds a `DioramaMeta` (version 2): elevation range, ground
-radius, centre, the disc's `rings` and `segments`, exaggeration, base depth and contour
-settings. The centre and disc layout are what place longitude and latitude on the mesh.
+radius, centre, the disc's `rings`, exaggeration, base depth and contour
+settings. The top disc is a centre vertex followed by `rings` rings, with 6k vertices on ring
+k so that triangles are evenly sized; older files instead record `segments`, the same count on
+every ring. The centre and disc layout are what place longitude and latitude on the mesh.
 Version 1 files load too, as long as they were exported with their centre. The terrain style
 is not stored: the file holds the terrain, and each viewer chooses how to draw it.
 

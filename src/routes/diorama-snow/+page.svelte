@@ -124,7 +124,7 @@
 		const box = frameBox({ ...frame, w: frame.w * 1.04 }, 1);
 		const rings = 220;
 		const { grid } = await sampleApiGrid(PROVIDERS[0], box, rings * 2 + 1, rings * 2 + 1);
-		model = buildDiorama(gridSampler(grid, box), circle, { rings, segments: 512 });
+		model = buildDiorama(gridSampler(grid, box), circle, { rings });
 	}
 	build().catch((e) => (message = e instanceof Error ? e.message : String(e)));
 

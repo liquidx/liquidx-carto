@@ -44,17 +44,9 @@
 	const dem = new DemStore();
 
 	type Source = 'files' | 'api';
-	type Detail = 'coarse' | 'normal' | 'fine';
-	const mesh = (rings: number): MeshParams => ({
-		rings,
-		// Keep the outer ring's triangles roughly square.
-		segments: Math.round((rings * 2.33) / 8) * 8
-	});
-	const DETAIL: Record<Detail, MeshParams> = {
-		coarse: mesh(120),
-		normal: mesh(220),
-		fine: mesh(400)
-	};
+	// Terrain tiles are sampled on a grid of at most 1024², two samples per ring, so more rings
+	// than this add triangles without adding detail.
+	const MAX_RINGS = 512;
 
 	let source = $state<Source>('api');
 	let providerId = $state(PROVIDERS[0].id);
@@ -62,7 +54,9 @@
 	// Mount Fuji: a recognisable default with plenty of relief. The frame is the circle's square.
 	let frame = $state<Frame | null>(frameAt(138.7274, 35.3606, 14_000));
 	let drawing = $state(false);
-	let detail = $state<Detail>('normal');
+	/** Mesh detail: rings from the centre to the rim, so the ground spacing is radius / rings. */
+	let rings = $state(224);
+	let wireframe = $state(false);
 	let exaggeration = $state(1);
 	let baseDepth = $state(0.25);
 	let contourInterval = $state(50);
@@ -75,6 +69,7 @@
 	let view: Diorama | undefined = $state();
 
 	const provider = $derived(findProvider(providerId));
+	const meshParams = $derived<MeshParams>({ rings });
 	const circle = $derived.by((): Circle | null => {
 		if (!frame) return null;
 		const lat = yToLat(frame.cy);
@@ -143,7 +138,7 @@
 		const c = circle;
 		const src = source;
 		const p = provider;
-		const params = DETAIL[detail];
+		const params = meshParams;
 		const version = dem.version;
 		const tileCount = dem.tiles.length;
 		const busy = dem.loading > 0;
@@ -217,6 +212,10 @@
 	const fmtKm = (m: number) =>
 		m >= 1000 ? `${(m / 1000).toFixed(m >= 10_000 ? 1 : 2)} km` : `${Math.round(m)} m`;
 	const fmtM = (m: number) => `${Math.round(m).toLocaleString('en')} m`;
+	/** Ground distance between rings, the mesh's nominal resolution. */
+	const fmtSpacing = (m: number) => (m < 10 ? `${m.toFixed(1)} m` : fmtKm(m));
+	const fmtCount = (n: number) =>
+		n >= 1e6 ? `${(n / 1e6).toFixed(2)}m` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n);
 
 	const circleInfo = $derived.by(() => {
 		if (!circle) return null;
@@ -384,7 +383,7 @@
 		<SectionLabel
 			index="03"
 			label="Diorama"
-			count={model ? `${Math.round(model.elev.length / 1000)}k vertices` : undefined}
+			count={model ? `${fmtCount((model.geometry.index?.count ?? 0) / 3)} triangles` : undefined}
 		/>
 		<div class="body">
 			<div class="stage" class:stale={status === 'building'}>
@@ -398,6 +397,7 @@
 					{terrain}
 					{autoRotate}
 					{rotateSpeed}
+					{wireframe}
 				>
 					<Compass />
 				</Diorama>
@@ -446,12 +446,16 @@
 					/>
 				</div>
 				<div class="control">
-					<span class="label">mesh</span>
-					<Segmented
-						label="mesh resolution"
-						options={[{ value: 'coarse' }, { value: 'normal' }, { value: 'fine' }]}
-						bind:value={detail}
+					<Slider
+						label="mesh detail"
+						min={16}
+						max={MAX_RINGS}
+						step={8}
+						bind:value={rings}
+						format={(v) =>
+							circle ? `${v} rings · ${fmtSpacing(circle.radius / v)}` : `${v} rings`}
 					/>
+					<Toggle label="wireframe" bind:checked={wireframe} />
 				</div>
 				<div class="control">
 					<Slider

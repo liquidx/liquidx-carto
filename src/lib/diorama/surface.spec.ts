@@ -6,6 +6,7 @@ import {
 	dioramaMeta,
 	shapesOf
 } from '@liquidx/diorama';
+import { legacyGridGeometry } from './legacy-grid';
 
 const circle = { lon: 138.7, lat: 35.3, radius: 1000 };
 // A plane rising eastwards and northwards, which a triangle mesh reproduces exactly.
@@ -13,7 +14,7 @@ const plane = (lon: number, lat: number) =>
 	500 + (lon - circle.lon) * 20_000 + (lat - circle.lat) * 10_000;
 
 function surfaceFor(exaggeration: number) {
-	const data = buildDiorama(plane, circle, { rings: 6, segments: 16 });
+	const data = buildDiorama(plane, circle, { rings: 6 });
 	applyVertical(data, { exaggeration, baseDepth: 0.25 });
 	const meta = dioramaMeta(data, {
 		exaggeration,
@@ -50,6 +51,51 @@ describe('createSurface', () => {
 		for (const p of points) {
 			expect(surface.contains(p)).toBe(true);
 			expect(surface.elevationAt(p)).toBeCloseTo(plane(p[0], p[1]), 1);
+		}
+	});
+
+	it('reads elevation on a dense mesh, including beside ring edges and sextant seams', () => {
+		const data = buildDiorama(plane, circle, { rings: 40 });
+		applyVertical(data, { exaggeration: 1, baseDepth: 0.25 });
+		const surface = createSurface(
+			data.geometry,
+			dioramaMeta(data, { exaggeration: 1, baseDepth: 0.25, contourInterval: 50, majorEvery: 5 })
+		);
+		const perLon = 111_320 * Math.cos((circle.lat * Math.PI) / 180);
+		// Spokes at every 7.5°, so some run along the seams between sextants, sampled at radii
+		// that land on rings, just either side of them and in between.
+		for (let spoke = 0; spoke < 48; spoke++) {
+			const angle = (spoke / 48) * Math.PI * 2 + (spoke % 3) * 0.004;
+			for (const r of [0, 0.012, 0.025, 0.2499, 0.25, 0.2501, 0.513, 0.74, 0.9, 0.985]) {
+				const p = [
+					circle.lon + (Math.cos(angle) * r * circle.radius) / perLon,
+					circle.lat - (Math.sin(angle) * r * circle.radius) / 111_320
+				];
+				expect(surface.elevationAt(p)).toBeCloseTo(plane(p[0], p[1]), 1);
+			}
+		}
+	});
+
+	it('reads older meshes with the same vertex count on every ring', () => {
+		const tilt = (x: number, z: number) => 0.3 + 0.2 * x - 0.1 * z;
+		const surface = createSurface(legacyGridGeometry(6, 16, tilt), {
+			...dioramaMeta(buildDiorama(plane, circle, { rings: 1 }), {
+				exaggeration: 1,
+				baseDepth: 0.25,
+				contourInterval: 50,
+				majorEvery: 5
+			}),
+			rings: 6,
+			segments: 16
+		});
+		for (const [x, z] of [
+			[0, 0],
+			[0.05, -0.03],
+			[-0.4, 0.31],
+			[0.62, 0.55],
+			[-0.2, -0.9]
+		]) {
+			expect(surface.heightAt(x, z)).toBeCloseTo(tilt(x, z), 5);
 		}
 	});
 
