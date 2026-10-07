@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { applyVertical, buildDiorama } from '@liquidx/diorama';
 import { frameAt, frameBox } from '$lib/contour/mercator';
-import { applyVertical, buildDiorama } from './geometry';
 import { gridSampler } from './sampler';
 
 const circle = { lon: 138.7, lat: 35.3, radius: 1000 };

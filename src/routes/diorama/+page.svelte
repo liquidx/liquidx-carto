@@ -2,7 +2,6 @@
 	import { onMount } from 'svelte';
 	import AreaMap from '$lib/components/AreaMap.svelte';
 	import Button from '$lib/components/Button.svelte';
-	import DioramaView from '$lib/components/DioramaView.svelte';
 	import DataCredits from '$lib/components/DataCredits.svelte';
 	import DropZone from '$lib/components/DropZone.svelte';
 	import NumberField from '$lib/components/NumberField.svelte';
@@ -27,12 +26,16 @@
 	} from '$lib/contour/mercator';
 	import { findProvider, PROVIDERS, sampleApiGrid } from '$lib/contour/terrain-api';
 	import {
+		Compass,
+		Diorama,
 		buildDiorama,
 		type Circle,
 		type DioramaData,
-		type MeshParams
-	} from '$lib/diorama/geometry';
-	import { gridSampler, type Sampler } from '$lib/diorama/sampler';
+		type MeshParams,
+		type Sampler,
+		type TerrainPreset
+	} from '@liquidx/diorama';
+	import { gridSampler } from '$lib/diorama/sampler';
 
 	import { TERRAIN_TOOL_CREDITS } from '$lib/credits';
 
@@ -58,11 +61,12 @@
 	let baseDepth = $state(0.25);
 	let contourInterval = $state(50);
 	let majorEvery = $state(5);
+	let terrain = $state<TerrainPreset>('topo');
 	let autoRotate = $state(true);
 	let rotateSpeed = $state(1.2);
 
 	let map: AreaMap | undefined = $state();
-	let view: DioramaView | undefined = $state();
+	let view: Diorama | undefined = $state();
 
 	const provider = $derived(findProvider(providerId));
 	const meshParams = $derived<MeshParams>({ rings });
@@ -190,7 +194,7 @@
 		if (!view || !circle) return;
 		exporting = true;
 		try {
-			const blob = await view.glb({ lon: circle.lon, lat: circle.lat });
+			const blob = await view.glb();
 			if (!blob) return;
 			const name = `diorama_${circle.lat.toFixed(4)}_${circle.lon.toFixed(4)}_${Math.round(circle.radius)}m.glb`;
 			const a = document.createElement('a');
@@ -383,18 +387,21 @@
 		/>
 		<div class="body">
 			<div class="stage" class:stale={status === 'building'}>
-				<DioramaView
+				<Diorama
 					bind:this={view}
 					data={model}
 					{exaggeration}
 					{baseDepth}
 					{contourInterval}
 					{majorEvery}
+					{terrain}
 					{autoRotate}
 					{rotateSpeed}
 					{wireframe}
-					{hint}
-				/>
+				>
+					<Compass />
+				</Diorama>
+				{#if !model && hint}<div class="hint">{hint}</div>{/if}
 			</div>
 			{#if message}<div class="error">{message}</div>{/if}
 			<div class="controls">
@@ -430,6 +437,14 @@
 					format={(v) => (v ? `every ${v}` : 'off')}
 					disabled={!contourInterval}
 				/>
+				<div class="control">
+					<span class="label">style</span>
+					<Segmented
+						label="terrain style"
+						options={[{ value: 'topo' }, { value: 'snow' }]}
+						bind:value={terrain}
+					/>
+				</div>
 				<div class="control">
 					<Slider
 						label="mesh detail"
@@ -574,8 +589,22 @@
 		width: 200px;
 	}
 	.stage {
+		position: relative;
 		height: 560px;
 		transition: opacity 0.2s;
+		--diorama-background: var(--color-surface);
+	}
+	.hint {
+		position: absolute;
+		inset: 0;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		padding: 0 var(--spacing-gutter);
+		text-align: center;
+		font-size: var(--text-small);
+		color: var(--color-text-faint);
+		pointer-events: none;
 	}
 	.stage.stale {
 		opacity: 0.6;
@@ -591,6 +620,12 @@
 		flex-direction: column;
 		justify-content: flex-end;
 		gap: 10px;
+	}
+	.control .label {
+		font-size: var(--text-meta);
+		letter-spacing: var(--tracking-label);
+		text-transform: uppercase;
+		color: var(--color-text-label);
 	}
 	/* Wide: map and model side by side, their panes top-aligned and the same height. */
 	@media (min-width: 960px) {

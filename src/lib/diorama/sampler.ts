@@ -1,8 +1,6 @@
+import type { Sampler } from '@liquidx/diorama';
 import type { Grid } from '$lib/contour/contour';
 import { latToY, lonToX, type MercatorBox } from '$lib/contour/mercator';
-
-/** An elevation lookup: metres at lon/lat, NaN where there is no data. */
-export type Sampler = (lon: number, lat: number) => number;
 
 /**
  * Bilinear sampler over a grid spanning a mercator box (first row at y0). Falls back to the
