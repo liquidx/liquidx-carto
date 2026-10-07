@@ -25,6 +25,8 @@
 		majorEvery?: number;
 		autoRotate?: boolean;
 		rotateSpeed?: number;
+		/** Draw the triangle edges over the shaded surface. */
+		wireframe?: boolean;
 		/** Shown in the middle of the viewport while there is no model. */
 		hint?: string;
 	};
@@ -37,6 +39,7 @@
 		majorEvery = 5,
 		autoRotate = true,
 		rotateSpeed = 1.2,
+		wireframe = false,
 		hint = ''
 	}: Props = $props();
 
@@ -47,16 +50,27 @@
 	mesh.castShadow = true;
 	mesh.receiveShadow = true;
 	mesh.visible = false;
+	// Triangle edges, sharing the mesh's geometry. Kept out of `mesh` so it is not exported.
+	const wireMaterial = new THREE.MeshBasicMaterial({
+		color: 0x1a1208,
+		wireframe: true,
+		transparent: true,
+		opacity: 0.4,
+		depthWrite: false
+	});
+	const wire = new THREE.Mesh(mesh.geometry, wireMaterial);
+	wire.visible = false;
 
 	onMount(() => {
 		const s = createStage(container);
-		s.scene.add(mesh);
+		s.scene.add(mesh, wire);
 		stage = s;
 		return () => {
 			stage = undefined;
 			s.dispose();
 			mesh.geometry.dispose();
 			material.dispose();
+			wireMaterial.dispose();
 		};
 	});
 
@@ -65,6 +79,7 @@
 		const next = data?.geometry ?? new THREE.BufferGeometry();
 		if (mesh.geometry !== next) mesh.geometry.dispose();
 		mesh.geometry = next;
+		wire.geometry = next;
 		mesh.visible = !!data;
 		uniforms.uMinZ.value = data?.minZ ?? 0;
 	});
@@ -76,6 +91,14 @@
 	$effect(() => {
 		uniforms.uInterval.value = contourInterval;
 		uniforms.uMajorEvery.value = majorEvery;
+	});
+
+	$effect(() => {
+		wire.visible = wireframe && !!data;
+		// Push the surface back a little so the edges on it are not z-fighting with it.
+		material.polygonOffset = wireframe;
+		material.polygonOffsetFactor = 1;
+		material.polygonOffsetUnits = 1;
 	});
 
 	$effect(() => {
