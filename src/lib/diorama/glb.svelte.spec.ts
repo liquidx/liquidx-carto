@@ -6,10 +6,7 @@ import { applyVertical, buildDiorama } from './geometry';
 describe('diorama glb', () => {
 	it('round-trips the shader attributes and settings', async () => {
 		const circle = { lon: 138.7, lat: 35.3, radius: 1000 };
-		const data = buildDiorama((lon) => (lon - circle.lon) * 10_000 + 500, circle, {
-			rings: 4,
-			segments: 8
-		});
+		const data = buildDiorama((lon) => (lon - circle.lon) * 10_000 + 500, circle, { rings: 4 });
 		applyVertical(data, { exaggeration: 1.5, baseDepth: 0.25 });
 		const mesh = new THREE.Mesh(data.geometry, createTerrainMaterial().material);
 		const meta = {
