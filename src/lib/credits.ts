@@ -21,6 +21,12 @@ export const CREDITS = {
 		use: 'elevation',
 		url: 'https://mapterhorn.com'
 	},
+	reearthTerrain: {
+		name: 're:earth terrain',
+		by: 're:earth · mapterhorn (cc by 4.0), egm2008 geoid (nga)',
+		use: 'elevation',
+		url: 'https://terrain.reearth.land'
+	},
 	gsiDem: {
 		name: '標高タイル',
 		by: '国土地理院 (gsi japan)',
@@ -75,6 +81,7 @@ export const CREDITS = {
 export const TERRAIN_TOOL_CREDITS: Credit[] = [
 	CREDITS.awsTerrain,
 	CREDITS.mapterhorn,
+	CREDITS.reearthTerrain,
 	CREDITS.gsiDem,
 	CREDITS.gsiFgd,
 	CREDITS.openFreeMap,
