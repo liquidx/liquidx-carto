@@ -15,6 +15,10 @@ export interface TerrainProvider {
 	encoding: Encoding;
 	minZoom: number;
 	maxZoom: number;
+	/** Pixel width of a tile. A 512 px tile has the detail of the next zoom up at 256 px. */
+	tileSize: number;
+	/** Fill nodata inside a tile from its parent, for layers that only partly cover a tile. */
+	fillGaps?: boolean;
 	url: (z: number, x: number, y: number) => string;
 	attribution: string;
 }
@@ -27,6 +31,7 @@ export const PROVIDERS: TerrainProvider[] = [
 		encoding: 'terrarium',
 		minZoom: 0,
 		maxZoom: 15,
+		tileSize: 256,
 		url: (z, x, y) => `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`,
 		attribution: 'Terrain Tiles · Mapzen / Tilezen, AWS Open Data'
 	},
@@ -36,11 +41,25 @@ export const PROVIDERS: TerrainProvider[] = [
 		coverage: 'global · copernicus glo-30 plus national lidar where published',
 		encoding: 'terrarium',
 		minZoom: 0,
-		// Tiles are 512 px; high zooms only exist where high-resolution sources do, and missing
-		// tiles fall back to their parent.
+		// High zooms only exist where high-resolution sources do, and missing tiles fall back to
+		// their parent.
 		maxZoom: 16,
+		tileSize: 512,
 		url: (z, x, y) => `https://tiles.mapterhorn.com/${z}/${x}/${y}.webp`,
 		attribution: '© Mapterhorn'
+	},
+	{
+		id: 'reearth',
+		label: 're:earth terrain',
+		coverage: 'global · mapterhorn merged with the egm2008 geoid, ~5 m at best',
+		encoding: 'terrarium',
+		minZoom: 0,
+		// The service answers deeper zooms too, but only by upsampling z14.
+		maxZoom: 14,
+		tileSize: 512,
+		// `elevation` is height above sea level; the service also has an `ellipsoid` datum.
+		url: (z, x, y) => `https://terrain.reearth.land/terrarium/elevation/${z}/${x}/${y}.png`,
+		attribution: 'Re:Earth Terrain · Mapterhorn (CC BY 4.0)'
 	},
 	{
 		id: 'gsi',
@@ -49,10 +68,29 @@ export const PROVIDERS: TerrainProvider[] = [
 		encoding: 'gsi',
 		minZoom: 0,
 		maxZoom: 15,
+		tileSize: 256,
 		url: (z, x, y) =>
 			z >= 15
 				? `https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/${z}/${x}/${y}.png`
 				: `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`,
+		attribution: '国土地理院 (GSI Japan) 標高タイル'
+	},
+	{
+		id: 'gsi-1m',
+		label: 'gsi japan 1m',
+		coverage: 'japan only · dem1a 1 m lidar where surveyed, else dem5a / dem10b',
+		encoding: 'gsi',
+		minZoom: 0,
+		maxZoom: 17,
+		tileSize: 256,
+		// DEM1A is patchy, so its gaps and missing tiles fall back through 5 m to 10 m.
+		fillGaps: true,
+		url: (z, x, y) =>
+			z >= 16
+				? `https://cyberjapandata.gsi.go.jp/xyz/dem1a_png/${z}/${x}/${y}.png`
+				: z === 15
+					? `https://cyberjapandata.gsi.go.jp/xyz/dem5a_png/${z}/${x}/${y}.png`
+					: `https://cyberjapandata.gsi.go.jp/xyz/dem_png/${z}/${x}/${y}.png`,
 		attribution: '国土地理院 (GSI Japan) 標高タイル'
 	}
 ];
@@ -116,7 +154,10 @@ async function fetchTile(
 /** How many zoom levels to climb looking for an ancestor when a tile is missing. */
 const MAX_FALLBACK = 4;
 
-/** A tile, or its nearest available ancestor upsampled to cover the same area. */
+/**
+ * A tile, or its nearest available ancestor upsampled to cover the same area. With `fillGaps`
+ * the ancestor also patches nodata inside a tile that does exist.
+ */
 function getTile(
 	p: TerrainProvider,
 	z: number,
@@ -128,9 +169,15 @@ function getTile(
 	let hit = cache.get(key);
 	if (!hit) {
 		hit = fetchTile(p, z, x, y).then(async (t) => {
-			if (t || z <= p.minZoom || depth >= MAX_FALLBACK) return t;
+			const gaps = t !== null && p.fillGaps === true && t.data.some(Number.isNaN);
+			if ((t && !gaps) || z <= p.minZoom || depth >= MAX_FALLBACK) return t;
 			const parent = await getTile(p, z - 1, x >> 1, y >> 1, depth + 1);
-			return parent && upsampleQuadrant(parent, x & 1, y & 1);
+			if (!parent) return t;
+			const fill = upsampleQuadrant(parent, x & 1, y & 1);
+			// Parent and child tiles are the same size for every provider.
+			if (!t || t.size !== fill.size) return t ?? fill;
+			for (let i = 0; i < t.data.length; i++) if (Number.isNaN(t.data[i])) t.data[i] = fill.data[i];
+			return t;
 		});
 		// Don't cache failures (network errors) so they can be retried.
 		hit.catch(() => cache.delete(key));
@@ -171,14 +218,9 @@ function bilinear(d: Float32Array, w: number, h: number, fx: number, fy: number)
 const MAX_TILES = 64;
 
 /** Pick the zoom whose pixels are about as fine as the grid spacing, within a tile budget. */
-export function chooseZoom(
-	p: TerrainProvider,
-	box: MercatorBox,
-	gridWidth: number,
-	tileSize = 256
-) {
+export function chooseZoom(p: TerrainProvider, box: MercatorBox, gridWidth: number) {
 	const spacing = (box.x1 - box.x0) / Math.max(1, gridWidth - 1);
-	let z = Math.ceil(Math.log2(1 / (spacing * tileSize)));
+	let z = Math.ceil(Math.log2(1 / (spacing * p.tileSize)));
 	z = Math.max(p.minZoom, Math.min(p.maxZoom, z));
 	while (z > p.minZoom && tileCount(box, z) > MAX_TILES) z--;
 	return z;
@@ -211,9 +253,7 @@ export async function sampleApiGrid(
 	gridHeight: number,
 	signal?: AbortSignal
 ): Promise<ApiGridResult> {
-	// Mapterhorn serves 512 px tiles, so one zoom level lower gives the same detail.
-	const nominal = p.id === 'mapterhorn' ? 512 : 256;
-	const z = chooseZoom(p, box, gridWidth, nominal);
+	const z = chooseZoom(p, box, gridWidth);
 	const { tx0, ty0, tx1, ty1 } = tileRange(box, z);
 	const jobs: Promise<Tile | null>[] = [];
 	for (let ty = ty0; ty <= ty1; ty++)
@@ -221,7 +261,7 @@ export async function sampleApiGrid(
 	const tiles = await Promise.all(jobs);
 	signal?.throwIfAborted();
 
-	const size = tiles.find((t) => t)?.size ?? nominal;
+	const size = tiles.find((t) => t)?.size ?? p.tileSize;
 	const nx = tx1 - tx0 + 1;
 	const ny = ty1 - ty0 + 1;
 	const mw = nx * size;
