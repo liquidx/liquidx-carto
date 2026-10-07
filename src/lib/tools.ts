@@ -9,6 +9,12 @@ export type Tool = {
 /** Every tool/experiment listed on the index, in display order. */
 export const tools: Tool[] = [
 	{
+		slug: 'diorama-snow',
+		title: 'Snow Diorama',
+		date: '2026-10-07',
+		summary: 'a ski resort on a snow diorama, with its runs, lifts, trees and buildings.'
+	},
+	{
 		slug: 'diorama',
 		title: 'Mountain Diorama',
 		date: '2026-09-25',

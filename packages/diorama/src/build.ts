@@ -1,6 +1,9 @@
 import * as THREE from 'three';
-import { rampColor } from './ramp';
-import type { Sampler } from './sampler';
+import type { DioramaMeta } from './format.js';
+import { RAMP_SIZE, terrainStyles, writeRamp } from './style.js';
+
+/** An elevation lookup: metres at a longitude and latitude, NaN where there is no data. */
+export type Sampler = (lon: number, lat: number) => number;
 
 const M_PER_DEG_LAT = 111_320;
 
@@ -26,6 +29,7 @@ export interface VerticalParams {
 	baseDepth: number;
 }
 
+/** A diorama mesh as built, before it is written to a file. */
 export interface DioramaData {
 	geometry: THREE.BufferGeometry;
 	/** Actual elevations (metres) per vertex, for the contour shader and re-scaling. */
@@ -37,6 +41,12 @@ export interface DioramaData {
 	minZ: number;
 	maxZ: number;
 	radius: number;
+	/** Centre of the circle in degrees. */
+	lon: number;
+	lat: number;
+	/** Layout of the top disc: a centre vertex, then `rings` rings of `segments` vertices. */
+	rings: number;
+	segments: number;
 	nodataFraction: number;
 }
 
@@ -104,16 +114,25 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 	// Fill nodata with the minimum so it reads as a flat floor.
 	for (let i = 0; i < topCount; i++) if (Number.isNaN(topElev[i])) topElev[i] = minZ;
 
+	// Vertex colours in the topo style, for glTF viewers without the terrain shader.
+	const ramp = new Uint8Array(RAMP_SIZE * 4);
+	writeRamp(terrainStyles.topo.ramp, ramp);
 	const range = Math.max(1e-6, maxZ - minZ);
-	const col = new Float32Array(3);
+	const col = new THREE.Color();
 	for (let i = 0; i < topCount; i++) {
 		positions[i * 3] = xy[i * 2];
 		positions[i * 3 + 2] = xy[i * 2 + 1];
 		elev[i] = topElev[i];
-		rampColor((topElev[i] - minZ) / range, col);
-		colors[i * 3] = col[0] / 255;
-		colors[i * 3 + 1] = col[1] / 255;
-		colors[i * 3 + 2] = col[2] / 255;
+		const texel = Math.round(((topElev[i] - minZ) / range) * (RAMP_SIZE - 1)) * 4;
+		col.setRGB(
+			ramp[texel] / 255,
+			ramp[texel + 1] / 255,
+			ramp[texel + 2] / 255,
+			THREE.SRGBColorSpace
+		);
+		colors[i * 3] = col.r;
+		colors[i * 3 + 1] = col.g;
+		colors[i * 3 + 2] = col.b;
 	}
 
 	// --- wall: duplicate outer ring (top) and add bottom ring ---
@@ -211,6 +230,10 @@ export function buildDiorama(sample: Sampler, sel: Circle, params: MeshParams): 
 		minZ,
 		maxZ,
 		radius: R,
+		lon: sel.lon,
+		lat: sel.lat,
+		rings,
+		segments,
 		nodataFraction: nodata / topCount
 	};
 }
@@ -231,4 +254,25 @@ export function applyVertical(data: DioramaData, params: VerticalParams) {
 	surf.needsUpdate = true;
 	data.geometry.computeVertexNormals();
 	data.geometry.computeBoundingSphere();
+}
+
+/** The settings to store with (or use to view) a mesh built by `buildDiorama`. */
+export function dioramaMeta(
+	data: DioramaData,
+	settings: VerticalParams & { contourInterval: number; majorEvery: number }
+): DioramaMeta {
+	return {
+		version: 2,
+		minZ: data.minZ,
+		maxZ: data.maxZ,
+		radius: data.radius,
+		lon: data.lon,
+		lat: data.lat,
+		rings: data.rings,
+		segments: data.segments,
+		exaggeration: settings.exaggeration,
+		baseDepth: settings.baseDepth,
+		contourInterval: settings.contourInterval,
+		majorEvery: settings.majorEvery
+	};
 }

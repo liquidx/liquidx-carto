@@ -1,7 +1,7 @@
 {
 	"name": "@liquidx/diorama",
 	"version": "0.1.0",
-	"description": "Svelte viewer for terrain diorama GLBs exported from liquidx-carto, with the contour and soil shader.",
+	"description": "Svelte component for terrain diorama GLBs exported from liquidx-carto: styled terrain, overlays by longitude and latitude.",
 	"type": "module",
 	"license": "MIT",
 	"scripts": {
@@ -36,6 +36,9 @@
 	"peerDependencies": {
 		"svelte": "^5.0.0",
 		"three": ">=0.170.0"
+	},
+	"dependencies": {
+		"@types/geojson": "^7946.0.16"
 	},
 	"devDependencies": {
 		"@sveltejs/package": "^2.5.8",

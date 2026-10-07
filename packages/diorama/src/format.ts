@@ -1,22 +1,27 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createTerrainMaterial, type ContourUniforms } from './material.js';
+import { createTerrainMaterial, type TerrainMaterial } from './material.js';
+import { createSurface, type DioramaSurface } from './surface.js';
+import type { TerrainStyle } from './style.js';
 
 /**
  * Settings and extents carried in the GLB (as `extras.diorama` on the mesh node) so a viewer
- * can render it the way it was exported.
+ * can render it the way it was exported and place things on it by longitude and latitude.
  */
 export interface DioramaMeta {
-	version: 1;
+	version: 2;
 	/** Lowest and highest terrain elevation in metres. */
 	minZ: number;
 	maxZ: number;
 	/** Ground radius in metres; the model itself is normalised to a radius of 1. */
 	radius: number;
-	/** Centre of the circle in degrees, when known. */
-	lon?: number;
-	lat?: number;
+	/** Centre of the circle in degrees. */
+	lon: number;
+	lat: number;
+	/** Layout of the top disc: a centre vertex, then `rings` rings of `segments` vertices. */
+	rings: number;
+	segments: number;
 	exaggeration: number;
 	/** Base thickness as a fraction of the radius. */
 	baseDepth: number;
@@ -52,13 +57,41 @@ export interface LoadedDiorama {
 	mesh: THREE.Mesh;
 	/** Settings stored in the file; null for GLBs without them. */
 	meta: DioramaMeta | null;
-	/** Contour shader uniforms; null when the file lacks the attributes the shader needs. */
-	uniforms: ContourUniforms | null;
+	/** The terrain material; null when the file lacks the attributes its shader needs. */
+	terrain: TerrainMaterial | null;
+	/** Longitude/latitude lookups on the mesh; null without `meta`. */
+	surface: DioramaSurface | null;
 	dispose(): void;
 }
 
-/** Load a diorama GLB from a URL, Blob or ArrayBuffer and give it the terrain material. */
-export async function loadDioramaGlb(src: string | Blob | ArrayBuffer): Promise<LoadedDiorama> {
+/**
+ * Bring the stored settings up to the current version. Version 1 files did not record the
+ * disc layout, which is recovered from the vertex counts (a disc of 1 + rings × segments
+ * vertices, then 3 × segments + 1 for the wall and bottom). Null when the file has no usable
+ * settings, such as a version 1 file exported without its centre.
+ */
+function readMeta(mesh: THREE.Mesh): DioramaMeta | null {
+	const raw = mesh.userData[EXTRAS_KEY] as (Partial<DioramaMeta> & { version: number }) | undefined;
+	if (!raw) return null;
+	if (raw.version === 2) return raw as DioramaMeta;
+	const mask = mesh.geometry.getAttribute('contourMask');
+	if (raw.version !== 1 || raw.lon === undefined || raw.lat === undefined || !mask) return null;
+	let top = 0;
+	while (top < mask.count && mask.getX(top) > 0.5) top++;
+	const segments = (mask.count - top - 1) / 3;
+	const rings = (top - 1) / segments;
+	if (!Number.isInteger(segments) || !Number.isInteger(rings) || rings < 1) return null;
+	return { ...(raw as DioramaMeta), version: 2, rings, segments };
+}
+
+/**
+ * Load a diorama GLB from a URL, Blob or ArrayBuffer and give it the terrain material, in
+ * `style` when given.
+ */
+export async function loadDioramaGlb(
+	src: string | Blob | ArrayBuffer,
+	style?: TerrainStyle
+): Promise<LoadedDiorama> {
 	const loader = new GLTFLoader();
 	const gltf =
 		typeof src === 'string'
@@ -76,34 +109,47 @@ export async function loadDioramaGlb(src: string | Blob | ArrayBuffer): Promise<
 	mesh.receiveShadow = true;
 
 	const geometry = mesh.geometry;
-	const meta = (mesh.userData[EXTRAS_KEY] as DioramaMeta | undefined) ?? null;
-
-	let uniforms: ContourUniforms | null = null;
+	let terrain: TerrainMaterial | null = null;
 	if (ATTRIBUTES.every((a) => geometry.hasAttribute(loadedName(a)))) {
 		for (const a of ATTRIBUTES) {
 			geometry.setAttribute(a, geometry.getAttribute(loadedName(a)));
 			geometry.deleteAttribute(loadedName(a));
 		}
-		const terrain = createTerrainMaterial();
-		uniforms = terrain.uniforms;
-		if (meta) {
-			uniforms.uInterval.value = meta.contourInterval;
-			uniforms.uMajorEvery.value = meta.majorEvery;
-			uniforms.uMinZ.value = meta.minZ;
-		}
+		terrain = createTerrainMaterial(style);
 		const old = mesh.material as THREE.Material;
 		mesh.material = terrain.material;
 		old.dispose();
+	}
+
+	const meta = terrain ? readMeta(mesh) : null;
+	if (terrain && meta) {
+		terrain.uniforms.uInterval.value = meta.contourInterval;
+		terrain.uniforms.uMajorEvery.value = meta.majorEvery;
+		terrain.uniforms.uExaggeration.value = meta.exaggeration;
+		terrain.setElevationRange(meta.minZ, meta.maxZ);
+	} else if (terrain) {
+		// No settings to go by: take the elevation range from the mesh itself.
+		const elevation = geometry.getAttribute('elevation');
+		let minZ = Infinity,
+			maxZ = -Infinity;
+		for (let i = 0; i < elevation.count; i++) {
+			const z = elevation.getX(i);
+			if (z < minZ) minZ = z;
+			if (z > maxZ) maxZ = z;
+		}
+		terrain.setElevationRange(minZ, maxZ);
 	}
 
 	const loaded = mesh;
 	return {
 		mesh: loaded,
 		meta,
-		uniforms,
+		terrain,
+		surface: meta ? createSurface(geometry, meta) : null,
 		dispose() {
 			loaded.geometry.dispose();
-			(loaded.material as THREE.Material).dispose();
+			if (terrain) terrain.dispose();
+			else (loaded.material as THREE.Material).dispose();
 		}
 	};
 }
