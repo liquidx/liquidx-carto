@@ -121,7 +121,8 @@ export function decodePixels(rgba: Uint8ClampedArray, encoding: Encoding): Float
 	return out;
 }
 
-interface Tile {
+/** A decoded tile: `size` × `size` elevations in metres, row-major from the north-west. */
+export interface Tile {
 	size: number;
 	data: Float32Array;
 }
@@ -187,6 +188,15 @@ function getTile(
 	return hit;
 }
 
+/**
+ * A decoded tile from a provider, through a shared cache. Missing tiles come back as their
+ * nearest ancestor upsampled (see `getTile`), so callers only see `null` where there is no data
+ * at all. Shared by the contour, diorama and snowboard tools.
+ */
+export function loadTile(p: TerrainProvider, z: number, x: number, y: number) {
+	return getTile(p, z, x, y);
+}
+
 function upsampleQuadrant(parent: Tile, qx: number, qy: number): Tile {
 	const n = parent.size;
 	const half = n / 2;
@@ -201,7 +211,11 @@ function upsampleQuadrant(parent: Tile, qx: number, qy: number): Tile {
 	return { size: n, data: out };
 }
 
-function bilinear(d: Float32Array, w: number, h: number, fx: number, fy: number): number {
+/**
+ * Bilinear sample of a row-major grid at fractional pixel coordinates, where pixel (i, j) is
+ * centred on (i, j). Coordinates are clamped to the grid.
+ */
+export function bilinear(d: Float32Array, w: number, h: number, fx: number, fy: number): number {
 	const x0 = Math.max(0, Math.min(w - 1, Math.floor(fx)));
 	const y0 = Math.max(0, Math.min(h - 1, Math.floor(fy)));
 	const x1 = Math.min(w - 1, x0 + 1);
@@ -218,15 +232,21 @@ function bilinear(d: Float32Array, w: number, h: number, fx: number, fy: number)
 const MAX_TILES = 64;
 
 /** Pick the zoom whose pixels are about as fine as the grid spacing, within a tile budget. */
-export function chooseZoom(p: TerrainProvider, box: MercatorBox, gridWidth: number) {
+export function chooseZoom(
+	p: TerrainProvider,
+	box: MercatorBox,
+	gridWidth: number,
+	maxTiles = MAX_TILES
+) {
 	const spacing = (box.x1 - box.x0) / Math.max(1, gridWidth - 1);
 	let z = Math.ceil(Math.log2(1 / (spacing * p.tileSize)));
 	z = Math.max(p.minZoom, Math.min(p.maxZoom, z));
-	while (z > p.minZoom && tileCount(box, z) > MAX_TILES) z--;
+	while (z > p.minZoom && tileCount(box, z) > maxTiles) z--;
 	return z;
 }
 
-function tileRange(box: MercatorBox, z: number) {
+/** The XYZ tile indices covering a mercator box at a zoom, inclusive. */
+export function tileRange(box: MercatorBox, z: number) {
 	const n = 2 ** z;
 	const clamp = (v: number) => Math.max(0, Math.min(n - 1, Math.floor(v * n)));
 	return { tx0: clamp(box.x0), ty0: clamp(box.y0), tx1: clamp(box.x1), ty1: clamp(box.y1) };

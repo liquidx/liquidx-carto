@@ -1,0 +1,256 @@
+/**
+ * Lifts: towers on the terrain, two cables, stations at each end and carriers going round
+ * the loop. Each lift also exposes its cable as a path the rider can be carried along.
+ */
+import * as THREE from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import type { Lift } from './resort';
+import type { Terrain } from './terrain';
+
+const TOWER_EVERY = 90;
+const CABLE_HEIGHT = 11;
+const GAUGE = 5;
+/** Carrier spacing and speed, metres and metres a second. */
+const CARRIER_EVERY = { gondola: 70, chair: 26 };
+export const LIFT_SPEED = { gondola: 6, chair: 3.2 };
+/** How far below the cable a rider sits. */
+export const SEAT_DROP = 2.4;
+
+export interface LiftLine {
+	lift: Lift;
+	/** The cable's midline from bottom to top, in world space. */
+	path: THREE.Vector3[];
+	/** Distance along the path to each point, and the total. */
+	lengths: number[];
+	total: number;
+	/** World position of the bottom and top stations, on the ground. */
+	bottom: THREE.Vector3;
+	top: THREE.Vector3;
+	/** Unit direction of travel on the map at the top, for dropping riders off. */
+	heading: number;
+	/** Position on the cable `d` metres from the bottom, `drop` metres below it. */
+	at(d: number, drop: number, target: THREE.Vector3): THREE.Vector3;
+}
+
+export interface Lifts {
+	group: THREE.Group;
+	lines: LiftLine[];
+	/** Advance the carriers. */
+	update(dt: number): void;
+	dispose(): void;
+}
+
+function alongPath(path: THREE.Vector3[], lengths: number[], d: number, target: THREE.Vector3) {
+	const total = lengths[lengths.length - 1];
+	d = Math.max(0, Math.min(total, d));
+	let k = 1;
+	while (k < path.length - 1 && lengths[k] < d) k++;
+	const span = lengths[k] - lengths[k - 1] || 1;
+	return target.copy(path[k - 1]).lerp(path[k], (d - lengths[k - 1]) / span);
+}
+
+export function buildLifts(lifts: Lift[], terrain: Terrain): Lifts {
+	const group = new THREE.Group();
+	const structure = new THREE.MeshStandardMaterial({
+		color: '#6b7280',
+		roughness: 0.7,
+		side: THREE.DoubleSide
+	});
+	const post = new THREE.CylinderGeometry(0.5, 0.5, 1, 8);
+	const box = new THREE.BoxGeometry(1, 1, 1);
+	const posts: THREE.Matrix4[] = [];
+	const boxes: THREE.Matrix4[] = [];
+	const cable: number[] = [];
+	const up = new THREE.Vector3(0, 1, 0);
+
+	const rod = (a: THREE.Vector3, b: THREE.Vector3, width: number) => {
+		const span = b.clone().sub(a);
+		const length = span.length();
+		posts.push(
+			new THREE.Matrix4().compose(
+				a.clone().add(b).multiplyScalar(0.5),
+				new THREE.Quaternion().setFromUnitVectors(up, span.divideScalar(length || 1)),
+				new THREE.Vector3(width, length, width)
+			)
+		);
+	};
+
+	const slab = (w: number, h: number, d: number, y: number, z = 0) =>
+		new THREE.BoxGeometry(w, h, d).translate(0, y, z);
+	const chairShape = mergeGeometries([
+		slab(0.1, 2.2, 0.1, -1.1),
+		slab(2.4, 0.5, 0.1, -2.3, -0.25),
+		slab(2.4, 0.1, 0.6, -2.55),
+		slab(2.4, 0.06, 0.06, -1.5, 0.5)
+	]);
+	const cabinShape = mergeGeometries([slab(0.12, 1, 0.12, -0.5), slab(2.2, 2.3, 2.6, -2.15)]);
+	const carrierMaterial = new THREE.MeshStandardMaterial({ roughness: 0.5, metalness: 0.2 });
+
+	type Fleet = {
+		mesh: THREE.InstancedMesh;
+		line: LiftLine;
+		gap: number;
+		pace: number;
+		travelled: number;
+		side: THREE.Vector3;
+		turns: [THREE.Quaternion, THREE.Quaternion];
+	};
+	const fleets: Fleet[] = [];
+	const lines: LiftLine[] = [];
+
+	for (const lift of lifts) {
+		if (lift.path.length < 2) continue;
+		// Bottom to top by elevation, whatever order the data has.
+		let pts = lift.path.map(([x, z]) => new THREE.Vector3(x, terrain.height(x, z), z));
+		if (pts[0].y > pts[pts.length - 1].y) pts = pts.reverse();
+		// Towers at even ground spacing along the line.
+		const lengths2d = [0];
+		for (let i = 1; i < pts.length; i++)
+			lengths2d.push(
+				lengths2d[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z)
+			);
+		const groundTotal = lengths2d[lengths2d.length - 1];
+		const towers = Math.max(1, Math.round(groundTotal / TOWER_EVERY));
+		const feet: THREE.Vector3[] = [];
+		for (let i = 0; i <= towers; i++) {
+			const p = alongPath(pts, lengths2d, (groundTotal * i) / towers, new THREE.Vector3());
+			p.y = terrain.height(p.x, p.z);
+			feet.push(p);
+		}
+		const tops = feet.map((p) => p.clone().setY(p.y + CABLE_HEIGHT));
+		const bearing = Math.atan2(
+			tops[tops.length - 1].x - tops[0].x,
+			tops[tops.length - 1].z - tops[0].z
+		);
+		const heading = new THREE.Quaternion().setFromAxisAngle(up, bearing);
+		const side = new THREE.Vector3(-Math.cos(bearing), 0, Math.sin(bearing));
+
+		feet.forEach((foot, i) => {
+			const end = i === 0 || i === feet.length - 1;
+			if (end) {
+				// A shed over the end of the line: a roof on legs, open at the sides.
+				const roof = new THREE.Vector3(GAUGE + 5, 0.6, 12);
+				boxes.push(
+					new THREE.Matrix4().compose(foot.clone().setY(foot.y + CABLE_HEIGHT + 1.6), heading, roof)
+				);
+				for (const sx of [-1, 1])
+					for (const sz of [-1, 1]) {
+						const leg = foot
+							.clone()
+							.addScaledVector(side, (sx * roof.x) / 2)
+							.addScaledVector(
+								new THREE.Vector3(Math.sin(bearing), 0, Math.cos(bearing)),
+								(sz * roof.z) / 2
+							);
+						leg.y = terrain.height(leg.x, leg.z) - 1;
+						rod(leg, leg.clone().setY(foot.y + CABLE_HEIGHT + 1.6), 0.6);
+					}
+			} else {
+				rod(foot.clone().setY(foot.y - 1), tops[i], 0.9);
+				boxes.push(
+					new THREE.Matrix4().compose(tops[i], heading, new THREE.Vector3(GAUGE + 1.4, 0.5, 0.6))
+				);
+			}
+			if (!i) return;
+			for (const sign of [1, -1]) {
+				const a = tops[i - 1].clone().addScaledVector(side, sign * (GAUGE / 2));
+				const b = tops[i].clone().addScaledVector(side, sign * (GAUGE / 2));
+				cable.push(a.x, a.y, a.z, b.x, b.y, b.z);
+			}
+		});
+
+		const lengths = [0];
+		for (let i = 1; i < tops.length; i++)
+			lengths.push(lengths[i - 1] + tops[i].distanceTo(tops[i - 1]));
+		const total = lengths[lengths.length - 1];
+		const line: LiftLine = {
+			lift,
+			path: tops,
+			lengths,
+			total,
+			bottom: feet[0],
+			top: feet[feet.length - 1],
+			heading: bearing,
+			at: (d, drop, target) => {
+				alongPath(tops, lengths, d, target);
+				target.y -= drop;
+				return target;
+			}
+		};
+		lines.push(line);
+
+		const gap = CARRIER_EVERY[lift.kind];
+		const count = Math.max(2, Math.round((total * 2) / gap));
+		const mesh = new THREE.InstancedMesh(
+			lift.kind === 'gondola' ? cabinShape : chairShape,
+			carrierMaterial,
+			count
+		);
+		const colour = new THREE.Color(lift.kind === 'gondola' ? '#f08c00' : '#c92a2a');
+		for (let i = 0; i < count; i++) mesh.setColorAt(i, colour);
+		mesh.frustumCulled = false;
+		group.add(mesh);
+		fleets.push({
+			mesh,
+			line,
+			gap: (total * 2) / count,
+			pace: LIFT_SPEED[lift.kind],
+			travelled: 0,
+			side,
+			turns: [
+				heading,
+				heading.clone().multiply(new THREE.Quaternion().setFromAxisAngle(up, Math.PI))
+			]
+		});
+	}
+
+	const postMesh = new THREE.InstancedMesh(post, structure, posts.length);
+	posts.forEach((m, i) => postMesh.setMatrixAt(i, m));
+	const boxMesh = new THREE.InstancedMesh(box, structure, boxes.length);
+	boxes.forEach((m, i) => boxMesh.setMatrixAt(i, m));
+	postMesh.castShadow = boxMesh.castShadow = true;
+	postMesh.frustumCulled = boxMesh.frustumCulled = false;
+	const cableGeometry = new THREE.BufferGeometry();
+	cableGeometry.setAttribute('position', new THREE.Float32BufferAttribute(cable, 3));
+	const cableMaterial = new THREE.LineBasicMaterial({ color: '#2b2f36' });
+	const cables = new THREE.LineSegments(cableGeometry, cableMaterial);
+	cables.frustumCulled = false;
+	group.add(postMesh, boxMesh, cables);
+
+	const matrix = new THREE.Matrix4();
+	const position = new THREE.Vector3();
+	const one = new THREE.Vector3(1, 1, 1);
+	const place = (fleet: Fleet) => {
+		const { mesh, line, gap, side, turns } = fleet;
+		const loop = line.total * 2;
+		for (let i = 0; i < mesh.count; i++) {
+			const d = (fleet.travelled + i * gap) % loop;
+			const goingUp = d < line.total;
+			line.at(goingUp ? d : loop - d, 0, position);
+			position.addScaledVector(side, goingUp ? GAUGE / 2 : -GAUGE / 2);
+			mesh.setMatrixAt(i, matrix.compose(position, turns[goingUp ? 0 : 1], one));
+		}
+		mesh.instanceMatrix.needsUpdate = true;
+	};
+	for (const fleet of fleets) place(fleet);
+
+	return {
+		group,
+		lines,
+		update(dt) {
+			for (const fleet of fleets) {
+				fleet.travelled = (fleet.travelled + fleet.pace * dt) % (fleet.line.total * 2);
+				place(fleet);
+			}
+		},
+		dispose() {
+			for (const g of [post, box, chairShape, cabinShape, cableGeometry]) g.dispose();
+			structure.dispose();
+			carrierMaterial.dispose();
+			cableMaterial.dispose();
+			for (const f of fleets) f.mesh.dispose();
+			postMesh.dispose();
+			boxMesh.dispose();
+		}
+	};
+}
