@@ -37,6 +37,13 @@
 	const isLift = kind('lift');
 	const isGondola = (f: Feature) => f.properties?.liftType === 'gondola';
 	const find = (k: string) => data.features.features.find(kind(k));
+	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
+	/** Metres a second: from the ride time where the lift has one, else typical for its kind. */
+	function liftSpeed(f: Feature) {
+		const { lengthMeters, durationSecs } = f.properties ?? {};
+		if (lengthMeters && durationSecs) return lengthMeters / durationSecs;
+		return isGondola(f) ? 5 : seats(f) >= 4 ? 4 : 2;
+	}
 
 	const DIFFICULTY: Record<string, string> = {
 		easy: '#2f9e44',
@@ -90,8 +97,9 @@
 	});
 
 	let terrain = $state<TerrainPreset>('snow');
-	let exaggeration = $state(1.3);
-	let objectScale = $state(4);
+	let exaggeration = $state(1);
+	let objectScale = $state(1);
+	let liftsMoving = $state(true);
 	let trees = $state<'none' | 'resort' | 'all'>('all');
 	let showLabels = $state(true);
 	let sunAzimuth = $state(231);
@@ -149,7 +157,8 @@
 	<p>
 		{data.features.metadata?.name ?? 'A ski resort'} on a
 		<a href={resolve('/diorama')}>Mountain Diorama</a>: runs drawn on the terrain by difficulty,
-		with placeholder lifts, trees, buildings and labels from <code>@liquidx/diorama</code>.
+		with placeholder lifts, trees and buildings from <code>@liquidx/diorama</code> at their true size.
+		Zoom in to find them.
 	</p>
 </section>
 
@@ -166,6 +175,7 @@
 			{background}
 			{backgroundGradient}
 			{autoRotate}
+			minDistance={0.1}
 		>
 			<Compass sun />
 			<Drape
@@ -178,12 +188,19 @@
 					data={trees === 'all' ? everywhere : find('skiArea')}
 					avoid={[...data.features.features.filter((f) => isRun(f) || isLift(f)), ...hotels]}
 					clearance={30}
+					density={6000}
+					height={16}
+					limit={120_000}
 				/>
 			{/if}
 			<Lift
 				data={data.features}
 				filter={isLift}
-				carrierSize={(f) => (isGondola(f) ? 3.4 : 2.2)}
+				height={(f) => (isGondola(f) ? 14 : 9)}
+				carrier={(f) => (isGondola(f) ? 'cabin' : 'chair')}
+				carrierEvery={(f) => (isGondola(f) ? 45 : seats(f) >= 4 ? 28 : 14)}
+				carrierSize={(f) => (isGondola(f) ? 2 : seats(f) * 0.55 + 0.2)}
+				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isGondola(f) ? '#f08c00' : '#e03131')}
 			/>
 			<Building
@@ -197,7 +214,7 @@
 				src={asset('/diorama/summit-hut.glb')}
 				data={data.features}
 				filter={kind('locationPeak')}
-				size={40}
+				size={25}
 				heading={200}
 			/>
 			<Marker data={data.features} filter={kind('locationPeak')} height={70} />
@@ -272,6 +289,7 @@
 			bind:value={backgroundGradient}
 			format={(v) => v.toFixed(2)}
 		/>
+		<Toggle label="moving lifts" bind:checked={liftsMoving} />
 		<Toggle label="labels" bind:checked={showLabels} />
 		<Toggle label="auto-rotate" bind:checked={autoRotate} />
 	</div>

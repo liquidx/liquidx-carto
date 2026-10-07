@@ -62,6 +62,11 @@
 		backgroundGradient?: number;
 		autoRotate?: boolean;
 		rotateSpeed?: number;
+		/**
+		 * How close the view can zoom in, as a distance from what it looks at in radii of the
+		 * model. Lower it to look closely at objects left at their true size.
+		 */
+		minDistance?: number;
 		/** Called when a GLB from `src` has loaded. */
 		onload?: (meta: DioramaMeta | null) => void;
 		onerror?: (error: unknown) => void;
@@ -86,6 +91,7 @@
 		backgroundGradient = 0.5,
 		autoRotate = true,
 		rotateSpeed = 1.2,
+		minDistance = 0.8,
 		onload,
 		onerror,
 		class: className,
@@ -284,6 +290,10 @@
 		if (!stage) return;
 		stage.controls.autoRotate = autoRotate;
 		stage.controls.autoRotateSpeed = rotateSpeed;
+	});
+
+	$effect(() => {
+		if (stage) stage.controls.minDistance = minDistance;
 	});
 
 	/** The terrain on show as a binary glTF that `src` can load. Layers are not included. */

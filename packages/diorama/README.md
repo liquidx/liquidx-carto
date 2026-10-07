@@ -55,6 +55,7 @@ in the browser. It renders nothing during SSR and needs no `ssr = false`.
 | `backgroundGradient` | backdrop shading, 0 to 1                | `0.5`           |
 | `autoRotate`         | `boolean`                               | `true`          |
 | `rotateSpeed`        | `number`                                | `1.2`           |
+| `minDistance`        | closest zoom, in radii of the model     | `0.8`           |
 | `onload`             | `(meta: DioramaMeta \| null) => void`   |                 |
 | `onerror`            | `(error: unknown) => void`              |                 |
 | `class`              | `string`                                |                 |
@@ -178,7 +179,11 @@ own.
 ```svelte
 <Diorama src="/models/appi.glb" terrain="snow" objectScale={4}>
 	<Trees data={skiArea} avoid={runs} clearance={30} />
-	<Lift data={lifts} carrierSize={(f) => (f.properties?.liftType === 'gondola' ? 3.4 : 2.2)} />
+	<Lift
+		data={lifts}
+		carrier={(f) => (f.properties?.liftType === 'gondola' ? 'cabin' : 'chair')}
+		speed={4}
+	/>
 	<Building data={footprints} height={(f) => f.properties?.height ?? 9} />
 	<Building at={[140.9715, 40.0017]} footprint={[60, 24]} height={14} />
 	<Model src="/models/hut.glb" data={peaks} size={40} heading={200} />
@@ -189,7 +194,7 @@ own.
 | Component  | Reads               | Draws                                                  | Main props                                                                |
 | ---------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `avoid`, `clearance` |
-| `Lift`     | lines               | towers, cable, end stations and carriers               | `towerEvery`, `height`, `color`, `carrierEvery`, `carrierSize`            |
+| `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`       |
 | `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor` |
 | `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                       |
 | `Marker`   | points              | a pin                                                  | `height`, `color`                                                         |
@@ -199,9 +204,15 @@ They all take `data` and `filter` like `Drape`, so several can read the same fil
 Props typed as `PerFeature` (colours, sizes, headings, the carrier props) accept a value or a
 function of the feature.
 
-On a model several kilometres across, a tree at true scale is a speck, so set `objectScale`
-on `<Diorama>` to enlarge every object. Positions and spacing stay true; only the objects
-grow.
+`Lift` hangs a `carrier` (`'chair'` or `'cabin'`, `carrierSize` metres wide) every
+`carrierEvery` metres round the loop, up the right of the line and back down the left. Give it
+a `speed` in metres a second and they travel; at 0, the default, they stand still.
+
+The defaults are true to life: a 14 m tree, a 10 m lift tower, a chair 2.2 m wide. On a model
+several kilometres across that makes each one a speck, which shows how big the mountain is;
+lower `minDistance` on `<Diorama>` so the view can zoom in to them. To have them read from
+afar instead, set `objectScale` to enlarge every object. Positions and spacing stay true; only
+the objects grow.
 
 ## North and light
 

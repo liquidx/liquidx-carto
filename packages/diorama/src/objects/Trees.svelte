@@ -80,7 +80,7 @@
 		if (!polygons.length || density <= 0) return;
 
 		// Segments to stay clear of, as [x0, z0, x1, z1] in model space.
-		const segments: number[][] = [];
+		const segments: [number, number, number, number][] = [];
 		for (const shape of obstacles.current) {
 			if (shape.kind === 'point') continue;
 			for (const path of shape.coords) {
@@ -89,9 +89,17 @@
 			}
 		}
 		const treeHeight = diorama.size(height);
-		const keepOut = diorama.metres(clearance) + treeHeight * 0.2;
+		const keepOut = diorama.metres(clearance) + treeHeight * 0.17;
 		const blocked = (x: number, z: number) => {
 			for (const [x0, z0, x1, z1] of segments) {
+				// Most segments are nowhere near: rule those out cheaply.
+				if (
+					x < Math.min(x0, x1) - keepOut ||
+					x > Math.max(x0, x1) + keepOut ||
+					z < Math.min(z0, z1) - keepOut ||
+					z > Math.max(z0, z1) + keepOut
+				)
+					continue;
 				const dx = x1 - x0;
 				const dz = z1 - z0;
 				const t = Math.min(
@@ -138,8 +146,8 @@
 		}
 		if (!spots.size) return;
 
-		// A cone standing on its base, one unit tall.
-		const geometry = new THREE.ConeGeometry(0.5, 1, 6).translate(0, 0.5, 0);
+		// A cone standing on its base, one unit tall. The base is in the ground, so it has none.
+		const geometry = new THREE.ConeGeometry(0.5, 1, 6, 1, true).translate(0, 0.5, 0);
 		const material = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
 		const trees = new THREE.InstancedMesh(geometry, material, spots.size);
 		trees.castShadow = true;
@@ -157,7 +165,7 @@
 			// Sit slightly into the ground so no gap shows on a slope.
 			position.set(x, diorama.heightAt(x, z) - h * 0.04, z);
 			turn.setFromAxisAngle(up, b * Math.PI * 2);
-			scale.set(h * 0.42, h, h * 0.42);
+			scale.set(h * 0.34, h, h * 0.34);
 			trees.setMatrixAt(i, matrix.compose(position, turn, scale));
 			trees.setColorAt(i, tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08));
 			i++;
