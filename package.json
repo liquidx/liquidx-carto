@@ -19,6 +19,7 @@
 		"ekispert": "node --env-file-if-exists=.env tools/ekispert.ts",
 		"ev-jp": "node tools/ev-jp.ts",
 		"diorama-woods": "node tools/diorama-woods.ts",
+		"diorama-glb": "node --import ./tools/node-env.ts tools/diorama-glb.ts",
 		"japan-train-lines": "node tools/japan-train-lines.ts"
 	},
 	"devDependencies": {
@@ -31,6 +32,7 @@
 		"@tailwindcss/vite": "^4.3.0",
 		"@types/geojson": "^7946.0.16",
 		"@types/node": "^24",
+		"@types/pngjs": "^6.0.5",
 		"@types/three": "^0.186.0",
 		"@vitest/browser-playwright": "^4.1.8",
 		"eslint": "^10.4.1",
@@ -39,6 +41,7 @@
 		"globals": "^17.6.0",
 		"open-data-jp-prefectures-geojson": "^1.1.0",
 		"playwright": "^1.60.0",
+		"pngjs": "^7.0.0",
 		"prettier": "^3.8.3",
 		"prettier-plugin-svelte": "^4.1.0",
 		"prettier-plugin-tailwindcss": "^0.8.0",
