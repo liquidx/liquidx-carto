@@ -340,7 +340,9 @@ export async function createGame(
 	function loop(now: number) {
 		if (disposed) return;
 		requestAnimationFrame(loop);
-		const dt = Math.min(0.05, (now - last) / 1000);
+		// Up to a tenth of a second a frame is simulated in full, in steps of at most a sixtieth,
+		// so the mountain goes past at the speed on the dial however slow the rendering is.
+		const dt = Math.min(0.1, (now - last) / 1000);
 		last = now;
 		frames++;
 		if (now - fpsAt > 1000) {
@@ -350,7 +352,8 @@ export async function createGame(
 		}
 		lifts.update(dt);
 		if (!paused) {
-			rider.update(dt, input);
+			const steps = Math.max(1, Math.ceil(dt / (1 / 60)));
+			for (let i = 0; i < steps; i++) rider.update(dt / steps, input);
 			terrain.update(rider.position.x, rider.position.z);
 			nearLift = null;
 			if (rider.mode === 'ride' && rider.speed < 7) {

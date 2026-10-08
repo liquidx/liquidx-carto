@@ -151,9 +151,13 @@ export class Rider {
 		v.y *= before > 1e-6 ? Math.hypot(v.x, v.z) / before : 0;
 		if (this.speed > MAX_SPEED) v.multiplyScalar(MAX_SPEED / this.speed);
 
-		// Jumping, on release so that a tap and a long press both pop once.
+		// Jumping, once per press: up, and forward where the board points, hardest when standing
+		// still so that a hop or two gets out of a flat spot or off an uphill.
 		if (input.jump && !this.jumpHeld) {
 			this.jumpHeld = true;
+			const hop = 1 + 3.5 * Math.max(0, 1 - speed / 12);
+			v.x += fx * hop;
+			v.z += fz * hop;
 			v.y = 4.2 + Math.min(2.5, speed * 0.1);
 			this.mode = 'air';
 			this.airStart = performance.now();
