@@ -1,6 +1,40 @@
-import type { Sampler } from '@liquidx/diorama';
+import type { Circle, Sampler } from '@liquidx/diorama';
 import type { Grid } from '$lib/contour/contour';
-import { latToY, lonToX, type MercatorBox } from '$lib/contour/mercator';
+import { frameAt, frameBox, latToY, lonToX, type MercatorBox } from '$lib/contour/mercator';
+import { sampleApiGrid, type TerrainProvider } from '$lib/contour/terrain-api';
+
+/**
+ * Terrain tiles are sampled on a grid of at most 1024², two samples per ring, so more rings
+ * than this add triangles without adding detail.
+ */
+export const MAX_RINGS = 512;
+
+export interface CircleSample {
+	sample: Sampler;
+	/** Approximate source resolution in metres per sample. */
+	resolution: number;
+	/** Tile zoom level the elevations came from. */
+	zoom: number;
+	tiles: number;
+}
+
+/**
+ * Elevation over a diorama's circle from a tile provider, as the Mountain Diorama tool fetches
+ * it: a square grid with two samples per ring, over the circle's square plus a little margin
+ * so the rim never samples outside it.
+ */
+export async function circleSampler(
+	provider: TerrainProvider,
+	circle: Circle,
+	rings: number,
+	signal?: AbortSignal
+): Promise<CircleSample> {
+	const frame = frameAt(circle.lon, circle.lat, circle.radius * 2);
+	const box = frameBox({ ...frame, w: frame.w * 1.04 }, 1);
+	const n = Math.min(MAX_RINGS * 2, rings * 2 + 1);
+	const { grid, resolution, zoom, tiles } = await sampleApiGrid(provider, box, n, n, signal);
+	return { sample: gridSampler(grid, box), resolution, zoom, tiles };
+}
 
 /**
  * Bilinear sampler over a grid spanning a mercator box (first row at y0). Falls back to the
