@@ -322,7 +322,10 @@ only exist while a model is loaded and are recreated when it changes.
   build the mesh; `dioramaMeta(data, settings)` gives the settings to export it with.
 - `loadDioramaGlb(src, style?)` returns `{ mesh, meta, terrain, surface, dispose }` so you can
   put the model in your own three.js scene.
-- `exportDioramaGlb(mesh, meta)` writes the format described below.
+- `exportDioramaGlb(mesh, meta)` writes the format described below; `exportDioramaData(data,
+settings, style?)` does the same for a mesh from `buildDiorama` without a stage, so it also
+  runs in Node. `createDioramaMesh(data, style?)` is the mesh the component shows for `data`,
+  and `dioramaFileName(circle)` the name the Mountain Diorama tool exports under.
 - `createTerrainMaterial(style?)` returns the material with `setStyle`, `setElevationRange` and
   `setDrapes`.
 - `createSurface(geometry, meta)` gives the longitude and latitude lookups for a mesh.

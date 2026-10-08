@@ -28,9 +28,13 @@ export {
 	type PerFeature
 } from './geojson.svelte.js';
 export {
+	createDioramaMesh,
+	dioramaFileName,
+	exportDioramaData,
 	exportDioramaGlb,
 	loadDioramaGlb,
 	type DioramaMeta,
+	type ExportSettings,
 	type LoadedDiorama
 } from './format.js';
 export {

@@ -11,8 +11,13 @@
 	import { applyVertical, dioramaMeta, type DioramaData } from './build.js';
 	import { setDioramaContext, type DioramaContext } from './context.js';
 	import { createDrapeCompositor } from './drape.js';
-	import { exportDioramaGlb, loadDioramaGlb, type DioramaMeta } from './format.js';
-	import { createTerrainMaterial, type TerrainMaterial } from './material.js';
+	import {
+		createDioramaMesh,
+		exportDioramaGlb,
+		loadDioramaGlb,
+		type DioramaMeta
+	} from './format.js';
+	import type { TerrainMaterial } from './material.js';
 	import { createStage, DEFAULT_SUN, type Stage, type Sun } from './stage.js';
 	import { resolveTerrainStyle, type TerrainPreset, type TerrainStyle } from './style.js';
 	import { createSurface } from './surface.js';
@@ -161,17 +166,15 @@
 	$effect(() => {
 		const s = stage;
 		if (!s || !data) return;
-		const material = createTerrainMaterial(untrack(() => resolveTerrainStyle(terrain)));
-		material.setElevationRange(data.minZ, data.maxZ);
-		const { geometry } = data;
-		return show(
-			s,
-			{ mesh: new THREE.Mesh(geometry, material.material), terrain: material, file: null },
-			() => {
-				geometry.dispose();
-				material.dispose();
-			}
+		const { mesh, terrain: material } = createDioramaMesh(
+			data,
+			untrack(() => terrain)
 		);
+		const { geometry } = data;
+		return show(s, { mesh, terrain: material, file: null }, () => {
+			geometry.dispose();
+			material.dispose();
+		});
 	});
 
 	// A GLB, loaded (and replaced) when the source changes.

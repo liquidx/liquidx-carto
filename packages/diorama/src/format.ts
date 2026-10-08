@@ -1,9 +1,10 @@
 import * as THREE from 'three';
 import { GLTFExporter } from 'three/addons/exporters/GLTFExporter.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { applyVertical, dioramaMeta, type DioramaData, type VerticalParams } from './build.js';
 import { createTerrainMaterial, type TerrainMaterial } from './material.js';
 import { createSurface, type DioramaSurface } from './surface.js';
-import type { TerrainStyle } from './style.js';
+import { resolveTerrainStyle, type TerrainPreset, type TerrainStyle } from './style.js';
 
 /**
  * Settings and extents carried in the GLB (as `extras.diorama` on the mesh node) so a viewer
@@ -53,6 +54,51 @@ export async function exportDioramaGlb(mesh: THREE.Mesh, meta: DioramaMeta): Pro
 	} finally {
 		mesh.userData = previous;
 	}
+}
+
+/** The contour settings stored with a built mesh, alongside its relief. */
+export type ExportSettings = VerticalParams & {
+	/** Contour interval in metres, 0 disables. */
+	contourInterval: number;
+	/** Every nth contour is drawn heavier, 0 disables. */
+	majorEvery: number;
+};
+
+/**
+ * A mesh built by `buildDiorama` with the terrain material, as the `Diorama` component shows
+ * it. The caller owns the geometry; dispose of `terrain` when done with the mesh.
+ */
+export function createDioramaMesh(
+	data: DioramaData,
+	style: TerrainPreset | TerrainStyle = 'topo'
+): { mesh: THREE.Mesh; terrain: TerrainMaterial } {
+	const terrain = createTerrainMaterial(resolveTerrainStyle(style));
+	terrain.setElevationRange(data.minZ, data.maxZ);
+	return { mesh: new THREE.Mesh(data.geometry, terrain.material), terrain };
+}
+
+/**
+ * Write a mesh from `buildDiorama` to a binary glTF with the given relief and contours: what
+ * the `Diorama` component's `glb()` gives for the same `data` and props, without a stage, so
+ * it also works in Node. Sets the heights of `data` as a side effect.
+ */
+export async function exportDioramaData(
+	data: DioramaData,
+	settings: ExportSettings,
+	style?: TerrainPreset | TerrainStyle
+): Promise<Blob> {
+	applyVertical(data, settings);
+	const { mesh, terrain } = createDioramaMesh(data, style);
+	try {
+		return await exportDioramaGlb(mesh, dioramaMeta(data, settings));
+	} finally {
+		terrain.dispose();
+	}
+}
+
+/** The file name the Mountain Diorama tool exports a circle as: `diorama_<lat>_<lon>_<radius>m.glb`. */
+export function dioramaFileName(circle: { lon: number; lat: number; radius: number }): string {
+	return `diorama_${circle.lat.toFixed(4)}_${circle.lon.toFixed(4)}_${Math.round(circle.radius)}m.glb`;
 }
 
 export interface LoadedDiorama {
