@@ -155,10 +155,10 @@ export class Rider {
 		// still so that a hop or two gets out of a flat spot or off an uphill.
 		if (input.jump && !this.jumpHeld) {
 			this.jumpHeld = true;
-			const hop = 1 + 3.5 * Math.max(0, 1 - speed / 12);
+			const hop = 1.5 + 5.25 * Math.max(0, 1 - speed / 12);
 			v.x += fx * hop;
 			v.z += fz * hop;
-			v.y = 2.1 + Math.min(1.25, speed * 0.05);
+			v.y = 2.3 + Math.min(1.4, speed * 0.055);
 			this.mode = 'air';
 			this.airStart = performance.now();
 			p.addScaledVector(v, dt);
