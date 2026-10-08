@@ -23,8 +23,10 @@
 		Trees,
 		buildDiorama,
 		shapesOf,
+		terrainStyles,
 		type DioramaData,
-		type TerrainPreset
+		type TerrainPreset,
+		type TerrainStyle
 	} from '@liquidx/diorama';
 	import DataCredits from '$lib/components/DataCredits.svelte';
 	import PromptField from '$lib/components/PromptField.svelte';
@@ -158,7 +160,16 @@
 		});
 	});
 
+	/** Depth of the base below the lowest ground, as a fraction of the radius. */
+	const BASE_DEPTH = 0.2;
+
 	let terrain = $state<TerrainPreset>('snow');
+	// Thickness of the snow (or topsoil) band on the cut sides, as a fraction of the radius.
+	let topLayerDepth = $state(0.05);
+	const style = $derived<TerrainStyle>({
+		...terrainStyles[terrain],
+		sides: { ...terrainStyles[terrain].sides, topLayerDepth }
+	});
 	let exaggeration = $state(1);
 	let objectScale = $state(1);
 	let liftsMoving = $state(true);
@@ -301,9 +312,9 @@
 			src={glb}
 			data={model}
 			{exaggeration}
-			baseDepth={0.2}
+			baseDepth={BASE_DEPTH}
 			contourInterval={50}
-			{terrain}
+			terrain={style}
 			{objectScale}
 			sun={{ azimuth: sunAzimuth, elevation: sunElevation }}
 			{background}
@@ -380,6 +391,14 @@
 				bind:value={trees}
 			/>
 		</div>
+		<Slider
+			label={terrain === 'snow' ? 'snow depth' : 'topsoil depth'}
+			min={0}
+			max={BASE_DEPTH}
+			step={0.005}
+			bind:value={topLayerDepth}
+			format={(v) => v.toFixed(3)}
+		/>
 		<Slider
 			label="object scale"
 			min={1}

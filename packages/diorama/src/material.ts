@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {
 	RAMP_SIZE,
+	TOP_LAYER_DEPTH,
 	terrainStyles,
 	writeRamp,
 	type TerrainStyle,
@@ -81,6 +82,7 @@ export function createTerrainMaterial(style: TerrainStyle = terrainStyles.topo):
 		uSlopeRange: { value: new THREE.Vector2(0, 90) },
 		uSlopeStrength: { value: 0 },
 		uSideTop: { value: color(0) },
+		uSideTopDepth: { value: 0 },
 		uStrataA: { value: color(0) },
 		uStrataB: { value: color(0) },
 		uSideColor: { value: color(0) },
@@ -138,6 +140,7 @@ export function createTerrainMaterial(style: TerrainStyle = terrainStyles.topo):
 		else {
 			const soil = terrainStyles.topo.sides;
 			uniforms.uSideTop.value.set(sides.topLayer ?? soil.topLayer);
+			uniforms.uSideTopDepth.value = Math.max(0, sides.topLayerDepth ?? TOP_LAYER_DEPTH);
 			uniforms.uStrataA.value.set(sides.strata?.[0] ?? soil.strata[0]);
 			uniforms.uStrataB.value.set(sides.strata?.[1] ?? soil.strata[1]);
 		}
@@ -205,6 +208,7 @@ export function createTerrainMaterial(style: TerrainStyle = terrainStyles.topo):
 				uniform vec2 uSlopeRange;
 				uniform float uSlopeStrength;
 				uniform vec3 uSideTop;
+				uniform float uSideTopDepth;
 				uniform vec3 uStrataA;
 				uniform vec3 uStrataB;
 				uniform vec3 uSideColor;
@@ -262,8 +266,12 @@ export function createTerrainMaterial(style: TerrainStyle = terrainStyles.topo):
 					vec3 subsoil = mix(uStrataA, uStrataB, tone);
 					subsoil = mix(subsoil, vec3(0.56, 0.52, 0.48), step(0.8, tone) * 0.8);
 					// A top layer (humus-rich topsoil, or snow) hugging the surface with a ragged lower edge.
-					float topEdge = 0.05 + wobble * 0.03 + (soilNoise(p * 25.0) - 0.5) * 0.015;
-					vec3 c = mix(uSideTop, subsoil, smoothstep(topEdge - 0.008, topEdge + 0.012, depth));
+					// The raggedness shrinks with a thin layer, so it thins evenly down to nothing.
+					float ragged = clamp(uSideTopDepth / ${TOP_LAYER_DEPTH}, 0.0, 1.0);
+					float topEdge = uSideTopDepth
+						+ (wobble * 0.03 + (soilNoise(p * 25.0) - 0.5) * 0.015) * ragged;
+					vec3 c = mix(uSideTop, subsoil,
+						smoothstep(topEdge - 0.008 * ragged, topEdge + 0.012 * ragged + 1e-5, depth));
 					// Grain and clumps.
 					float grain = soilNoise(p * 90.0) * 0.6 + soilNoise(p * 220.0) * 0.4;
 					c *= 0.75 + 0.45 * grain;

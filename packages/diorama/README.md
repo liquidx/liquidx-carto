@@ -121,7 +121,7 @@ const dusk: TerrainStyle = {
 | `rampUnits` | `normalized` (default): stops run 0–1 over the model's range. `metres`: real elevation |
 | `slope`     | `{ color, from, to }`: tint steep ground between two angles in degrees                 |
 | `contours`  | `{ color, strength }`, or `false` to hide them                                         |
-| `sides`     | `{ topLayer, strata: [a, b] }` for layered earth, or `{ color }` for flat sides        |
+| `sides`     | `{ topLayer, topLayerDepth, strata: [a, b] }` for layered earth, or `{ color }` flat   |
 | `roughness` | 0–1, default 0.9                                                                       |
 | `surface`   | your own GLSL for the surface colour                                                   |
 | `uniforms`  | values for the uniforms `surface` uses                                                 |

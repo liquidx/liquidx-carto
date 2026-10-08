@@ -26,6 +26,8 @@ export interface TerrainStyle {
 	sides?:
 		| {
 				topLayer?: THREE.ColorRepresentation;
+				/** Thickness of `topLayer` as a fraction of the diorama's radius, default 0.05. */
+				topLayerDepth?: number;
 				strata?: [THREE.ColorRepresentation, THREE.ColorRepresentation];
 		  }
 		| { color: THREE.ColorRepresentation };
@@ -41,6 +43,9 @@ export interface TerrainStyle {
 	/** Values for uniforms used by `surface`. Declared for you; changing a value is cheap. */
 	uniforms?: Record<string, UniformValue>;
 }
+
+/** Default thickness of the sides' top layer, as a fraction of the diorama's radius. */
+export const TOP_LAYER_DEPTH = 0.05;
 
 const SOIL = {
 	topLayer: '#816950',
