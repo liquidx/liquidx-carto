@@ -18,8 +18,7 @@ export const tools: Tool[] = [
 		slug: 'diorama-snow',
 		title: 'Snow Diorama',
 		date: '2026-10-07',
-		summary:
-			'exploring more detailed, animated objects on a diorama: moving lifts, trees, buildings and snowboarders riding a real resort.'
+		summary: 'a ski resort on a snow diorama.'
 	},
 	{
 		slug: 'diorama',
