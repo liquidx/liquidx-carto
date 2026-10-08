@@ -52,7 +52,7 @@
 	let providerId = $state(PROVIDERS[0].id);
 	let basemap = $state<BasemapId>('terrain');
 	// Mount Fuji: a recognisable default with plenty of relief. The frame is the circle's square.
-	let frame = $state<Frame | null>(frameAt(138.7274, 35.3606, 14_000));
+	let frame = $state<Frame | null>(frameAt(138.7274, 35.3606, 6_000));
 	let drawing = $state(false);
 	/** Mesh detail: rings from the centre to the rim, so the ground spacing is radius / rings. */
 	let rings = $state(224);
@@ -125,7 +125,7 @@
 
 	/** Centre the circle on a place, keeping its ground size. */
 	function goTo(place: Place) {
-		const ground = circle ? circle.radius * 2 : 14_000;
+		const ground = circle ? circle.radius * 2 : 6_000;
 		frame = frameAt(place.lon, place.lat, ground);
 		map?.showFrame();
 	}
