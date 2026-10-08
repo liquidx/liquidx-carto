@@ -1,101 +1,70 @@
 /**
- * Woodland for a ski diorama, from OpenStreetMap. Run `pnpm diorama-woods help`.
+ * Woodland for a ski diorama, from Overture Maps. Run `pnpm diorama-woods help`.
  *
  * Reads a ski features file, works out the circle its runs and lifts cover (as the
- * /diorama-snow page does), asks the Overpass API for the wooded areas there, and writes them
- * as polygons clipped to that circle's square, next to the features file.
+ * /diorama-snow page does), reads the wooded areas there from Overture's land data (OpenStreetMap's
+ * woods and forests, republished as Parquet on S3 with no API in the way), and writes them as
+ * polygons clipped to that circle's square, next to the features file unless an output path is
+ * given.
  */
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { Feature, FeatureCollection, Polygon, Position } from 'geojson';
+import { DuckDBInstance } from '@duckdb/node-api';
+import type { Feature, FeatureCollection, Geometry, Polygon, Position } from 'geojson';
 import { circleBounds, fitCircle } from '../src/lib/diorama/fit.ts';
 
 const DEFAULT_FEATURES = join('static', 'diorama', 'appi-kogen-ski-features.geojson');
-/** Public Overpass servers, tried in turn. */
-const OVERPASS = [
-	'https://overpass-api.de/api/interpreter',
-	'https://overpass.private.coffee/api/interpreter',
-	'https://overpass.kumi.systems/api/interpreter'
-];
+/** Overture releases are monthly; bump this to pick up newer mapping. */
+const OVERTURE_RELEASE = '2026-09-23.1';
+const OVERTURE_LAND = `s3://overturemaps-us-west-2/release/${OVERTURE_RELEASE}/theme=base/type=land/*`;
 /** Corners closer than this to the line between their neighbours are dropped, in metres. */
 const SIMPLIFY = 2;
 
-type Point = { lat: number; lon: number };
-type Member = { type: string; role: string; geometry?: Point[] };
-type Element = {
-	type: 'way' | 'relation';
-	id: number;
-	tags?: Record<string, string>;
-	geometry?: Point[];
-	members?: Member[];
-};
 type Ring = Position[];
 type Box = [west: number, south: number, east: number, north: number];
+type Wood = { osm: string; leafType?: string; rings: Ring[][] };
 
-async function overpass(query: string): Promise<Element[]> {
-	let failure: unknown;
-	for (const url of OVERPASS) {
-		try {
-			const response = await fetch(url, {
-				method: 'POST',
-				// Overpass turns away requests that do not say who they are.
-				headers: { 'User-Agent': 'liquidx-carto diorama-woods' },
-				body: new URLSearchParams({ data: query })
-			});
-			if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
-			return ((await response.json()) as { elements: Element[] }).elements;
-		} catch (e) {
-			failure = e;
-			console.log(`  ${new URL(url).host}: ${e instanceof Error ? e.message : e}`);
-		}
-	}
-	throw failure;
+/**
+ * The forest and wood areas touching a box, read straight from Overture's Parquet files: DuckDB
+ * fetches only the row groups whose bounds overlap, so this reads a few megabytes of the planet.
+ */
+async function overture([west, south, east, north]: Box): Promise<Wood[]> {
+	const db = await DuckDBInstance.create(':memory:');
+	const connection = await db.connect();
+	// The extensions are downloaded once and cached under ~/.duckdb.
+	await connection.run(
+		`INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial; SET s3_region = 'us-west-2';`
+	);
+	const result = await connection.runAndReadAll(
+		`SELECT sources[1].record_id AS record, source_tags['leaf_type'] AS leafType,
+		        ST_AsGeoJSON(geometry) AS geometry
+		 FROM read_parquet('${OVERTURE_LAND}', hive_partitioning = 1)
+		 WHERE subtype = 'forest'
+		   AND bbox.xmin <= ${east} AND bbox.xmax >= ${west}
+		   AND bbox.ymin <= ${north} AND bbox.ymax >= ${south}`
+	);
+	const osmTypes: Record<string, string> = { n: 'node', w: 'way', r: 'relation' };
+	return result.getRowObjects().map((row) => {
+		// Overture keeps the OSM id as e.g. "w261303574@2": the element and its version.
+		const [, kind, id] = /^([nwr])(\d+)/.exec(String(row.record)) ?? [];
+		const geometry = JSON.parse(String(row.geometry)) as Geometry;
+		const rings =
+			geometry.type === 'Polygon'
+				? [geometry.coordinates]
+				: geometry.type === 'MultiPolygon'
+					? geometry.coordinates
+					: [];
+		return {
+			osm: kind ? `${osmTypes[kind]}/${id}` : String(row.record),
+			...(row.leafType ? { leafType: String(row.leafType) } : {}),
+			rings
+		};
+	});
 }
 
-const same = (a: Position, b: Position) => a[0] === b[0] && a[1] === b[1];
-
-/** Join ways end to end into closed rings; ways that never close are left out. */
-function assemble(ways: Ring[]): Ring[] {
-	const rings: Ring[] = [];
-	const open = ways.filter((w) => w.length > 1).map((w) => [...w]);
-	while (open.length) {
-		const ring = open.pop()!;
-		while (!same(ring[0], ring[ring.length - 1])) {
-			const end = ring[ring.length - 1];
-			const next = open.findIndex((w) => same(w[0], end) || same(w[w.length - 1], end));
-			if (next < 0) break;
-			const [way] = open.splice(next, 1);
-			if (!same(way[0], end)) way.reverse();
-			ring.push(...way.slice(1));
-		}
-		if (ring.length > 3 && same(ring[0], ring[ring.length - 1])) rings.push(ring);
-	}
-	return rings;
-}
-
-function inside([x, y]: Position, ring: Ring) {
-	let hit = false;
-	for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-		const [xi, yi] = ring[i];
-		const [xj, yj] = ring[j];
-		if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) hit = !hit;
-	}
-	return hit;
-}
-
-/** Each outer ring with the holes that lie in it. */
-function polygonsOf(element: Element): Ring[][] {
-	const path = (points: Point[] = []) => points.map((p): Position => [p.lon, p.lat]);
-	if (element.type === 'way') return assemble([path(element.geometry)]).map((ring) => [ring]);
-	const ways = (role: string) =>
-		(element.members ?? [])
-			.filter((m) => m.type === 'way' && (m.role || 'outer') === role)
-			.map((m) => path(m.geometry));
-	const polygons = assemble(ways('outer')).map((ring) => [ring]);
-	for (const hole of assemble(ways('inner')))
-		polygons.find(([outer]) => inside(hole[0], outer))?.push(hole);
-	return polygons;
-}
+/** Where the woods go when no output path is given: beside the features file. */
+const woodsPathFor = (source: string) =>
+	source.replace(/(-ski-features)?\.geojson$/, '-woods.geojson');
 
 /** Cut a closed ring down to a box, one edge of the box at a time. */
 function clip(ring: Ring, [west, south, east, north]: Box): Ring {
@@ -154,7 +123,7 @@ function simplify(ring: Ring, perLon: number, perLat: number): Ring {
 	return out.length > 3 ? out : [];
 }
 
-async function build(source: string) {
+async function build(source: string, target = woodsPathFor(source)) {
 	const features = JSON.parse(await readFile(source, 'utf8')) as FeatureCollection;
 	// The same circle as the page: around the runs and lifts.
 	const points = features.features
@@ -168,37 +137,25 @@ async function build(source: string) {
 	if (!points.length) throw new Error(`no runs or lifts in ${source}`);
 	const circle = fitCircle(points);
 	const box = circleBounds(circle);
-	const [west, south, east, north] = box;
 
-	console.log('openstreetmap');
-	const area = `(${south},${west},${north},${east})`;
-	const elements = await overpass(
-		`[out:json][timeout:90];(` +
-			['way', 'relation']
-				.flatMap((type) => [
-					`${type}["natural"="wood"]${area};`,
-					`${type}["landuse"="forest"]${area};`
-				])
-				.join('') +
-			`);out geom;`
-	);
+	console.log(`overture ${OVERTURE_RELEASE}`);
+	const areas = await overture(box);
 
 	const perLat = 111_320;
 	const perLon = perLat * Math.cos((circle.lat * Math.PI) / 180);
 	const tidy = (ring: Ring) =>
 		simplify(clip(ring, box), perLon, perLat).map((p) => [+p[0].toFixed(6), +p[1].toFixed(6)]);
 	const woods: Feature<Polygon>[] = [];
-	for (const element of elements) {
-		for (const [outer, ...holes] of polygonsOf(element)) {
+	for (const area of areas) {
+		for (const [outer, ...holes] of area.rings) {
 			const ring = tidy(outer);
 			if (!ring.length) continue;
-			const leafType = element.tags?.leaf_type;
 			woods.push({
 				type: 'Feature',
 				properties: {
 					kind: 'wood',
-					id: `osm:${element.type}/${element.id}`,
-					...(leafType ? { leafType } : {})
+					id: `osm:${area.osm}`,
+					...(area.leafType ? { leafType: area.leafType } : {})
 				},
 				geometry: {
 					type: 'Polygon',
@@ -208,11 +165,10 @@ async function build(source: string) {
 		}
 	}
 
-	const target = source.replace(/(-ski-features)?\.geojson$/, '-woods.geojson');
 	const text = JSON.stringify({
 		type: 'FeatureCollection',
 		metadata: {
-			source: 'openstreetmap (natural=wood, landuse=forest) via overpass',
+			source: `overture maps ${OVERTURE_RELEASE} base/land subtype=forest, from openstreetmap`,
 			exportedAt: new Date().toISOString(),
 			bounds: box.map((v) => +v.toFixed(6)),
 			featureCount: woods.length
@@ -221,18 +177,18 @@ async function build(source: string) {
 	});
 	await writeFile(target, text);
 	const corners = woods.reduce((n, f) => n + f.geometry.coordinates.flat().length, 0);
-	console.log(`  ${elements.length} areas → ${woods.length} polygons, ${corners} corners`);
+	console.log(`  ${areas.length} areas → ${woods.length} polygons, ${corners} corners`);
 	console.log(`  ${target}  ${(Buffer.byteLength(text) / 1024).toFixed(0)} kB`);
 }
 
-const [command = 'help', source = DEFAULT_FEATURES] = process.argv.slice(2);
+const [command = 'help', source = DEFAULT_FEATURES, target] = process.argv.slice(2);
 
 if (command === 'build') {
-	await build(source);
+	await build(source, target);
 } else {
-	console.log(`usage: pnpm diorama-woods build [features.geojson]
+	console.log(`usage: pnpm diorama-woods build [features.geojson] [woods.geojson]
 
   build   fetch the wooded areas around the runs and lifts in a ski features file
-          (default ${DEFAULT_FEATURES}) and write them beside it as
-          <name>-woods.geojson`);
+          (default ${DEFAULT_FEATURES}) and write them to the output
+          path, or beside the features file as <name>-woods.geojson when none is given`);
 }

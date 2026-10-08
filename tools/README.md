@@ -41,15 +41,19 @@ Sources in `tools/ev-jp/source/`:
 ```sh
 pnpm diorama-woods build                      # static/diorama/appi-kogen-woods.geojson
 pnpm diorama-woods build path/to/x.geojson    # another resort's features → x-woods.geojson beside it
+pnpm diorama-woods build path/to/x.geojson out/woods.geojson   # … written to the given path instead
 ```
 
 Reads the runs and lifts in a ski features file, fits the same circle around them as the
-/diorama-snow page, and asks the public [Overpass API](https://overpass-api.de) for the
-`natural=wood` and `landuse=forest` areas there. They are clipped to the circle's square,
-simplified to 2 m and written beside the features file. The public servers are often busy;
-run it again if all three turn it away. Rerun after changing the runs or lifts.
+/diorama-snow page, and reads the forest and wood areas there from
+[Overture Maps](https://overturemaps.org)' `base/land` data: OpenStreetMap's `natural=wood` and
+`landuse=forest`, republished monthly as Parquet on S3. DuckDB (in-process, via
+`@duckdb/node-api`) reads just the row groups overlapping the area, about 15 s with no API or
+rate limit in the way; its `httpfs` and `spatial` extensions are downloaded once into `~/.duckdb`.
+The areas are clipped to the circle's square, simplified to 2 m and written beside the features
+file. Rerun after changing the runs or lifts; bump `OVERTURE_RELEASE` in the tool for newer mapping.
 
-Source: © OpenStreetMap contributors, ODbL.
+Source: © OpenStreetMap contributors, ODbL, via Overture Maps.
 
 ## japan-train-lines
 

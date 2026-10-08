@@ -22,6 +22,7 @@
 		"japan-train-lines": "node tools/japan-train-lines.ts"
 	},
 	"devDependencies": {
+		"@duckdb/node-api": "1.5.6-r.1",
 		"@eslint/js": "^10.0.1",
 		"@playwright/test": "^1.60.0",
 		"@sveltejs/adapter-auto": "^7.0.1",
