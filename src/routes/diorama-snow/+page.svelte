@@ -17,7 +17,6 @@
 		Trees,
 		buildDiorama,
 		shapesOf,
-		type Circle,
 		type DioramaData,
 		type TerrainPreset
 	} from '@liquidx/diorama';
@@ -28,6 +27,7 @@
 	import { frameAt, frameBox } from '$lib/contour/mercator';
 	import { PROVIDERS, sampleApiGrid } from '$lib/contour/terrain-api';
 	import { CREDITS, type Credit } from '$lib/credits';
+	import { circleBounds, fitCircle } from '$lib/diorama/fit';
 	import { gridSampler } from '$lib/diorama/sampler';
 
 	let { data } = $props();
@@ -50,22 +50,6 @@
 		intermediate: '#d6336c',
 		advanced: '#212529'
 	};
-
-	/** The smallest circle around the runs and lifts, with a little margin. */
-	function fit(): Circle {
-		const points = shapesOf(data.features)
-			.filter((s) => isRun(s.feature) || isLift(s.feature))
-			.flatMap((s) => s.coords.flat());
-		const lons = points.map((p) => p[0]);
-		const lats = points.map((p) => p[1]);
-		const lon = (Math.min(...lons) + Math.max(...lons)) / 2;
-		const lat = (Math.min(...lats) + Math.max(...lats)) / 2;
-		const perLon = 111_320 * Math.cos((lat * Math.PI) / 180);
-		const reach = Math.max(
-			...points.map((p) => Math.hypot((p[0] - lon) * perLon, (p[1] - lat) * 111_320))
-		);
-		return { lon, lat, radius: reach * 1.12 };
-	}
 
 	/**
 	 * Stand-in hotel footprints beside the base, as the features have no buildings: rectangles
@@ -100,7 +84,7 @@
 	let exaggeration = $state(1);
 	let objectScale = $state(1);
 	let liftsMoving = $state(true);
-	let trees = $state<'none' | 'resort' | 'all'>('all');
+	let trees = $state<'none' | 'woods' | 'all'>('woods');
 	let showLabels = $state(true);
 	let sunAzimuth = $state(231);
 	let sunElevation = $state(48);
@@ -110,23 +94,34 @@
 	let model = $state.raw<DioramaData | null>(null);
 	let message = $state('');
 
-	// Fetch elevation for the circle and build the mesh from it.
-	const circle = fit();
-	/** A square around the whole diorama, for tree cover beyond the ski area. */
+	// The circle around the runs and lifts, which `pnpm diorama-woods` fits its woods to.
+	const circle = fitCircle(
+		shapesOf(data.features)
+			.filter((s) => isRun(s.feature) || isLift(s.feature))
+			.flatMap((s) => s.coords.flat())
+	);
+	/** A square around the whole diorama, for tree cover everywhere. */
 	const everywhere = $derived.by((): Feature<Polygon> => {
-		const dLat = (circle.radius * 1.05) / 111_320;
-		const dLon = dLat / Math.cos((circle.lat * Math.PI) / 180);
-		const corner = (x: number, y: number) => [circle.lon + x * dLon, circle.lat + y * dLat];
+		const [west, south, east, north] = circleBounds(circle);
 		return {
 			type: 'Feature',
 			properties: {},
 			geometry: {
 				type: 'Polygon',
-				coordinates: [[corner(-1, -1), corner(1, -1), corner(1, 1), corner(-1, 1), corner(-1, -1)]]
+				coordinates: [
+					[
+						[west, south],
+						[east, south],
+						[east, north],
+						[west, north],
+						[west, south]
+					]
+				]
 			}
 		};
 	});
 
+	// Fetch elevation for the circle and build the mesh from it.
 	async function build() {
 		const frame = frameAt(circle.lon, circle.lat, circle.radius * 2);
 		const box = frameBox({ ...frame, w: frame.w * 1.04 }, 1);
@@ -141,7 +136,7 @@
 		{
 			name: 'openstreetmap',
 			by: '© openstreetmap contributors, odbl · skimap.org',
-			use: 'ski runs, lifts and resort area',
+			use: 'ski runs, lifts and woodland',
 			url: 'https://www.openstreetmap.org/copyright'
 		}
 	];
@@ -185,7 +180,7 @@
 			/>
 			{#if trees !== 'none'}
 				<Trees
-					data={trees === 'all' ? everywhere : find('skiArea')}
+					data={trees === 'all' ? everywhere : data.woods}
 					avoid={[...data.features.features.filter((f) => isRun(f) || isLift(f)), ...hotels]}
 					clearance={30}
 					density={6000}
@@ -241,7 +236,7 @@
 			<span class="label">trees</span>
 			<Segmented
 				label="tree cover"
-				options={[{ value: 'none' }, { value: 'resort' }, { value: 'all' }]}
+				options={[{ value: 'none' }, { value: 'woods' }, { value: 'all' }]}
 				bind:value={trees}
 			/>
 		</div>

@@ -10,9 +10,15 @@ export const ssr = false;
 export const load: PageLoad = async ({ fetch }) => {
 	const tool = findTool('diorama-snow');
 	if (!tool) error(404, 'not found');
-	const response = await fetch(asset('/diorama/appi-kogen-ski-features.geojson'));
+	const [features, woods] = await Promise.all(
+		['appi-kogen-ski-features', 'appi-kogen-woods'].map((name) =>
+			fetch(asset(`/diorama/${name}.geojson`)).then((response) => response.json())
+		)
+	);
 	return {
 		tool,
-		features: (await response.json()) as FeatureCollection & { metadata?: { name?: string } }
+		features: features as FeatureCollection & { metadata?: { name?: string } },
+		/** Wooded areas from OpenStreetMap, written by `pnpm diorama-woods build`. */
+		woods: woods as FeatureCollection
 	};
 };

@@ -8,6 +8,7 @@ imports with `.ts` extensions. They're type-checked with the app by `pnpm check`
 | ------------------------ | ----------------- | ------------------------------------------------------------- |
 | `pnpm ev-jp`             | EV Charging Japan | builds charger, distance-grid and route data from the source  |
 | `pnpm japan-train-lines` | Japan Train Lines | downloads railway data, builds region polygons and line index |
+| `pnpm diorama-woods`     | Snow Diorama      | fetches wooded areas from OpenStreetMap for a ski resort      |
 | `pnpm odpt`              | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)               |
 | `pnpm ekispert`          | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                        |
 
@@ -34,6 +35,21 @@ Sources in `tools/ev-jp/source/`:
 
 `data/ev-jp/` (gitignored) gets the full-attribute exports: `hokkaido_chargers_all.geojson`,
 `hokkaido_chademo_dc.geojson`, `hokkaido_chargers_all.csv` and `hokkaido_outline.geojson`.
+
+## diorama-woods
+
+```sh
+pnpm diorama-woods build                      # static/diorama/appi-kogen-woods.geojson
+pnpm diorama-woods build path/to/x.geojson    # another resort's features → x-woods.geojson beside it
+```
+
+Reads the runs and lifts in a ski features file, fits the same circle around them as the
+/diorama-snow page, and asks the public [Overpass API](https://overpass-api.de) for the
+`natural=wood` and `landuse=forest` areas there. They are clipped to the circle's square,
+simplified to 2 m and written beside the features file. The public servers are often busy;
+run it again if all three turn it away. Rerun after changing the runs or lifts.
+
+Source: © OpenStreetMap contributors, ODbL.
 
 ## japan-train-lines
 
