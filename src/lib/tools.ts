@@ -10,7 +10,7 @@ export type Tool = {
 export const tools: Tool[] = [
 	{
 		slug: 'snowboard',
-		title: 'Snowboard',
+		title: 'Snowboard Sim',
 		date: '2026-10-08',
 		summary: 'ride down a real ski resort on 1 m lidar terrain, with its runs, lifts and forest.'
 	},
