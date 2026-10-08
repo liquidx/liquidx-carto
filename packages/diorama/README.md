@@ -322,6 +322,13 @@ only exist while a model is loaded and are recreated when it changes.
 | `stage`                      | renderer, scene, camera and controls                     |
 | `drapes`                     | the overlay compositor `Drape` draws through             |
 
+A frame is only drawn when the view moves or something on the diorama changes, and the shadows
+are kept from one frame to the next. Adding to `group` or removing from it redraws both. If you
+change an object that is already there, call `stage.invalidate()` to draw a frame, or
+`stage.invalidateShadows()` when it casts a shadow that should follow it. `stage.onFrame(fn)`
+runs `fn` on every animation frame for animations; they call `stage.invalidate()` as they go.
+The carriers of `Lift` and the `Riders` cast no shadows for this reason.
+
 ## Lower level
 
 - `buildDiorama(sample, circle, mesh)` and `applyVertical(data, { exaggeration, baseDepth })`

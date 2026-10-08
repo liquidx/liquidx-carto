@@ -160,7 +160,9 @@
 		}
 
 		const mesh = new THREE.InstancedMesh(rider, material, skiers.length);
-		mesh.castShadow = mesh.receiveShadow = true;
+		// No shadow of their own: the shadows are only redrawn when the scene changes, not every
+		// frame for what moves through it.
+		mesh.receiveShadow = true;
 		const palette = colors.map((c) => new THREE.Color(c));
 		for (let i = 0; i < skiers.length; i++)
 			mesh.setColorAt(i, palette[Math.floor(random() * palette.length)]);
@@ -210,6 +212,7 @@
 				mesh.setMatrixAt(i, matrix.compose(position, lean.multiply(turn), scale));
 			});
 			mesh.instanceMatrix.needsUpdate = true;
+			diorama.stage.invalidate();
 		};
 		place(0);
 		let stop: (() => void) | undefined;

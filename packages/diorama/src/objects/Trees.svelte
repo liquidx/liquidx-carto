@@ -61,23 +61,38 @@
 		return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 	}
 
-	function inside(x: number, z: number, rings: [number, number][][]) {
+	/** Whether (x, z) is in the polygon whose edges are `edges`, as x0, z0, x1, z1 one after another. */
+	function inside(x: number, z: number, edges: number[]) {
 		let hit = false;
-		for (const ring of rings) {
-			for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-				const [xi, zi] = ring[i];
-				const [xj, zj] = ring[j];
-				if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) hit = !hit;
-			}
+		for (let i = 0; i < edges.length; i += 4) {
+			const xi = edges[i],
+				zi = edges[i + 1],
+				xj = edges[i + 2],
+				zj = edges[i + 3];
+			if (zi > z !== zj > z && x < ((xj - xi) * (z - zi)) / (zj - zi) + xi) hit = !hit;
 		}
 		return hit;
 	}
 
-	$effect(() => {
+	/** Side of the squares the trees are grouped into for drawing, in model units. */
+	const CHUNK = 0.25;
+
+	// How far trees stay from `avoid`: the clearance, and room for the tree's own width.
+	const keepOut = $derived(diorama.metres(clearance) + diorama.size(height) * 0.17);
+	// As far as the scatter needs to measure to `avoid`. It moves in steps, so that the trees
+	// growing or shrinking with the object scale does not scatter them again.
+	const reach = $derived(2 ** Math.ceil(Math.log2(keepOut)));
+
+	/** Where a tree may stand: x, the ground's height, z, two random numbers, and the gap to `avoid`. */
+	type Spot = [x: number, y: number, z: number, a: number, b: number, gap: number];
+
+	// Every spot in the polygons, whatever the size of the trees. At most `limit` of them clear
+	// `avoid` by `clearance`.
+	const spots = $derived.by((): Spot[] => {
 		const polygons = areas.current
 			.filter((s) => s.kind === 'polygon')
 			.map((s) => s.coords.map((ring) => ring.map(diorama.toModel)));
-		if (!polygons.length || density <= 0) return;
+		if (!polygons.length || density <= 0) return [];
 
 		// Segments to stay clear of, as [x0, z0, x1, z1] in model space.
 		const segments: [number, number, number, number][] = [];
@@ -88,35 +103,47 @@
 				for (let i = 1; i < p.length; i++) segments.push([...p[i - 1], ...p[i]]);
 			}
 		}
-		const treeHeight = diorama.size(height);
-		const keepOut = diorama.metres(clearance) + treeHeight * 0.17;
-		const blocked = (x: number, z: number) => {
-			for (const [x0, z0, x1, z1] of segments) {
-				// Most segments are nowhere near: rule those out cheaply.
-				if (
-					x < Math.min(x0, x1) - keepOut ||
-					x > Math.max(x0, x1) + keepOut ||
-					z < Math.min(z0, z1) - keepOut ||
-					z > Math.max(z0, z1) + keepOut
-				)
-					continue;
+		// The segments each square of a grid comes within `reach` of, so that a spot only measures
+		// to the few around it.
+		const side = Math.max(reach, 1 / 64);
+		const across = Math.ceil(2 / side);
+		const square = (v: number) => Math.min(across - 1, Math.max(0, Math.floor((v + 1) / side)));
+		const near: [number, number, number, number][][] = [];
+		for (const segment of segments) {
+			const [x0, z0, x1, z1] = segment;
+			for (let j = square(Math.min(z0, z1) - reach); j <= square(Math.max(z0, z1) + reach); j++) {
+				for (let i = square(Math.min(x0, x1) - reach); i <= square(Math.max(x0, x1) + reach); i++) {
+					(near[j * across + i] ??= []).push(segment);
+				}
+			}
+		}
+		/** Distance to the nearest segment, measured no further than `reach`. */
+		const gapAt = (x: number, z: number) => {
+			let gap = reach;
+			const around = near[square(z) * across + square(x)];
+			if (!around) return gap;
+			for (let i = 0; i < around.length; i++) {
+				const [x0, z0, x1, z1] = around[i];
 				const dx = x1 - x0;
 				const dz = z1 - z0;
 				const t = Math.min(
 					1,
 					Math.max(0, ((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz || 1))
 				);
-				if (Math.hypot(x - x0 - t * dx, z - z0 - t * dz) < keepOut) return true;
+				gap = Math.min(gap, Math.hypot(x - x0 - t * dx, z - z0 - t * dz));
 			}
-			return false;
+			return gap;
 		};
 
 		// One candidate per cell of a grid shared by all polygons, jittered within its cell.
 		const cell = diorama.metres(1000 / Math.sqrt(density));
-		// Local to this run of the effect, never read reactively.
+		const least = diorama.metres(clearance);
+		const out: Spot[] = [];
+		// Local to this run, never read reactively.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const spots = new Map<string, [number, number, number, number]>();
-		for (const rings of polygons) {
+		const seen = new Set<string>();
+		let clear = 0;
+		scan: for (const rings of polygons) {
 			let x0 = Infinity,
 				x1 = -Infinity,
 				z0 = Infinity,
@@ -131,27 +158,58 @@
 			x1 = Math.min(x1, 1);
 			z0 = Math.max(z0, -1);
 			z1 = Math.min(z1, 1);
-			for (let iz = Math.floor(z0 / cell); iz <= Math.floor(z1 / cell); iz++) {
+			const first = Math.floor(z0 / cell);
+			const last = Math.floor(z1 / cell);
+			// The polygon's edges by the rows of the grid they cross, so that a spot is only tested
+			// against the few beside it.
+			const rows: number[][] = [];
+			for (const ring of rings) {
+				for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+					const [xi, zi] = ring[i];
+					const [xj, zj] = ring[j];
+					const from = Math.max(first, Math.floor(Math.min(zi, zj) / cell));
+					const to = Math.min(last, Math.floor(Math.max(zi, zj) / cell));
+					for (let row = from; row <= to; row++) (rows[row - first] ??= []).push(xi, zi, xj, zj);
+				}
+			}
+			for (let iz = first; iz <= last; iz++) {
+				const edges = rows[iz - first];
+				if (!edges) continue;
 				for (let ix = Math.floor(x0 / cell); ix <= Math.floor(x1 / cell); ix++) {
 					const key = `${ix},${iz}`;
-					if (spots.has(key)) continue;
+					if (seen.has(key)) continue;
 					const x = (ix + hash(ix, iz, 1)) * cell;
 					const z = (iz + hash(ix, iz, 2)) * cell;
-					if (x * x + z * z > 0.97 || !inside(x, z, rings) || blocked(x, z)) continue;
-					spots.set(key, [x, z, hash(ix, iz, 3), hash(ix, iz, 4)]);
-					if (spots.size >= limit) break;
+					if (x * x + z * z > 0.97 || !inside(x, z, edges)) continue;
+					const gap = gapAt(x, z);
+					// Too close whatever the size of the trees.
+					if (gap < least) continue;
+					seen.add(key);
+					out.push([x, diorama.heightAt(x, z), z, hash(ix, iz, 3), hash(ix, iz, 4), gap]);
+					if (++clear >= limit) break scan;
 				}
-				if (spots.size >= limit) break;
 			}
 		}
-		if (!spots.size) return;
+		return out;
+	});
+
+	$effect(() => {
+		const treeHeight = diorama.size(height);
+		// Trees in squares of the ground, each drawn only while it is in view.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const chunks = new Map<string, Spot[]>();
+		for (const spot of spots) {
+			if (spot[5] < keepOut) continue;
+			const key = `${Math.floor(spot[0] / CHUNK)},${Math.floor(spot[2] / CHUNK)}`;
+			const chunk = chunks.get(key);
+			if (chunk) chunk.push(spot);
+			else chunks.set(key, [spot]);
+		}
+		if (!chunks.size) return;
 
 		// A cone standing on its base, one unit tall. The base is in the ground, so it has none.
 		const geometry = new THREE.ConeGeometry(0.5, 1, 6, 1, true).translate(0, 0.5, 0);
 		const material = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
-		const trees = new THREE.InstancedMesh(geometry, material, spots.size);
-		trees.castShadow = true;
-		trees.receiveShadow = true;
 		const matrix = new THREE.Matrix4();
 		const position = new THREE.Vector3();
 		const turn = new THREE.Quaternion();
@@ -159,21 +217,25 @@
 		const up = new THREE.Vector3(0, 1, 0);
 		const base = new THREE.Color(color);
 		const tint = new THREE.Color();
-		let i = 0;
-		for (const [x, z, a, b] of spots.values()) {
-			const h = treeHeight * (1 + (a * 2 - 1) * variation);
-			// Sit slightly into the ground so no gap shows on a slope.
-			position.set(x, diorama.heightAt(x, z) - h * 0.04, z);
-			turn.setFromAxisAngle(up, b * Math.PI * 2);
-			scale.set(h * 0.34, h, h * 0.34);
-			trees.setMatrixAt(i, matrix.compose(position, turn, scale));
-			trees.setColorAt(i, tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08));
-			i++;
-		}
-		diorama.group.add(trees);
+		const meshes = [...chunks.values()].map((chunk) => {
+			const trees = new THREE.InstancedMesh(geometry, material, chunk.length);
+			trees.castShadow = true;
+			trees.receiveShadow = true;
+			chunk.forEach(([x, y, z, a, b], i) => {
+				const h = treeHeight * (1 + (a * 2 - 1) * variation);
+				// Sit slightly into the ground so no gap shows on a slope.
+				position.set(x, y - h * 0.04, z);
+				turn.setFromAxisAngle(up, b * Math.PI * 2);
+				scale.set(h * 0.34, h, h * 0.34);
+				trees.setMatrixAt(i, matrix.compose(position, turn, scale));
+				trees.setColorAt(i, tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08));
+			});
+			return trees;
+		});
+		diorama.group.add(...meshes);
 		return () => {
-			diorama.group.remove(trees);
-			trees.dispose();
+			diorama.group.remove(...meshes);
+			for (const trees of meshes) trees.dispose();
 			geometry.dispose();
 			material.dispose();
 		};

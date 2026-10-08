@@ -23,14 +23,26 @@ export interface Stage {
 	readonly sun: Sun;
 	/** Move or dim the main light; the fill light stays opposite it. Unset fields keep their value. */
 	setSun(sun: Partial<Sun>): void;
-	/** Run `fn` before every frame is rendered; returns a function that stops it. */
+	/**
+	 * Run `fn` on every animation frame, before anything is drawn; returns a function that stops
+	 * it. A frame is only drawn when the view moved or something asked for it, so a callback
+	 * that changes the scene calls `invalidate()`.
+	 */
 	onFrame(fn: () => void): () => void;
+	/** Draw the next frame. Call after changing anything that shows. */
+	invalidate(): void;
+	/**
+	 * Draw the next frame with fresh shadows. The shadows are kept between frames, so call this
+	 * after adding, removing or moving anything that casts one.
+	 */
+	invalidateShadows(): void;
 	dispose(): void;
 }
 
 /**
  * Renderer, camera, orbit controls and lighting for a diorama normalised to a unit radius.
- * Appends a canvas to `container`, tracks its size and renders every frame until disposed.
+ * Appends a canvas to `container`, tracks its size and, until disposed, renders a frame
+ * whenever the view moves or `invalidate()` asks for one.
  */
 export function createStage(container: HTMLElement): Stage {
 	const scene = new THREE.Scene();
@@ -38,6 +50,10 @@ export function createStage(container: HTMLElement): Stage {
 	renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
 	renderer.shadowMap.enabled = true;
 	renderer.shadowMap.type = THREE.PCFShadowMap;
+	// Drawing the shadows costs as much as drawing the scene, and they only change when the
+	// sun or something casting them does: see `invalidateShadows`.
+	renderer.shadowMap.autoUpdate = false;
+	renderer.shadowMap.needsUpdate = true;
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 0.95;
 	renderer.domElement.style.display = 'block';
@@ -78,12 +94,22 @@ export function createStage(container: HTMLElement): Stage {
 			.set(Math.sin(a) * Math.cos(e), Math.sin(e), -Math.cos(a) * Math.cos(e))
 			.multiplyScalar(distance);
 	};
+	let dirty = true;
+	const invalidate = () => {
+		dirty = true;
+	};
+	const invalidateShadows = () => {
+		renderer.shadowMap.needsUpdate = true;
+		dirty = true;
+	};
+
 	const sun = { ...DEFAULT_SUN };
 	const setSun = (next: Partial<Sun>) => {
 		Object.assign(sun, next);
 		sunLight.intensity = sun.intensity;
 		aim(sunLight, sun.azimuth, sun.elevation, 4.7);
 		aim(fill, sun.azimuth + 185, 15, 3.7);
+		invalidateShadows();
 	};
 	setSun({});
 
@@ -93,6 +119,7 @@ export function createStage(container: HTMLElement): Stage {
 		renderer.setSize(w, h, false);
 		camera.aspect = w / h;
 		camera.updateProjectionMatrix();
+		invalidate();
 	};
 	const ro = new ResizeObserver(resize);
 	ro.observe(container);
@@ -102,8 +129,11 @@ export function createStage(container: HTMLElement): Stage {
 	let raf = 0;
 	const loop = () => {
 		raf = requestAnimationFrame(loop);
-		controls.update();
+		// True while the view is turning, being dragged or settling.
+		const moved = controls.update();
 		for (const fn of frameCallbacks) fn();
+		if (!moved && !dirty) return;
+		dirty = false;
 		renderer.render(scene, camera);
 	};
 	loop();
@@ -119,6 +149,8 @@ export function createStage(container: HTMLElement): Stage {
 			frameCallbacks.add(fn);
 			return () => frameCallbacks.delete(fn);
 		},
+		invalidate,
+		invalidateShadows,
 		dispose() {
 			cancelAnimationFrame(raf);
 			ro.disconnect();

@@ -158,10 +158,12 @@
 	function show(s: Stage, next: Model, dispose: () => void) {
 		next.mesh.castShadow = next.mesh.receiveShadow = true;
 		s.scene.add(next.mesh);
+		s.invalidateShadows();
 		model = next;
 		return () => {
 			model = undefined;
 			s.scene.remove(next.mesh);
+			s.invalidateShadows();
 			dispose();
 		};
 	}
@@ -219,17 +221,23 @@
 			relief = exaggeration;
 		}
 		m.terrain.uniforms.uExaggeration.value = relief ?? 1;
+		s.invalidateShadows();
 		const settings = untrack(() => meta);
 		if (!settings) return;
 
 		const surface = createSurface(m.mesh.geometry, settings);
 		const group = new THREE.Group();
+		// Whatever a child adds or takes away may cast a shadow.
+		group.addEventListener('childadded', s.invalidateShadows);
+		group.addEventListener('childremoved', s.invalidateShadows);
 		s.scene.add(group);
 		const drapes = createDrapeCompositor(m.terrain, {
 			resolution: untrack(() => drapeResolution),
 			anisotropy: Math.min(8, s.renderer.capabilities.getMaxAnisotropy())
 		});
-		const stopFrames = s.onFrame(drapes.update);
+		const stopFrames = s.onFrame(() => {
+			if (drapes.update()) s.invalidate();
+		});
 		context = {
 			...surface,
 			get meta() {
@@ -245,11 +253,13 @@
 			stopFrames();
 			drapes.dispose();
 			s.scene.remove(group);
+			s.invalidateShadows();
 		};
 	});
 
 	$effect(() => {
 		model?.terrain?.setStyle(resolveTerrainStyle(terrain));
+		stage?.invalidate();
 	});
 
 	// Triangle edges, on a second mesh sharing the geometry so that they are not exported.
@@ -266,6 +276,7 @@
 		});
 		const wire = new THREE.Mesh(m.mesh.geometry, material);
 		s.scene.add(wire);
+		s.invalidate();
 		// Push the surface back a little so the edges on it are not z-fighting with it.
 		const surface = m.mesh.material as THREE.Material;
 		surface.polygonOffset = true;
@@ -274,6 +285,7 @@
 		return () => {
 			surface.polygonOffset = false;
 			s.scene.remove(wire);
+			s.invalidate();
 			material.dispose();
 		};
 	});
@@ -283,6 +295,7 @@
 		if (!u) return;
 		u.uInterval.value = contourInterval ?? model?.file?.contourInterval ?? 20;
 		u.uMajorEvery.value = majorEvery ?? model?.file?.majorEvery ?? 5;
+		stage?.invalidate();
 	});
 
 	$effect(() => {

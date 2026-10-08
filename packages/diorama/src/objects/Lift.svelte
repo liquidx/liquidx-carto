@@ -250,6 +250,7 @@
 				}
 				mesh.instanceMatrix.needsUpdate = true;
 			});
+			diorama.stage.invalidate();
 		};
 		place(0);
 		let stop: (() => void) | undefined;
@@ -269,8 +270,14 @@
 			colors.forEach((c, i) => mesh.setColorAt(i, c));
 			return mesh;
 		});
-		for (const fleet of fleets) if (fleet) meshes.push(fleet.mesh);
 		for (const mesh of meshes) mesh.castShadow = mesh.receiveShadow = true;
+		// The carriers cast no shadow: the shadows are only redrawn when the scene changes, not
+		// every frame for what moves through it.
+		for (const fleet of fleets) {
+			if (!fleet) continue;
+			fleet.mesh.receiveShadow = true;
+			meshes.push(fleet.mesh);
+		}
 		const wire = new THREE.BufferGeometry();
 		wire.setAttribute('position', new THREE.Float32BufferAttribute(cables, 3));
 		wire.setAttribute('color', new THREE.Float32BufferAttribute(cableColors, 3));

@@ -56,6 +56,7 @@
 			// Ease out; theta runs from -π to π, so going to 0 is always the short way round.
 			offset.theta = from * (1 - t) ** 3;
 			camera.position.setFromSpherical(offset).add(controls.target);
+			stage.invalidate();
 			if (t === 1) stop();
 		});
 	}

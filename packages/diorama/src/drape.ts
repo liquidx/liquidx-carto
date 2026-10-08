@@ -20,8 +20,8 @@ export interface DrapeCompositor {
 	invalidate(): void;
 	/** Texture size in pixels. */
 	setResolution(px: number): void;
-	/** Redraw if anything changed. Call once per frame. */
-	update(): void;
+	/** Redraw if anything changed, and say whether it did. Call once per frame. */
+	update(): boolean;
 	dispose(): void;
 }
 
@@ -97,7 +97,7 @@ export function createDrapeCompositor(
 			dirty = true;
 		},
 		update() {
-			if (!dirty) return;
+			if (!dirty) return false;
 			dirty = false;
 			const ordered = [...layers].sort((a, b) =>
 				a.anchor.compareDocumentPosition(b.anchor) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
@@ -111,6 +111,7 @@ export function createDrapeCompositor(
 				ordered.filter((l) => l.above)
 			);
 			terrain.setDrapes(planes[0]?.texture ?? null, planes[1]?.texture ?? null);
+			return true;
 		},
 		dispose() {
 			terrain.setDrapes(null, null);
