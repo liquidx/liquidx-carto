@@ -53,8 +53,9 @@ in the browser. It renders nothing during SSR and needs no `ssr = false`.
 | `sun`                | `{ azimuth, elevation, intensity }`     | south-west, 48° |
 | `background`         | CSS colour behind the model             | transparent     |
 | `backgroundGradient` | backdrop shading, 0 to 1                | `0.5`           |
-| `autoRotate`         | `boolean`                               | `true`          |
+| `autoRotate`         | `boolean`, bindable                     | `true`          |
 | `rotateSpeed`        | `number`                                | `1.2`           |
+| `rotateButton`       | play/pause overlay for `autoRotate`     | `false`         |
 | `minDistance`        | closest zoom, in radii of the model     | `0.8`           |
 | `onload`             | `(meta: DioramaMeta \| null) => void`   |                 |
 | `onerror`            | `(error: unknown) => void`              |                 |
@@ -65,6 +66,11 @@ backdrop shaded like a studio: brighter behind the model, darker towards the cor
 `backgroundGradient` sets how strong that shading is, from 0 (flat) to 1; it defaults to 0.5.
 For anything else, such as an image, set the `--diorama-background` CSS custom property to any
 CSS background instead.
+
+`rotateButton` puts a play/pause button in the bottom-right corner, a translucent dark circle
+that stops and starts the rotation. Bind `autoRotate` to keep your own controls in step with
+it. Restyle it with `--diorama-rotate-size`, `--diorama-rotate-inset`,
+`--diorama-rotate-background` and `--diorama-rotate-color`.
 
 Bind the component to call `glb()`, which returns the terrain on show as a GLB blob that `src`
 can load again. Layers are not part of the file.

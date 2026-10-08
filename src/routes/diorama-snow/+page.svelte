@@ -173,7 +173,8 @@
 			sun={{ azimuth: sunAzimuth, elevation: sunElevation }}
 			{background}
 			{backgroundGradient}
-			{autoRotate}
+			bind:autoRotate
+			rotateButton
 			minDistance={0.1}
 		>
 			<Compass sun />

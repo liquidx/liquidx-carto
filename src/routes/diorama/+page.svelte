@@ -386,7 +386,8 @@
 					{contourInterval}
 					{majorEvery}
 					{terrain}
-					{autoRotate}
+					bind:autoRotate
+					rotateButton
 					{rotateSpeed}
 					{wireframe}
 				>

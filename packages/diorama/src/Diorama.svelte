@@ -65,8 +65,11 @@
 		 * darker towards the edges: 0 is flat, 1 is strong.
 		 */
 		backgroundGradient?: number;
+		/** Turn the model slowly while nobody is dragging it. Bindable, so `rotateButton` can pause it. */
 		autoRotate?: boolean;
 		rotateSpeed?: number;
+		/** Show a play/pause button in the bottom-right corner that stops and starts `autoRotate`. */
+		rotateButton?: boolean;
 		/**
 		 * How close the view can zoom in, as a distance from what it looks at in radii of the
 		 * model. Lower it to look closely at objects left at their true size.
@@ -94,8 +97,9 @@
 		sun,
 		background,
 		backgroundGradient = 0.5,
-		autoRotate = true,
+		autoRotate = $bindable(true),
 		rotateSpeed = 1.2,
+		rotateButton = false,
 		minDistance = 0.8,
 		onload,
 		onerror,
@@ -310,6 +314,25 @@
 	{#if context}
 		{#key context}{@render children?.()}{/key}
 	{/if}
+	{#if rotateButton && model}
+		<button
+			type="button"
+			class="rotate"
+			aria-label={autoRotate ? 'Pause rotation' : 'Rotate'}
+			aria-pressed={autoRotate}
+			title={autoRotate ? 'Pause rotation' : 'Rotate'}
+			onclick={() => (autoRotate = !autoRotate)}
+		>
+			<svg viewBox="0 0 24 24" aria-hidden="true">
+				{#if autoRotate}
+					<rect x="7" y="6" width="3.5" height="12" rx="0.75" />
+					<rect x="13.5" y="6" width="3.5" height="12" rx="0.75" />
+				{:else}
+					<path d="M8.5 5.5v13l10-6.5z" />
+				{/if}
+			</svg>
+		</button>
+	{/if}
 </div>
 
 <style>
@@ -323,5 +346,35 @@
 	.canvas {
 		position: absolute;
 		inset: 0;
+	}
+	.rotate {
+		position: absolute;
+		right: 0;
+		bottom: 0;
+		margin: var(--diorama-rotate-inset, 12px);
+		padding: 0;
+		width: var(--diorama-rotate-size, 36px);
+		height: var(--diorama-rotate-size, 36px);
+		border: 0;
+		border-radius: 50%;
+		background: var(--diorama-rotate-background, rgba(0, 0, 0, 0.45));
+		color: var(--diorama-rotate-color, #fff);
+		cursor: pointer;
+		display: grid;
+		place-items: center;
+		transition: background 120ms ease;
+	}
+	.rotate:hover {
+		background: var(--diorama-rotate-background-hover, rgba(0, 0, 0, 0.6));
+	}
+	.rotate:focus-visible {
+		outline: 2px solid currentColor;
+		outline-offset: 2px;
+	}
+	.rotate svg {
+		display: block;
+		width: 55%;
+		height: 55%;
+		fill: currentColor;
 	}
 </style>
