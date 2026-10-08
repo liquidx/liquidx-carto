@@ -12,7 +12,7 @@ export const tools: Tool[] = [
 		slug: 'snowboard-sim',
 		title: 'Snowboard Sim',
 		date: '2026-10-08',
-		summary: 'ride down a real ski resort on 1 m lidar terrain, with its runs, lifts and forest.'
+		summary: 'a simulation of riding down the real terrain of a mountain.'
 	},
 	{
 		slug: 'diorama-snow',

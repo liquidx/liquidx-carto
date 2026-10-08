@@ -4,7 +4,6 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { resolve } from '$app/paths';
 	import Button from '$lib/components/Button.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
@@ -195,10 +194,10 @@
 	const credits: Credit[] = [
 		CREDITS.gsiDem,
 		{
-			name: 'openstreetmap',
-			by: '© openstreetmap contributors, odbl · skimap.org',
+			name: 'openskidata',
+			by: 'openskidata.org · © openstreetmap contributors, odbl',
 			use: 'ski runs, lifts and resort area',
-			url: 'https://www.openstreetmap.org/copyright'
+			url: 'https://openskidata.org/'
 		}
 	];
 	const fmt = (n: number) => Math.round(n).toLocaleString();
@@ -279,10 +278,8 @@
 				<h1>{game?.resort.name ?? data.features.metadata?.name ?? data.tool.title}</h1>
 				{#if game?.resort.nameJa}<p class="ja">{game.resort.nameJa}</p>{/if}
 				<p class="blurb">
-					Ride the real mountain: terrain from {provider.label} lidar tiles, streamed at 1 m round the
-					board, with the runs, lifts and forest laid out from the resort's map data. The same tile sources
-					feed the <a href={resolve('/diorama')}>Mountain Diorama</a> and
-					<a href={resolve('/contour-maps')}>Contour Maps</a>.
+					A simulation of riding down the actual terrain of the mountain, from GSI Japan elevation
+					data at 1 m and 5 m resolution and wooded areas from OpenStreetMap.
 				</p>
 				{#if message}
 					<p class="error">{message}</p>
@@ -521,10 +518,6 @@
 		font-size: var(--text-content);
 		color: var(--color-text-tertiary);
 		max-width: 460px;
-	}
-	.blurb a {
-		color: inherit;
-		text-decoration: underline;
 	}
 	.loading {
 		display: flex;

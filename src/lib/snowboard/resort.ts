@@ -1,5 +1,5 @@
 /**
- * The resort's features (as exported for the Snow Diorama: OpenStreetMap and skimap.org data)
+ * The resort's features (as exported for the Snow Diorama: OpenStreetMap data via openskidata.org)
  * in the game's local frame: runs, lifts and the named points.
  */
 import type { Feature, FeatureCollection, Position } from 'geojson';

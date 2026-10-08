@@ -139,10 +139,10 @@
 	const credits: Credit[] = [
 		CREDITS.awsTerrain,
 		{
-			name: 'openstreetmap',
-			by: '© openstreetmap contributors, odbl · skimap.org',
+			name: 'openskidata',
+			by: 'openskidata.org · © openstreetmap contributors, odbl',
 			use: 'ski runs, lifts and woodland',
-			url: 'https://www.openstreetmap.org/copyright'
+			url: 'https://openskidata.org/'
 		}
 	];
 </script>
