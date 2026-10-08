@@ -1,9 +1,14 @@
 <!--
-	A ski resort on a diorama: terrain fetched for the area the features cover, runs draped on
-	the snow, and placeholder lifts, trees, buildings and labels from `@liquidx/diorama` on it.
+	A ski resort on a diorama. The resort's runs, lifts, woods and terrain GLB are fetched from
+	content.snowline.jp by location id (`?locationId=`, or the field below the title) and swapped
+	in place when it changes; a location without a GLB has its terrain built from elevation tiles.
+	Runs are draped on the snow, with placeholder lifts, trees, buildings and labels from
+	`@liquidx/diorama` on it.
 -->
 <script lang="ts">
-	import type { Feature, Polygon } from 'geojson';
+	import type { Feature, FeatureCollection, Polygon } from 'geojson';
+	import { untrack } from 'svelte';
+	import { replaceState } from '$app/navigation';
 	import { asset, resolve } from '$app/paths';
 	import {
 		Building,
@@ -22,21 +27,91 @@
 		type TerrainPreset
 	} from '@liquidx/diorama';
 	import DataCredits from '$lib/components/DataCredits.svelte';
+	import PromptField from '$lib/components/PromptField.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
 	import Slider from '$lib/components/Slider.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { PROVIDERS } from '$lib/contour/terrain-api';
 	import { CREDITS, type Credit } from '$lib/credits';
 	import { circleBounds, fitCircle } from '$lib/diorama/fit';
+	import {
+		fetchLocation,
+		isLocationId,
+		type LocationData,
+		type LocationFeatures
+	} from '$lib/diorama/location';
 	import { circleSampler } from '$lib/diorama/sampler';
 
 	let { data } = $props();
+
+	/** The location on show, or on its way: the id follows the URL and the field. */
+	let locationId = $state(untrack(() => data.locationId));
+	let draft = $state(untrack(() => data.locationId));
+	let location = $state.raw<LocationData | null>(null);
+	let loading = $state(false);
+	let message = $state('');
+
+	/** Each request is a new object, so submitting the same id again after a failure retries it. */
+	let request = $state.raw({ id: untrack(() => data.locationId) });
+
+	/** Switch locations: from the field, or from the URL changing under us. */
+	function go(id: string) {
+		id = id.trim();
+		if (!id || (id === locationId && (loading || location))) return;
+		if (!isLocationId(id)) {
+			message = `"${id}" is not a location id: use letters, digits, - and _`;
+			return;
+		}
+		locationId = id;
+		request = { id };
+	}
+	// Back/forward, or a link to another location.
+	$effect(() => {
+		const fromUrl = data.locationId;
+		untrack(() => {
+			draft = fromUrl;
+			go(fromUrl);
+		});
+	});
+
+	// Fetch the features, woods and GLB whenever the id changes, dropping a fetch that is overtaken.
+	$effect(() => {
+		const { id } = request;
+		const controller = new AbortController();
+		loading = true;
+		message = '';
+		location = null;
+		fetchLocation(id, { signal: controller.signal }).then(
+			(next) => {
+				if (controller.signal.aborted) return;
+				location = next;
+				loading = false;
+				const url = new URL(window.location.href);
+				if (url.searchParams.get('locationId') !== id) {
+					url.searchParams.set('locationId', id);
+					// eslint-disable-next-line svelte/no-navigation-without-resolve -- same page, query only
+					replaceState(url, {});
+				}
+			},
+			(e) => {
+				if (controller.signal.aborted) return;
+				loading = false;
+				message = e instanceof Error ? e.message : String(e);
+			}
+		);
+		return () => controller.abort();
+	});
+
+	const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
+	const features = $derived<LocationFeatures>(location?.features ?? EMPTY);
+	const woods = $derived<FeatureCollection>(location?.woods ?? EMPTY);
+	const title = $derived(location?.features.metadata?.name ?? locationId);
 
 	const kind = (k: string) => (f: Feature) => f.properties?.kind === k;
 	const isRun = kind('runSegment');
 	const isLift = kind('lift');
 	const isGondola = (f: Feature) => f.properties?.liftType === 'gondola';
-	const find = (k: string) => data.features.features.find(kind(k));
+	const find = (k: string) => features.features.find(kind(k));
 	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
 	/** Metres a second: from the ride time where the lift has one, else typical for its kind. */
 	function liftSpeed(f: Feature) {
@@ -95,17 +170,17 @@
 	let background = $state('#24344d');
 	let backgroundGradient = $state(0.5);
 	let autoRotate = $state(true);
-	let model = $state.raw<DioramaData | null>(null);
-	let message = $state('');
 
 	// The circle around the runs and lifts, which `pnpm diorama-woods` fits its woods to.
-	const circle = fitCircle(
-		shapesOf(data.features)
+	const circle = $derived.by(() => {
+		const points = shapesOf(features)
 			.filter((s) => isRun(s.feature) || isLift(s.feature))
-			.flatMap((s) => s.coords.flat())
-	);
+			.flatMap((s) => s.coords.flat());
+		return points.length ? fitCircle(points) : null;
+	});
 	/** A square around the whole diorama, for tree cover everywhere. */
-	const everywhere = $derived.by((): Feature<Polygon> => {
+	const everywhere = $derived.by((): Feature<Polygon> | null => {
+		if (!circle) return null;
 		const [west, south, east, north] = circleBounds(circle);
 		return {
 			type: 'Feature',
@@ -125,13 +200,58 @@
 		};
 	});
 
-	// Fetch elevation for the circle and build the mesh from it.
-	async function build() {
+	/**
+	 * The terrain: the location's GLB, or when it has none, a mesh built from elevation tiles
+	 * over the circle. Exactly one of the two is set while a location is on show.
+	 */
+	let glb = $state.raw<ArrayBuffer | null>(null);
+	/** Whether the stage has finished with `glb`. */
+	let glbLoaded = $state(false);
+	let model = $state.raw<DioramaData | null>(null);
+	let building = $state(false);
+	$effect(() => {
+		const current = location;
+		const c = circle;
+		glb = null;
+		glbLoaded = false;
+		model = null;
+		building = false;
+		if (!current) return;
+		if (current.glb) {
+			glb = current.glb;
+			return;
+		}
+		if (!c) {
+			message = 'The features have no runs or lifts to fit the terrain to.';
+			return;
+		}
+		// Fetch elevation for the circle and build the mesh from it.
+		const controller = new AbortController();
 		const rings = 220;
-		const { sample } = await circleSampler(PROVIDERS[0], circle, rings);
-		model = buildDiorama(sample, circle, { rings });
-	}
-	build().catch((e) => (message = e instanceof Error ? e.message : String(e)));
+		building = true;
+		circleSampler(PROVIDERS[0], c, rings, controller.signal).then(
+			({ sample }) => {
+				if (controller.signal.aborted) return;
+				model = buildDiorama(sample, c, { rings });
+				building = false;
+			},
+			(e) => {
+				if (controller.signal.aborted) return;
+				building = false;
+				message = e instanceof Error ? e.message : String(e);
+			}
+		);
+		return () => controller.abort();
+	});
+	const hint = $derived(
+		loading
+			? 'fetching location…'
+			: building
+				? 'fetching terrain…'
+				: glb && !glbLoaded
+					? 'loading terrain…'
+					: ''
+	);
 
 	const credits: Credit[] = [
 		CREDITS.awsTerrain,
@@ -144,23 +264,41 @@
 	];
 </script>
 
-<svelte:head><title>{data.tool.title} · Carto</title></svelte:head>
+<svelte:head><title>{data.tool.title} · {title} · Carto</title></svelte:head>
 
 <section class="head">
 	<h1>{data.tool.title}</h1>
 	<div class="meta">
 		<time datetime={data.tool.date}>{data.tool.date}</time>
+		{#if location}<span>{title}</span>{/if}
 	</div>
 	<p>
-	  A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> but with
-		animated objects like ski lifts and snowboards along with layer of
-		trees placed in areas defined by a GeoJSON file. Zoom in to find them.
+		A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> but with animated objects
+		like ski lifts and snowboards along with a layer of trees placed in areas defined by a GeoJSON
+		file. Zoom in to find them. The runs, woods and terrain are fetched by location id from
+		<code>content.snowline.jp/terrain</code>; type another id to switch.
 	</p>
+	<div class="location">
+		<PromptField
+			bind:value={draft}
+			placeholder="location id"
+			hint="⏎ load"
+			aria-label="location id"
+			onsubmit={go}
+		/>
+		{#if location?.missing.length}
+			<div class="note">
+				no {location.missing.map((m) => (m === 'glb' ? 'terrain glb' : m)).join(' or ')} for
+				{locationId}{#if location.missing.includes('glb')}: terrain built from elevation tiles{/if}
+			</div>
+		{/if}
+	</div>
 </section>
 
 <section class="body">
 	<div class="stage">
 		<Diorama
+			src={glb}
 			data={model}
 			{exaggeration}
 			baseDepth={0.2}
@@ -173,20 +311,22 @@
 			bind:autoRotate
 			rotateButton
 			minDistance={0.1}
+			onload={() => (glbLoaded = true)}
+			onerror={(e) => (message = e instanceof Error ? e.message : String(e))}
 		>
 			<Compass sun />
 			<Drape
-				data={data.features}
+				data={features}
 				filter={isRun}
 				paint={(f) => ({ stroke: DIFFICULTY[f.properties?.difficulty] ?? '#868e96', width: 3 })}
 			/>
 			{#if riders}
-				<Riders data={data.features} filter={isRun} every={90} speed={ridingSpeed} />
+				<Riders data={features} filter={isRun} every={90} speed={ridingSpeed} />
 			{/if}
 			{#if trees !== 'none'}
 				<Trees
-					data={trees === 'all' ? everywhere : data.woods}
-					avoid={[...data.features.features.filter((f) => isRun(f) || isLift(f)), ...hotels]}
+					data={trees === 'all' ? (everywhere ?? woods) : woods}
+					avoid={[...features.features.filter((f) => isRun(f) || isLift(f)), ...hotels]}
 					clearance={30}
 					density={6000}
 					height={16}
@@ -194,7 +334,7 @@
 				/>
 			{/if}
 			<Lift
-				data={data.features}
+				data={features}
 				filter={isLift}
 				height={(f) => (isGondola(f) ? 14 : 9)}
 				carrier={(f) => (isGondola(f) ? 'cabin' : 'chair')}
@@ -203,29 +343,24 @@
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isGondola(f) ? '#f08c00' : '#e03131')}
 			/>
-			<Building
-				data={data.features}
-				filter={kind('locationBase')}
-				footprint={[60, 24]}
-				height={14}
-			/>
+			<Building data={features} filter={kind('locationBase')} footprint={[60, 24]} height={14} />
 			<Building data={hotels} height={(f) => f.properties?.height} roofColor="#5c6670" />
 			<Model
 				src={asset('/diorama/summit-hut.glb')}
-				data={data.features}
+				data={features}
 				filter={kind('locationPeak')}
 				size={25}
 				heading={200}
 			/>
-			<Marker data={data.features} filter={kind('locationPeak')} height={70} />
+			<Marker data={features} filter={kind('locationPeak')} height={70} />
 			{#if showLabels}
-				<Label data={data.features} filter={isLift} text={(f) => f.properties?.nameEn} />
-				<Label data={data.features} filter={kind('locationPeak')} altitude={95}>
+				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />
+				<Label data={features} filter={kind('locationPeak')} altitude={95}>
 					{#snippet children(f)}<strong>{f.properties?.maxElevation} m</strong>{/snippet}
 				</Label>
 			{/if}
 		</Diorama>
-		{#if !model && !message}<div class="hint">fetching terrain…</div>{/if}
+		{#if hint && !message}<div class="hint">{hint}</div>{/if}
 	</div>
 	{#if message}<div class="error">{message}</div>{/if}
 	<div class="controls">
@@ -253,14 +388,17 @@
 			bind:value={objectScale}
 			format={(v) => `${v.toFixed(1)}×`}
 		/>
-		<Slider
-			label="vertical exaggeration"
-			min={0.5}
-			max={3}
-			step={0.1}
-			bind:value={exaggeration}
-			format={(v) => `${v.toFixed(1)}×`}
-		/>
+		{#if !glb}
+			<!-- A GLB keeps the relief it was exported with. -->
+			<Slider
+				label="vertical exaggeration"
+				min={0.5}
+				max={3}
+				step={0.1}
+				bind:value={exaggeration}
+				format={(v) => `${v.toFixed(1)}×`}
+			/>
+		{/if}
 		<Slider
 			label="sun bearing"
 			min={0}
@@ -327,6 +465,20 @@
 	.head p a {
 		color: inherit;
 		text-decoration: underline;
+	}
+	.head p code {
+		font-size: inherit;
+	}
+	.location {
+		width: 100%;
+		max-width: 360px;
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+	}
+	.note {
+		font-size: var(--text-meta);
+		color: var(--color-text-faint);
 	}
 	.body {
 		margin-top: 64px;
