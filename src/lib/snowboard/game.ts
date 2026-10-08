@@ -96,7 +96,7 @@ export async function createGame(
 	await tick();
 	const ground = paintGround(frame, resort, options.woods);
 
-	const terrain = new Terrain(frame, provider, ground.texture);
+	const terrain = new Terrain(frame, provider, ground.texture, ground.grain);
 	onProgress({ stage: `fetching ${terrain.cellCount} terrain tiles`, fraction: 0 });
 	await terrain.loadBase((p) =>
 		onProgress({
@@ -247,8 +247,10 @@ export async function createGame(
 		const speed = rider.speed;
 		if (speed > 2.5 && rider.mode !== 'lift') dir.copy(rider.velocity).setY(0).normalize();
 		else rider.forward(dir);
-		const back = rider.mode === 'lift' ? 12 : 8.5 + speed * 0.12;
-		const up = rider.mode === 'lift' ? 3 : 3.2 + speed * 0.03;
+		// Close and low behind the rider, so the snow streams past and speed reads; a little
+		// further back and wider as they go faster.
+		const back = rider.mode === 'lift' ? 12 : 6.5 + speed * 0.1;
+		const up = rider.mode === 'lift' ? 3 : 2.3 + speed * 0.02;
 		if (!dragging && rider.speed > 2) lookYaw *= Math.exp(-dt * 2);
 		if (lookYaw) dir.applyAxisAngle(new THREE.Vector3(0, 1, 0), lookYaw);
 		camTarget.copy(rider.position).addScaledVector(dir, -back);
@@ -260,7 +262,7 @@ export async function createGame(
 		look.copy(rider.position);
 		look.y += rider.mode === 'lift' ? 0.5 : 1.3;
 		camera.lookAt(look);
-		camera.fov = 62 + Math.min(14, speed * 0.3);
+		camera.fov = 64 + Math.min(18, speed * 0.45);
 		camera.updateProjectionMatrix();
 	}
 
@@ -281,8 +283,9 @@ export async function createGame(
 		distance: 0,
 		fps: 0
 	};
-	// Lift names over their stations: DOM labels placed every frame, faded with distance and
-	// hidden when the terrain is in the way.
+	// Lift names over their stations: DOM labels placed every frame, shrunk and faded with
+	// distance and hidden when the terrain is in the way.
+	const LABEL_RANGE = 1800;
 	const labels = options.labels
 		? lifts.lines.flatMap((line) =>
 				[line.top, line.bottom].map((at) => {
@@ -318,7 +321,7 @@ export async function createGame(
 			const d = at.distanceTo(camera.position);
 			screen.copy(at).project(camera);
 			const show =
-				d < 2600 &&
+				d < LABEL_RANGE &&
 				screen.z < 1 &&
 				Math.abs(screen.x) < 1.1 &&
 				Math.abs(screen.y) < 1.1 &&
@@ -327,8 +330,10 @@ export async function createGame(
 				el.style.opacity = '0';
 				continue;
 			}
-			el.style.opacity = String(Math.min(1, (2600 - d) / 800));
-			el.style.transform = `translate(${((screen.x + 1) / 2) * w}px, ${((1 - screen.y) / 2) * h}px) translate(-50%, -100%)`;
+			el.style.opacity = String(Math.min(0.9, (LABEL_RANGE - d) / 600));
+			// Full size up close, down to half size far off.
+			const size = 1 - Math.min(0.5, d / LABEL_RANGE / 2);
+			el.style.transform = `translate(${((screen.x + 1) / 2) * w}px, ${((1 - screen.y) / 2) * h}px) translate(-50%, -100%) scale(${size.toFixed(3)})`;
 		}
 	}
 

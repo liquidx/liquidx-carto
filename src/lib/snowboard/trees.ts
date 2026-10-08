@@ -53,7 +53,8 @@ export function plantForest(
 			// Sparser on steep ground.
 			const n = terrain.normal(x, z);
 			if (n.y < 0.72 && hash(ix, iz, 5) > 0.5) continue;
-			spots.push(x, y, z, 0.65 + hash(ix, iz, 4) * 0.75, hash(ix, iz, 6));
+			// Full-grown firs and beeches, 14 to 22 m tall, as a unit tree is 10 m.
+			spots.push(x, y, z, 1.4 + hash(ix, iz, 4) * 0.8, hash(ix, iz, 6));
 		}
 	}
 	const count = spots.length / 5;
@@ -81,7 +82,7 @@ export function plantForest(
 	const tint = new THREE.Color();
 	for (let i = 0; i < count; i++) {
 		const [x, y, z, s, r] = spots.slice(i * 5, i * 5 + 5);
-		position.set(x, y - 0.3, z);
+		position.set(x, y - 0.5, z);
 		turn.setFromAxisAngle(up, r * Math.PI * 2);
 		scale.set(s * (0.85 + r * 0.3), s, s * (0.85 + r * 0.3));
 		matrix.compose(position, turn, scale);

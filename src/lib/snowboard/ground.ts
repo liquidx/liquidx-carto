@@ -13,9 +13,17 @@ export const RUN_WIDTH = 36;
 /** Trees stay this far from a run's centre line, and lifts clear a narrow strip. */
 const TREE_CLEARANCE = RUN_WIDTH / 2 + 14;
 const LIFT_CLEARANCE = 10;
+/** Ground covered by one tile of the grain texture. */
+const GRAIN_METRES = 6;
 
 export interface Ground {
 	texture: THREE.CanvasTexture;
+	/**
+	 * Fine snow grain, a small tile repeated every `GRAIN_METRES` across the frame, for the
+	 * terrain's bump map: the colour texture is far too coarse to show the surface streaming
+	 * past, and this is what gives a sense of speed.
+	 */
+	grain: THREE.CanvasTexture;
 	/** The painted surface, also used for the minimap. */
 	canvas: HTMLCanvasElement;
 	/** Whether world x, z is on a groomed run. */
@@ -143,8 +151,46 @@ export function paintGround(
 	texture.generateMipmaps = true;
 	texture.minFilter = THREE.LinearMipmapLinearFilter;
 
+	// Grain: wind-worked snow as soft blobs a few centimetres across, blurred so the tile
+	// repeats without a visible seam, over fine noise.
+	const grainCanvas = document.createElement('canvas');
+	const G = 256;
+	grainCanvas.width = grainCanvas.height = G;
+	const g = grainCanvas.getContext('2d')!;
+	g.fillStyle = '#808080';
+	g.fillRect(0, 0, G, G);
+	const noise = g.createImageData(G, G);
+	for (let i = 0; i < noise.data.length; i += 4) {
+		const v = 128 + (Math.random() - 0.5) * 80;
+		noise.data[i] = noise.data[i + 1] = noise.data[i + 2] = v;
+		noise.data[i + 3] = 255;
+	}
+	g.putImageData(noise, 0, 0);
+	g.filter = 'blur(2px)';
+	for (let i = 0; i < 260; i++) {
+		const r = 4 + Math.random() * 14;
+		const x = Math.random() * G;
+		const y = Math.random() * G;
+		g.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
+		// Drawn at the tile's wrapped positions too, so the edges match up.
+		for (const ox of [-G, 0, G])
+			for (const oy of [-G, 0, G]) {
+				g.beginPath();
+				g.ellipse(x + ox, y + oy, r * 1.8, r, 0.4, 0, Math.PI * 2);
+				g.fill();
+			}
+	}
+	g.filter = 'none';
+	const grain = new THREE.CanvasTexture(grainCanvas);
+	grain.wrapS = grain.wrapT = THREE.RepeatWrapping;
+	grain.repeat.set(frame.width / GRAIN_METRES, frame.height / GRAIN_METRES);
+	grain.anisotropy = 8;
+	grain.generateMipmaps = true;
+	grain.minFilter = THREE.LinearMipmapLinearFilter;
+
 	return {
 		texture,
+		grain,
 		canvas,
 		groomed(x, z) {
 			const i = index(x, z);
@@ -157,6 +203,9 @@ export function paintGround(
 			const inBox = x >= woodBox[0] && x <= woodBox[2] && z >= woodBox[1] && z <= woodBox[3];
 			return !inBox || mask[i + 2] >= 128;
 		},
-		dispose: () => texture.dispose()
+		dispose: () => {
+			texture.dispose();
+			grain.dispose();
+		}
 	};
 }

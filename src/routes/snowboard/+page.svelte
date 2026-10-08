@@ -440,15 +440,15 @@
 		position: absolute;
 		top: 0;
 		left: 0;
-		margin-bottom: 8px;
-		padding: 3px 7px;
-		font-size: var(--text-small);
+		padding: 1px 5px;
+		font-size: var(--text-meta);
 		letter-spacing: var(--tracking-label);
 		text-transform: uppercase;
 		white-space: nowrap;
-		color: #fff;
-		background: rgba(8, 8, 10, 0.55);
+		color: rgba(255, 255, 255, 0.85);
+		background: rgba(8, 8, 10, 0.22);
 		opacity: 0;
+		transform-origin: 50% 100%;
 		will-change: transform, opacity;
 	}
 

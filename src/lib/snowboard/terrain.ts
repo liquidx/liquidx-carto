@@ -60,12 +60,16 @@ export class Terrain {
 	constructor(
 		readonly frame: LocalFrame,
 		readonly provider: TerrainProvider,
-		map: THREE.Texture
+		map: THREE.Texture,
+		/** A tiled bump map, for the snow's surface grain. */
+		bump?: THREE.Texture
 	) {
 		this.range = tileRange(frame.box, BASE_ZOOM);
 		// Double-sided so the skirts show whichever way they are wound.
 		this.material = new THREE.MeshStandardMaterial({
 			map,
+			bumpMap: bump ?? null,
+			bumpScale: 1.4,
 			roughness: 0.92,
 			metalness: 0,
 			side: THREE.DoubleSide
