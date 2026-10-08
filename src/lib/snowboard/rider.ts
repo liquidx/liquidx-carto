@@ -158,7 +158,7 @@ export class Rider {
 			const hop = 1 + 3.5 * Math.max(0, 1 - speed / 12);
 			v.x += fx * hop;
 			v.z += fz * hop;
-			v.y = 4.2 + Math.min(2.5, speed * 0.1);
+			v.y = 2.1 + Math.min(1.25, speed * 0.05);
 			this.mode = 'air';
 			this.airStart = performance.now();
 			p.addScaledVector(v, dt);
