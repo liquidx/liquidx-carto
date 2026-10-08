@@ -4,8 +4,16 @@
 	to teleport. Terrain comes from the same tile providers as the game.
 -->
 <script lang="ts">
-	import type { Feature } from 'geojson';
-	import { Diorama, Drape, Label, Lift, buildDiorama, type DioramaData } from '@liquidx/diorama';
+	import type { Feature, FeatureCollection } from 'geojson';
+	import {
+		Diorama,
+		Drape,
+		Label,
+		Lift,
+		Trees,
+		buildDiorama,
+		type DioramaData
+	} from '@liquidx/diorama';
 	import { xToLon, yToLat, frameAt, frameBox } from '$lib/contour/mercator';
 	import { findProvider, sampleApiGrid } from '$lib/contour/terrain-api';
 	import { gridSampler } from '$lib/diorama/sampler';
@@ -18,12 +26,22 @@
 	type Props = {
 		game: Game;
 		features: FeaturesFile;
+		/** Wood and forest polygons to stand trees on, if known. */
+		woods?: FeatureCollection | null;
 		/** Terrain provider id for the model; coarse tiles are fine for a map this size. */
 		provider?: string;
 		showLabels?: boolean;
 		onteleport: (lon: number, lat: number) => void;
 	};
-	let { game, features, provider = 'gsi', showLabels = true, onteleport }: Props = $props();
+	let {
+		game,
+		features,
+		woods = null,
+		provider = 'gsi',
+		showLabels = true,
+		onteleport
+	}: Props = $props();
+	const inTheWay = $derived(features.features.filter((f) => isRun(f) || isLift(f)));
 
 	const kind = (k: string) => (f: Feature) => f.properties?.kind === k;
 	const isRun = kind('runSegment');
@@ -84,6 +102,16 @@
 					width: 3
 				})}
 			/>
+			{#if woods}
+				<Trees
+					data={woods}
+					avoid={inTheWay}
+					clearance={30}
+					density={2500}
+					height={16}
+					limit={40_000}
+				/>
+			{/if}
 			<Lift data={features} filter={isLift} carrierEvery={0} />
 			{#if showLabels}
 				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />

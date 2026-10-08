@@ -26,8 +26,11 @@
 	let menu = $state(true);
 	let started = $state(false);
 	let liftId = $state('');
-	let shadows = $state(true);
-	let touching = $state(false);
+	/** A touch screen: on-screen controls and lighter rendering. `?touch` forces it, for testing. */
+	const coarse =
+		typeof window !== 'undefined' &&
+		(matchMedia('(pointer: coarse)').matches || new URLSearchParams(location.search).has('touch'));
+	let shadows = $state(!coarse);
 
 	const lifts = $derived(game?.lifts ?? []);
 	const provider = PROVIDERS.find((p) => p.id === 'gsi-1m')!;
@@ -37,7 +40,14 @@
 		createGame(
 			canvas,
 			data.features,
-			{ provider: provider.id, shadows, labels: labelHost, woods: data.woods },
+			{
+				provider: provider.id,
+				shadows,
+				labels: labelHost,
+				woods: data.woods,
+				treeSpacing: coarse ? 18 : 14,
+				maxPixelRatio: coarse ? 1.5 : 2
+			},
 			(p) => (progress = p),
 			(h) => (hud = h)
 		)
@@ -116,22 +126,30 @@
 		apply();
 	}
 
-	// Touch: left and right halves steer, both at once brakes.
-	// eslint-disable-next-line svelte/prefer-svelte-reactivity
-	const touches = new Map<number, 'left' | 'right'>();
-	function touch(e: PointerEvent, down: boolean) {
-		if (e.pointerType === 'mouse' || !game) return;
-		touching = true;
-		if (down) touches.set(e.pointerId, e.clientX < window.innerWidth / 2 ? 'left' : 'right');
-		else touches.delete(e.pointerId);
-		const sides = new Set(touches.values());
-		game.input.steer =
-			sides.has('right') && !sides.has('left')
-				? 1
-				: sides.has('left') && !sides.has('right')
-					? -1
-					: 0;
-		game.input.brake = sides.size === 2;
+	// On-screen controls: each button holds an input while a finger is on it, and several can
+	// be held at once since every pointer is captured by its own button.
+	type Control = 'left' | 'right' | 'tuck' | 'brake' | 'jump';
+	function hold(control: Control, on: boolean) {
+		if (!game) return;
+		const i = game.input;
+		if (control === 'left') i.steer = on ? -1 : i.steer < 0 ? 0 : i.steer;
+		else if (control === 'right') i.steer = on ? 1 : i.steer > 0 ? 0 : i.steer;
+		else i[control] = on;
+	}
+	function press(control: Control) {
+		return {
+			onpointerdown: (e: PointerEvent) => {
+				// Keep the pointer on the button even when the finger slides off it.
+				try {
+					(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+				} catch {
+					// Not an active pointer (synthetic events): the button still works.
+				}
+				hold(control, true);
+			},
+			onpointerup: () => hold(control, false),
+			onpointercancel: () => hold(control, false)
+		};
 	}
 
 	const credits: Credit[] = [
@@ -149,15 +167,8 @@
 <svelte:head><title>{data.tool.title} · Carto</title></svelte:head>
 <svelte:window onkeydown={onKeyDown} onkeyup={onKeyUp} onblur={onBlur} />
 
-<div class="game" class:menu>
-	<canvas
-		class="view"
-		bind:this={canvas}
-		tabindex="-1"
-		onpointerdown={(e) => touch(e, true)}
-		onpointerup={(e) => touch(e, false)}
-		onpointercancel={(e) => touch(e, false)}
-	></canvas>
+<div class="game" class:menu class:coarse>
+	<canvas class="view" bind:this={canvas} tabindex="-1"></canvas>
 
 	{#if hud && !menu}
 		<div class="hud">
@@ -188,16 +199,26 @@
 		{/if}
 		<div class="foot">
 			<span class="keys">
-				{#if touching}
-					touch left / right to carve · both to brake
-				{:else}
-					<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake · <kbd>space</kbd>
-					jump ·
-					<kbd>R</kbd> back to the top · <kbd>esc</kbd> menu
-				{/if}
+				<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake · <kbd>space</kbd>
+				jump ·
+				<kbd>R</kbd> back to the top · <kbd>esc</kbd> menu
 			</span>
 			<span class="fps">{hud.fps} fps</span>
 		</div>
+		{#if coarse}
+			<div class="touch">
+				<div class="pad">
+					<button class="key" aria-label="carve left" {...press('left')}>◀</button>
+					<button class="key" aria-label="carve right" {...press('right')}>▶</button>
+				</div>
+				<div class="pad">
+					<button class="key" aria-label="tuck" {...press('tuck')}>tuck</button>
+					<button class="key" aria-label="brake" {...press('brake')}>brake</button>
+					<button class="key" aria-label="jump" {...press('jump')}>jump</button>
+				</div>
+			</div>
+			<button class="menu-button" aria-label="menu" onclick={pause}>≡</button>
+		{/if}
 	{/if}
 	<div class="labels" bind:this={labelHost}></div>
 	{#if game}
@@ -205,6 +226,7 @@
 			<Minimap
 				{game}
 				features={data.features}
+				woods={data.woods}
 				onteleport={(lon, lat) => {
 					game?.teleport(lon, lat);
 					canvas.focus();
@@ -263,8 +285,13 @@
 						</li>
 					</ul>
 					<p class="keys">
-						<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake ·
-						<kbd>space</kbd> jump · <kbd>E</kbd> ride a lift · <kbd>R</kbd> back to the top
+						{#if coarse}
+							on-screen buttons to carve, tuck, brake and jump · tap the lift prompt to ride it ·
+							tap the map to teleport
+						{:else}
+							<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake ·
+							<kbd>space</kbd> jump · <kbd>E</kbd> ride a lift · <kbd>R</kbd> back to the top
+						{/if}
 					</p>
 				{/if}
 				<ul class="credits">
@@ -284,6 +311,10 @@
 		inset: 0;
 		overflow: hidden;
 		background: var(--color-base);
+		touch-action: none;
+		user-select: none;
+		-webkit-user-select: none;
+		-webkit-tap-highlight-color: transparent;
 	}
 	.view {
 		display: block;
@@ -524,13 +555,100 @@
 		font-size: var(--text-small);
 		color: var(--color-danger);
 	}
+	/* Touch controls */
+	.touch {
+		position: absolute;
+		left: var(--spacing-gutter-mobile);
+		right: var(--spacing-gutter-mobile);
+		bottom: calc(16px + env(safe-area-inset-bottom));
+		display: flex;
+		justify-content: space-between;
+		align-items: flex-end;
+		pointer-events: none;
+	}
+	.pad {
+		display: flex;
+		gap: 10px;
+		pointer-events: auto;
+	}
+	.key {
+		min-width: 64px;
+		height: 64px;
+		padding: 0 14px;
+		font: inherit;
+		font-size: var(--text-small);
+		letter-spacing: var(--tracking-label);
+		text-transform: uppercase;
+		color: #fff;
+		background: rgba(8, 8, 10, 0.45);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+		backdrop-filter: blur(6px);
+		touch-action: none;
+	}
+	.key:active {
+		background: var(--color-accent-tint);
+		border-color: var(--color-accent);
+	}
+	.menu-button {
+		position: absolute;
+		top: 12px;
+		right: var(--spacing-gutter-mobile);
+		width: 40px;
+		height: 40px;
+		font: inherit;
+		font-size: var(--text-list);
+		color: #fff;
+		background: rgba(8, 8, 10, 0.45);
+		border: 1px solid rgba(255, 255, 255, 0.3);
+	}
+	.coarse .foot .keys {
+		display: none;
+	}
+	.coarse .prompt {
+		bottom: 110px;
+	}
+	.coarse .minimap {
+		right: var(--spacing-gutter-mobile);
+		bottom: calc(96px + env(safe-area-inset-bottom));
+		width: 170px;
+		height: 130px;
+	}
+	.coarse .stats {
+		margin-right: 52px;
+	}
 	@media (max-width: 640px) {
+		.hud {
+			left: var(--spacing-gutter-mobile);
+			right: var(--spacing-gutter-mobile);
+			top: 14px;
+		}
 		.run .name,
 		.stats b {
 			font-size: var(--text-list);
 		}
+		.run .sub {
+			display: none;
+		}
+		.stats {
+			gap: 12px;
+		}
 		.foot .keys {
 			display: none;
+		}
+		.minimap {
+			right: var(--spacing-gutter-mobile);
+			width: 150px;
+			height: 120px;
+		}
+		.touch .key {
+			min-width: 54px;
+			height: 54px;
+			padding: 0 10px;
+		}
+		.overlay {
+			align-items: flex-start;
+			overflow-y: auto;
+			padding: 32px var(--spacing-gutter-mobile);
 		}
 	}
 </style>

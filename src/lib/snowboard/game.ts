@@ -26,6 +26,8 @@ export interface GameOptions {
 	shadows?: boolean;
 	/** Metres between trees. */
 	treeSpacing?: number;
+	/** Cap on the device pixel ratio rendered at; lower it on phones. */
+	maxPixelRatio?: number;
 	/** An element over the canvas for the lift names floating over their stations. */
 	labels?: HTMLElement;
 	/** Wood and forest polygons; trees only stand inside them where the data covers. */
@@ -122,7 +124,7 @@ export async function createGame(
 		antialias: true,
 		powerPreference: 'high-performance'
 	});
-	renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+	renderer.setPixelRatio(Math.min(window.devicePixelRatio, options.maxPixelRatio ?? 2));
 	renderer.outputColorSpace = THREE.SRGBColorSpace;
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 1.05;
