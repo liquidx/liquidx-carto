@@ -16,6 +16,7 @@
 	import type { Place } from '$lib/contour/geocode';
 	import {
 		frameAt,
+		frameBox,
 		latToY,
 		lonToX,
 		metresPerUnit,
@@ -23,19 +24,18 @@
 		yToLat,
 		type Frame
 	} from '$lib/contour/mercator';
-	import { findProvider, PROVIDERS } from '$lib/contour/terrain-api';
+	import { findProvider, PROVIDERS, sampleApiGrid } from '$lib/contour/terrain-api';
 	import {
 		Compass,
 		Diorama,
 		buildDiorama,
-		dioramaFileName,
 		type Circle,
 		type DioramaData,
 		type MeshParams,
 		type Sampler,
 		type TerrainPreset
 	} from '@liquidx/diorama';
-	import { circleSampler, MAX_RINGS } from '$lib/diorama/sampler';
+	import { gridSampler } from '$lib/diorama/sampler';
 
 	import { TERRAIN_TOOL_CREDITS } from '$lib/credits';
 
@@ -44,6 +44,9 @@
 	const dem = new DemStore();
 
 	type Source = 'files' | 'api';
+	// Terrain tiles are sampled on a grid of at most 1024², two samples per ring, so more rings
+	// than this add triangles without adding detail.
+	const MAX_RINGS = 512;
 
 	let source = $state<Source>('api');
 	let providerId = $state(PROVIDERS[0].id);
@@ -158,7 +161,12 @@
 				let sample: Sampler;
 				let res: number;
 				if (src === 'api') {
-					({ sample, resolution: res } = await circleSampler(p, c, params.rings));
+					// A little margin so the rim never samples outside the grid.
+					const box = frameBox({ ...f, w: f.w * 1.04 }, 1);
+					const n = Math.min(1024, params.rings * 2 + 1);
+					const r = await sampleApiGrid(p, box, n, n);
+					sample = gridSampler(r.grid, box);
+					res = r.resolution;
 				} else {
 					sample = dem.sampler();
 					res = demResolution(c.lat);
@@ -188,9 +196,10 @@
 		try {
 			const blob = await view.glb();
 			if (!blob) return;
+			const name = `diorama_${circle.lat.toFixed(4)}_${circle.lon.toFixed(4)}_${Math.round(circle.radius)}m.glb`;
 			const a = document.createElement('a');
 			a.href = URL.createObjectURL(blob);
-			a.download = dioramaFileName(circle);
+			a.download = name;
 			a.click();
 			setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 		} finally {

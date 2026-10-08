@@ -4,8 +4,6 @@ import {
 	applyVertical,
 	buildDiorama,
 	createTerrainMaterial,
-	dioramaMeta,
-	exportDioramaData,
 	exportDioramaGlb,
 	loadDioramaGlb,
 	type DioramaMeta
@@ -47,27 +45,6 @@ describe('diorama glb', () => {
 		}
 		// The exporter must not leave the metadata on the source mesh.
 		expect(mesh.userData).toEqual({});
-	});
-
-	it('exports built data without a stage the same way', async () => {
-		const circle = { lon: 138.7, lat: 35.3, radius: 1000 };
-		const build = () =>
-			buildDiorama((lon) => (lon - circle.lon) * 10_000 + 500, circle, { rings: 4 });
-		const settings = { exaggeration: 1.5, baseDepth: 0.25, contourInterval: 50, majorEvery: 4 };
-
-		// By hand, as the component does it.
-		const shown = build();
-		applyVertical(shown, settings);
-		const mesh = new THREE.Mesh(shown.geometry, createTerrainMaterial().material);
-		const byHand = await loadDioramaGlb(await exportDioramaGlb(mesh, dioramaMeta(shown, settings)));
-		const headless = await loadDioramaGlb(await exportDioramaData(build(), settings));
-
-		expect(headless.meta).toEqual(byHand.meta);
-		for (const name of ['position', 'elevation', 'contourMask', 'surfaceY']) {
-			expect(Array.from(headless.mesh.geometry.getAttribute(name).array)).toEqual(
-				Array.from(byHand.mesh.geometry.getAttribute(name).array)
-			);
-		}
 	});
 
 	const v1 = {
