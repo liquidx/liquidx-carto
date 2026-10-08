@@ -1,7 +1,8 @@
 <!--
 	A ski resort on a diorama. The resort's runs, lifts, woods and terrain GLB are fetched from
 	content.snowline.jp by location id (`?locationId=`, or the field below the title) and swapped
-	in place when it changes; a location without a GLB has its terrain built from elevation tiles.
+	in place when it changes. The terrain is generated from elevation tiles over the runs and
+	lifts, or the location's GLB when that source is picked.
 	Runs are draped on the snow, with placeholder lifts, trees, buildings and labels from
 	`@liquidx/diorama` on it.
 -->
@@ -36,6 +37,7 @@
 	import { circleBounds, fitCircle } from '$lib/diorama/fit';
 	import {
 		fetchLocation,
+		fetchLocationGlb,
 		isLocationId,
 		type LocationData,
 		type LocationFeatures
@@ -74,7 +76,7 @@
 		});
 	});
 
-	// Fetch the features, woods and GLB whenever the id changes, dropping a fetch that is overtaken.
+	// Fetch the features and woods whenever the id changes, dropping a fetch that is overtaken.
 	$effect(() => {
 		const { id } = request;
 		const controller = new AbortController();
@@ -200,57 +202,69 @@
 		};
 	});
 
+	/** Where the terrain comes from: generated from elevation tiles, or the location's GLB. */
+	let source = $state<'generated' | 'glb'>('generated');
 	/**
-	 * The terrain: the location's GLB, or when it has none, a mesh built from elevation tiles
-	 * over the circle. Exactly one of the two is set while a location is on show.
+	 * The terrain on stage: a GLB, or a mesh built from elevation tiles over the circle. Exactly
+	 * one of the two is set while a location is on show.
 	 */
 	let glb = $state.raw<ArrayBuffer | null>(null);
 	/** Whether the stage has finished with `glb`. */
 	let glbLoaded = $state(false);
 	let model = $state.raw<DioramaData | null>(null);
-	let building = $state(false);
+	let fetching = $state<'' | 'glb' | 'tiles'>('');
 	$effect(() => {
 		const current = location;
 		const c = circle;
+		const from = source;
 		glb = null;
 		glbLoaded = false;
 		model = null;
-		building = false;
+		fetching = '';
 		if (!current) return;
-		if (current.glb) {
-			glb = current.glb;
-			return;
-		}
-		if (!c) {
-			message = 'The features have no runs or lifts to fit the terrain to.';
-			return;
-		}
-		// Fetch elevation for the circle and build the mesh from it.
 		const controller = new AbortController();
-		const rings = 220;
-		building = true;
-		circleSampler(PROVIDERS[0], c, rings, controller.signal).then(
-			({ sample }) => {
+		const fail = (e: unknown) => {
+			if (controller.signal.aborted) return;
+			fetching = '';
+			message = e instanceof Error ? e.message : String(e);
+		};
+		if (from === 'glb') {
+			fetching = 'glb';
+			fetchLocationGlb(current.locationId, { signal: controller.signal }).then((bytes) => {
+				if (controller.signal.aborted) return;
+				fetching = '';
+				if (bytes) {
+					glb = bytes;
+				} else {
+					// Nothing to load: fall back to generating it.
+					message = `no terrain glb for ${current.locationId}: generated instead`;
+					source = 'generated';
+				}
+			}, fail);
+		} else if (!c) {
+			message = 'The features have no runs or lifts to fit the terrain to.';
+		} else {
+			// Fetch elevation for the circle and build the mesh from it.
+			const rings = 220;
+			fetching = 'tiles';
+			circleSampler(PROVIDERS[0], c, rings, controller.signal).then(({ sample }) => {
 				if (controller.signal.aborted) return;
 				model = buildDiorama(sample, c, { rings });
-				building = false;
-			},
-			(e) => {
-				if (controller.signal.aborted) return;
-				building = false;
-				message = e instanceof Error ? e.message : String(e);
-			}
-		);
+				fetching = '';
+			}, fail);
+		}
 		return () => controller.abort();
 	});
 	const hint = $derived(
 		loading
 			? 'fetching location…'
-			: building
+			: fetching === 'tiles'
 				? 'fetching terrain…'
-				: glb && !glbLoaded
-					? 'loading terrain…'
-					: ''
+				: fetching === 'glb'
+					? 'fetching glb…'
+					: glb && !glbLoaded
+						? 'loading terrain…'
+						: ''
 	);
 
 	const credits: Credit[] = [
@@ -275,8 +289,9 @@
 	<p>
 		A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> but with animated objects
 		like ski lifts and snowboards along with a layer of trees placed in areas defined by a GeoJSON
-		file. Zoom in to find them. The runs, woods and terrain are fetched by location id from
-		<code>content.snowline.jp/terrain</code>; type another id to switch.
+		file. Zoom in to find them. The runs and woods are fetched by location id from
+		<code>content.snowline.jp/terrain</code>; type another id to switch. The terrain is generated
+		from elevation tiles, or loaded from the location's GLB.
 	</p>
 	<div class="location">
 		<PromptField
@@ -286,11 +301,8 @@
 			aria-label="location id"
 			onsubmit={go}
 		/>
-		{#if location?.missing.length}
-			<div class="note">
-				no {location.missing.map((m) => (m === 'glb' ? 'terrain glb' : m)).join(' or ')} for
-				{locationId}{#if location.missing.includes('glb')}: terrain built from elevation tiles{/if}
-			</div>
+		{#if location?.missing.includes('woods')}
+			<div class="note">no woods for {locationId}</div>
 		{/if}
 	</div>
 </section>
@@ -365,6 +377,14 @@
 	{#if message}<div class="error">{message}</div>{/if}
 	<div class="controls">
 		<div class="control">
+			<span class="label">terrain</span>
+			<Segmented
+				label="terrain source"
+				options={[{ value: 'generated' }, { value: 'glb' }]}
+				bind:value={source}
+			/>
+		</div>
+		<div class="control">
 			<span class="label">style</span>
 			<Segmented
 				label="terrain style"
@@ -388,7 +408,7 @@
 			bind:value={objectScale}
 			format={(v) => `${v.toFixed(1)}×`}
 		/>
-		{#if !glb}
+		{#if source !== 'glb'}
 			<!-- A GLB keeps the relief it was exported with. -->
 			<Slider
 				label="vertical exaggeration"

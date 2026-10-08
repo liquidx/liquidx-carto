@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLocation, isLocationId, locationUrls } from './location';
+import { fetchLocation, fetchLocationGlb, isLocationId, locationUrls } from './location';
 
 const collection = (n: number) => ({
 	type: 'FeatureCollection',
@@ -40,28 +40,27 @@ describe('location data', () => {
 		expect(isLocationId('')).toBe(false);
 	});
 
-	it('fetches all three files', async () => {
-		const glb = new Uint8Array([1, 2, 3]).buffer;
+	it('fetches the features and the woods', async () => {
 		const data = await fetchLocation('x', {
-			fetch: serve({
-				'x-ski-features.geojson': collection(2),
-				'x-woods.geojson': collection(1),
-				'x.glb': glb
-			})
+			fetch: serve({ 'x-ski-features.geojson': collection(2), 'x-woods.geojson': collection(1) })
 		});
 		expect(data.features.features).toHaveLength(2);
 		expect(data.woods.features).toHaveLength(1);
-		expect(data.glb?.byteLength).toBe(3);
 		expect(data.missing).toEqual([]);
 	});
 
-	it('does without the woods and the glb', async () => {
+	it('does without the woods', async () => {
 		const data = await fetchLocation('x', {
 			fetch: serve({ 'x-ski-features.geojson': collection(2) })
 		});
 		expect(data.woods.features).toEqual([]);
-		expect(data.glb).toBeNull();
-		expect(data.missing).toEqual(['woods', 'glb']);
+		expect(data.missing).toEqual(['woods']);
+	});
+
+	it('fetches the glb on its own, null when there is none', async () => {
+		const glb = new Uint8Array([1, 2, 3]).buffer;
+		expect((await fetchLocationGlb('x', { fetch: serve({ 'x.glb': glb }) }))?.byteLength).toBe(3);
+		expect(await fetchLocationGlb('x', { fetch: serve({}) })).toBeNull();
 	});
 
 	it('fails without the features', async () => {
