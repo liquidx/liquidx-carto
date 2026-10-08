@@ -25,7 +25,7 @@
 		/** Distance in metres to keep from `avoid`. */
 		clearance?: number;
 		seed?: number;
-		/** Upper bound on the number of trees. */
+		/** Upper bound on the number of trees. Past it the cover is thinned evenly. */
 		limit?: number;
 	};
 
@@ -86,8 +86,8 @@
 	/** Where a tree may stand: x, the ground's height, z, two random numbers, and the gap to `avoid`. */
 	type Spot = [x: number, y: number, z: number, a: number, b: number, gap: number];
 
-	// Every spot in the polygons, whatever the size of the trees. At most `limit` of them clear
-	// `avoid` by `clearance`.
+	// Every spot in the polygons that clears `avoid` by `clearance`, whatever the size of the
+	// trees. When there are more than `limit`, that many are kept from all over the polygons.
 	const spots = $derived.by((): Spot[] => {
 		const polygons = areas.current
 			.filter((s) => s.kind === 'polygon')
@@ -138,12 +138,11 @@
 		// One candidate per cell of a grid shared by all polygons, jittered within its cell.
 		const cell = diorama.metres(1000 / Math.sqrt(density));
 		const least = diorama.metres(clearance);
-		const out: Spot[] = [];
+		const found: [x: number, z: number, ix: number, iz: number, gap: number][] = [];
 		// Local to this run, never read reactively.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const seen = new Set<string>();
-		let clear = 0;
-		scan: for (const rings of polygons) {
+		for (const rings of polygons) {
 			let x0 = Infinity,
 				x1 = -Infinity,
 				z0 = Infinity,
@@ -185,12 +184,27 @@
 					// Too close whatever the size of the trees.
 					if (gap < least) continue;
 					seen.add(key);
-					out.push([x, diorama.heightAt(x, z), z, hash(ix, iz, 3), hash(ix, iz, 4), gap]);
-					if (++clear >= limit) break scan;
+					found.push([x, z, ix, iz, gap]);
 				}
 			}
 		}
-		return out;
+		// Too many: keep the spots a hash of their cell puts first, which thins every polygon alike
+		// where stopping at the limit would leave the last ones bare.
+		let kept = found;
+		if (found.length > limit) {
+			const order = new Float64Array(found.length);
+			found.forEach(([, , ix, iz], i) => (order[i] = hash(ix, iz, 5)));
+			const most = order.slice().sort()[Math.max(0, limit)];
+			kept = found.filter((_, i) => order[i] < most);
+		}
+		return kept.map(([x, z, ix, iz, gap]) => [
+			x,
+			diorama.heightAt(x, z),
+			z,
+			hash(ix, iz, 3),
+			hash(ix, iz, 4),
+			gap
+		]);
 	});
 
 	$effect(() => {
