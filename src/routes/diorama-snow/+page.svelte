@@ -87,7 +87,7 @@
 	let exaggeration = $state(1);
 	let objectScale = $state(1);
 	let liftsMoving = $state(true);
-	let riders = $state(false);
+	let riders = $state(true);
 	let trees = $state<'none' | 'woods' | 'all'>('woods');
 	let showLabels = $state(true);
 	let sunAzimuth = $state(231);
