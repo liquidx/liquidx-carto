@@ -581,12 +581,17 @@ function buildFigure() {
 	const arms = [-0.4, 0.4].map((x) => {
 		const shoulder = new THREE.Group();
 		shoulder.position.set(x, 0.62, 0);
-		const arm = box(0.13, 0.5, 0.13, '#e8590c');
-		arm.position.y = -0.25;
-		shoulder.add(arm);
+		// Darker than the chest, with a glove, so the arms read against the body from the side.
+		const arm = box(0.13, 0.42, 0.13, '#b84708');
+		arm.position.y = -0.21;
+		const glove = box(0.14, 0.12, 0.14, '#16191d');
+		glove.position.y = -0.47;
+		shoulder.add(arm, glove);
 		torso.add(shoulder);
 		return shoulder;
 	});
+	/** Rotation about z that swings an arm away from the body by `angle`. */
+	const outward = (i: number, angle: number) => (i === 0 ? angle : -angle);
 
 	/** Bend the legs so the feet stay on the board: thighs forward, shins back. */
 	function pose(crouch: number) {
@@ -604,6 +609,10 @@ function buildFigure() {
 	let crouch = 0.25;
 	let fall = 0;
 	let lean = 0;
+	/** Where the arms are heading: spread from the body, and swung forward or back. */
+	let spread = 0.3;
+	let swing = 0;
+	let flail = 0;
 	const q = new THREE.Quaternion();
 	const up = new THREE.Vector3(0, 1, 0);
 	const tilt = new THREE.Quaternion();
@@ -642,9 +651,27 @@ function buildFigure() {
 			torso.rotation.x = lean * 0.55 + (input.tuck ? 0.35 : 0.12);
 			torso.rotation.y = -lean * 0.4;
 			torso.rotation.z = 0;
-			arms[0].rotation.z = 0.25 + Math.abs(lean) * 0.5;
-			arms[1].rotation.z = -0.25 - Math.abs(lean) * 0.5;
-			arms[0].rotation.x = arms[1].rotation.x = -lean * 0.4;
+
+			// Arms: out for balance in a carve and swung against the lean, thrown up in the air,
+			// tucked in at speed, and waving about in a wipeout.
+			const air = rider.mode === 'air';
+			const wantSpread = air
+				? 1.9
+				: rider.mode === 'crash'
+					? 1.2
+					: input.tuck
+						? 0.1
+						: 0.35 + Math.abs(lean) * 1.1;
+			const wantSwing = air ? -0.4 : input.tuck ? 0.5 : -lean * 1.1;
+			spread += (wantSpread - spread) * ease(dt, air ? 10 : 6);
+			swing += (wantSwing - swing) * ease(dt, 6);
+			flail = rider.mode === 'crash' ? flail + dt * 14 : 0;
+			arms.forEach((arm, i) => {
+				const wave = flail ? Math.sin(flail + i * 2) * 0.6 : 0;
+				arm.rotation.z = outward(i, spread + wave);
+				// The leading arm reaches further round the turn than the trailing one.
+				arm.rotation.x = swing * (i === 0 ? 1.2 : 0.8) + wave * 0.5;
+			});
 
 			// A crash: topple over onto the snow, lie there, then get back up.
 			const wantFall =
