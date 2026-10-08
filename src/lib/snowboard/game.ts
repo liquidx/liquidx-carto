@@ -1,6 +1,7 @@
 /**
  * The snowboard game: builds the scene for a resort, runs the loop, and reports to the HUD.
  */
+import type { FeatureCollection } from 'geojson';
 import * as THREE from 'three';
 import { findProvider } from '$lib/contour/terrain-api';
 import { xToLon, yToLat } from '$lib/contour/mercator';
@@ -27,6 +28,8 @@ export interface GameOptions {
 	treeSpacing?: number;
 	/** An element over the canvas for the lift names floating over their stations. */
 	labels?: HTMLElement;
+	/** Wood and forest polygons; trees only stand inside them where the data covers. */
+	woods?: FeatureCollection | null;
 }
 
 export interface LoadProgress {
@@ -89,7 +92,7 @@ export async function createGame(
 
 	onProgress({ stage: 'painting the snow' });
 	await tick();
-	const ground = paintGround(frame, resort);
+	const ground = paintGround(frame, resort, options.woods);
 
 	const terrain = new Terrain(frame, provider, ground.texture);
 	onProgress({ stage: `fetching ${terrain.cellCount} terrain tiles`, fraction: 0 });

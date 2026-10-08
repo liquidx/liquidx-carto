@@ -3,6 +3,7 @@
  * mask the physics and tree scatter read, so "on a groomed run" and "keep trees off" come from
  * the same strokes the player sees.
  */
+import type { FeatureCollection, Position } from 'geojson';
 import * as THREE from 'three';
 import type { LocalFrame } from './frame';
 import { DIFFICULTY_COLOR, type Resort } from './resort';
@@ -24,7 +25,17 @@ export interface Ground {
 	dispose(): void;
 }
 
-export function paintGround(frame: LocalFrame, resort: Resort, metresPerPixel = 2): Ground {
+/**
+ * Paint the ground. With `woods` (wood and forest polygons, as `pnpm diorama-woods` writes
+ * them) trees only stand inside those polygons; beyond the area the woods file covers, and
+ * without one, they stand everywhere the runs and lifts leave free.
+ */
+export function paintGround(
+	frame: LocalFrame,
+	resort: Resort,
+	woods?: FeatureCollection | null,
+	metresPerPixel = 2
+): Ground {
 	const w = Math.ceil(frame.width / metresPerPixel);
 	const h = Math.ceil(frame.height / metresPerPixel);
 	const sx = w / frame.width;
@@ -86,6 +97,37 @@ export function paintGround(frame: LocalFrame, resort: Resort, metresPerPixel = 
 	// Yellow keeps the red: the groomed corridor is still no place for a tree.
 	m.strokeStyle = '#ff0';
 	for (const run of resort.runs) stroke(m, run.path, RUN_WIDTH);
+	// Blue where there is woodland, within the box the woods file covers.
+	let woodBox: [number, number, number, number] | null = null;
+	if (woods?.features.length) {
+		woodBox = [Infinity, Infinity, -Infinity, -Infinity];
+		m.fillStyle = '#00f';
+		m.globalCompositeOperation = 'lighter';
+		for (const f of woods.features) {
+			const g = f.geometry;
+			const polygons =
+				g.type === 'Polygon' ? [g.coordinates] : g.type === 'MultiPolygon' ? g.coordinates : [];
+			for (const rings of polygons) {
+				m.beginPath();
+				for (const ring of rings) {
+					ring.forEach((p: Position, i) => {
+						const [x, z] = frame.toWorld(p);
+						const b = woodBox!;
+						b[0] = Math.min(b[0], x);
+						b[1] = Math.min(b[1], z);
+						b[2] = Math.max(b[2], x);
+						b[3] = Math.max(b[3], z);
+						const [px, py] = toPx([x, z]);
+						if (i) m.lineTo(px, py);
+						else m.moveTo(px, py);
+					});
+					m.closePath();
+				}
+				m.fill('evenodd');
+			}
+		}
+		m.globalCompositeOperation = 'source-over';
+	}
 	const mask = m.getImageData(0, 0, w, h).data;
 	const index = (x: number, z: number) => {
 		const [px, py] = toPx([x, z]);
@@ -110,7 +152,10 @@ export function paintGround(frame: LocalFrame, resort: Resort, metresPerPixel = 
 		},
 		treeAllowed(x, z) {
 			const i = index(x, z);
-			return i >= 0 && mask[i] < 128;
+			if (i < 0 || mask[i] >= 128) return false;
+			if (!woodBox) return true;
+			const inBox = x >= woodBox[0] && x <= woodBox[2] && z >= woodBox[1] && z <= woodBox[3];
+			return !inBox || mask[i + 2] >= 128;
 		},
 		dispose: () => texture.dispose()
 	};

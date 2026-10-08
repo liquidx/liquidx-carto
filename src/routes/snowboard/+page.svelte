@@ -37,7 +37,7 @@
 		createGame(
 			canvas,
 			data.features,
-			{ provider: provider.id, shadows, labels: labelHost },
+			{ provider: provider.id, shadows, labels: labelHost, woods: data.woods },
 			(p) => (progress = p),
 			(h) => (hud = h)
 		)
