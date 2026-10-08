@@ -5,6 +5,7 @@ export { default as Label } from './Label.svelte';
 export { default as Model } from './objects/Model.svelte';
 export { default as Trees } from './objects/Trees.svelte';
 export { default as Lift } from './objects/Lift.svelte';
+export { default as Riders } from './objects/Riders.svelte';
 export { default as Marker } from './objects/Marker.svelte';
 export { default as Building } from './objects/Building.svelte';
 export { getDiorama, type DioramaContext } from './context.js';

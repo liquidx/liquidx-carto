@@ -14,6 +14,7 @@
 		Lift,
 		Marker,
 		Model,
+		Riders,
 		Trees,
 		buildDiorama,
 		shapesOf,
@@ -50,6 +51,9 @@
 		intermediate: '#d6336c',
 		advanced: '#212529'
 	};
+	/** Average snowboarding speed by run, in metres a second: a cruise on the greens, faster on the blacks. */
+	const RIDING_SPEED: Record<string, number> = { easy: 8, intermediate: 11, advanced: 14 };
+	const ridingSpeed = (f: Feature) => RIDING_SPEED[f.properties?.difficulty] ?? 10;
 
 	/**
 	 * Stand-in hotel footprints beside the base, as the features have no buildings: rectangles
@@ -84,6 +88,7 @@
 	let exaggeration = $state(1);
 	let objectScale = $state(1);
 	let liftsMoving = $state(true);
+	let riders = $state(false);
 	let trees = $state<'none' | 'woods' | 'all'>('woods');
 	let showLabels = $state(true);
 	let sunAzimuth = $state(231);
@@ -152,8 +157,8 @@
 	<p>
 		{data.features.metadata?.name ?? 'A ski resort'} on a
 		<a href={resolve('/diorama')}>Mountain Diorama</a>: runs drawn on the terrain by difficulty,
-		with placeholder lifts, trees and buildings from <code>@liquidx/diorama</code> at their true size.
-		Zoom in to find them.
+		with placeholder lifts, trees and buildings from <code>@liquidx/diorama</code> at their true size,
+		and snowboarders riding the runs at a real-world pace. Zoom in to find them.
 	</p>
 </section>
 
@@ -178,6 +183,9 @@
 				filter={isRun}
 				paint={(f) => ({ stroke: DIFFICULTY[f.properties?.difficulty] ?? '#868e96', width: 3 })}
 			/>
+			{#if riders}
+				<Riders data={data.features} filter={isRun} every={90} speed={ridingSpeed} />
+			{/if}
 			{#if trees !== 'none'}
 				<Trees
 					data={trees === 'all' ? everywhere : data.woods}
@@ -285,6 +293,7 @@
 			format={(v) => v.toFixed(2)}
 		/>
 		<Toggle label="moving lifts" bind:checked={liftsMoving} />
+		<Toggle label="snowboarders" bind:checked={riders} />
 		<Toggle label="labels" bind:checked={showLabels} />
 		<Toggle label="auto-rotate" bind:checked={autoRotate} />
 	</div>

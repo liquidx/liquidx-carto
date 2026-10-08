@@ -184,6 +184,7 @@ own.
 		carrier={(f) => (f.properties?.liftType === 'gondola' ? 'cabin' : 'chair')}
 		speed={4}
 	/>
+	<Riders data={runs} every={90} speed={(f) => (f.properties?.difficulty === 'easy' ? 8 : 12)} />
 	<Building data={footprints} height={(f) => f.properties?.height ?? 9} />
 	<Building at={[140.9715, 40.0017]} footprint={[60, 24]} height={14} />
 	<Model src="/models/hut.glb" data={peaks} size={40} heading={200} />
@@ -195,6 +196,7 @@ own.
 | ---------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `avoid`, `clearance` |
 | `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`       |
+| `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                             |
 | `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor` |
 | `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                       |
 | `Marker`   | points              | a pin                                                  | `height`, `color`                                                         |
@@ -207,6 +209,12 @@ function of the feature.
 `Lift` hangs a `carrier` (`'chair'` or `'cabin'`, `carrierSize` metres wide) every
 `carrierEvery` metres round the loop, up the right of the line and back down the left. Give it
 a `speed` in metres a second and they travel; at 0, the default, they stand still.
+
+`Riders` sends a snowboarder down each line every `every` metres, from its high end to its
+low end whichever way the line is drawn, at `speed` metres a second on average (10 by
+default, about 36 km/h; each rider is a little faster or slower). They carve `carve` metres
+either side of the line, lean into their turns and start again at the top when they reach the
+bottom.
 
 The defaults are true to life: a 14 m tree, a 10 m lift tower, a chair 2.2 m wide. On a model
 several kilometres across that makes each one a speck, which shows how big the mountain is;
