@@ -4,15 +4,21 @@ Command-line tools that fetch, build and explore the data behind the prototypes.
 TypeScript run directly by Node's type stripping, so shared code in `src/lib` uses relative
 imports with `.ts` extensions. They're type-checked with the app by `pnpm check`.
 
-| Command                  | Prototype         | What it does                                                  |
-| ------------------------ | ----------------- | ------------------------------------------------------------- |
-| `pnpm ev-jp`             | EV Charging Japan | builds charger, distance-grid and route data from the source  |
-| `pnpm japan-train-lines` | Japan Train Lines | downloads railway data, builds region polygons and line index |
-| `pnpm diorama-woods`     | Snow Diorama      | fetches wooded areas from OpenStreetMap for a ski resort      |
-| `pnpm odpt`              | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)               |
-| `pnpm ekispert`          | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                        |
+| Command                  | Prototype         | What it does                                                   |
+| ------------------------ | ----------------- | -------------------------------------------------------------- |
+| `pnpm ev-jp`             | EV Charging Japan | builds charger, distance-grid and route data from the source   |
+| `pnpm japan-train-lines` | Japan Train Lines | downloads railway data, builds region polygons and line index  |
+| `pnpm diorama-woods`     | Snow Diorama      | fetches wooded areas from OpenStreetMap for a ski resort       |
+| `pnpm diorama-glb`       | Mountain Diorama  | exports the diorama GLB for a features file, without a browser |
+| `pnpm odpt`              | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                |
+| `pnpm ekispert`          | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                         |
 
 Run any of them with `help` for their subcommands.
+
+`diorama-glb` runs code written for the browser (`packages/diorama`, the terrain tile client),
+so it starts Node with `--import ./tools/node-env.ts`, which resolves `$lib/` and the package's
+`.js` imports to the sources and fills in the few browser globals three.js needs. Any new tool
+that reaches into that code should do the same.
 
 ## ev-jp
 
@@ -54,6 +60,23 @@ The areas are clipped to the circle's square, simplified to 2 m and written besi
 file. Rerun after changing the runs or lifts; bump `OVERTURE_RELEASE` in the tool for newer mapping.
 
 Source: © OpenStreetMap contributors, ODbL, via Overture Maps.
+
+## diorama-glb
+
+```sh
+pnpm diorama-glb build static/diorama/appi-kogen-ski-features.geojson
+pnpm diorama-glb build x.geojson --provider=gsi --rings=320 --exaggeration=1.5 --contours=20
+pnpm diorama-glb build x.geojson --out=path/to/model.glb
+```
+
+The GLB the Mountain Diorama page would export for the features in a GeoJSON file, built by
+the same code without a browser: the circle is fitted around the runs and lifts (every feature
+when the file has neither), terrain tiles are fetched from the chosen provider and the model
+goes to `data/diorama/diorama_<lat>_<lon>_<radius>m.glb` (gitignored). The options and their
+defaults are the page's; `help` lists them. Only providers that serve PNG tiles work here, as
+Node has no WebP decoder.
+
+Source: the terrain provider's, printed with the result.
 
 ## japan-train-lines
 
