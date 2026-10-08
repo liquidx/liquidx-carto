@@ -30,10 +30,8 @@ export interface LocationData {
 	features: LocationFeatures;
 	/** Empty when the location has no woods file. */
 	woods: FeatureCollection;
-	/** The terrain GLB, or null when the location has none and the terrain has to be built. */
-	glb: ArrayBuffer | null;
 	/** Files that were not there, by name, so the page can say so. */
-	missing: ('woods' | 'glb')[];
+	missing: 'woods'[];
 }
 
 const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
@@ -52,8 +50,9 @@ async function optional<T>(
 }
 
 /**
- * Fetch everything for a location. The features are required; the woods and the GLB are
- * optional, so a location can be shown before all of its files are uploaded.
+ * Fetch the GeoJSON for a location. The features are required; the woods are optional, so a
+ * location can be shown before all of its files are uploaded. The terrain GLB is fetched
+ * separately by `fetchLocationGlb`, as it is large and the terrain is usually generated instead.
  */
 export async function fetchLocation(
 	locationId: string,
@@ -65,10 +64,9 @@ export async function fetchLocation(
 	if (!isLocationId(locationId))
 		throw new Error(`Not a location id: ${JSON.stringify(locationId)}`);
 	const urls = locationUrls(locationId);
-	const [features, woods, glb] = await Promise.all([
+	const [features, woods] = await Promise.all([
 		optional(fetch, urls.features, (r) => r.json() as Promise<LocationFeatures>, signal),
-		optional(fetch, urls.woods, (r) => r.json() as Promise<FeatureCollection>, signal),
-		optional(fetch, urls.glb, (r) => r.arrayBuffer(), signal)
+		optional(fetch, urls.woods, (r) => r.json() as Promise<FeatureCollection>, signal)
 	]);
 	if (!features) throw new Error(`No data for location "${locationId}"`);
 	if (features.type !== 'FeatureCollection' || !Array.isArray(features.features)) {
@@ -76,6 +74,18 @@ export async function fetchLocation(
 	}
 	const missing: LocationData['missing'] = [];
 	if (!woods) missing.push('woods');
-	if (!glb) missing.push('glb');
-	return { locationId, features, woods: woods ?? EMPTY, glb, missing };
+	return { locationId, features, woods: woods ?? EMPTY, missing };
+}
+
+/** The location's terrain GLB, or null when it has none. */
+export async function fetchLocationGlb(
+	locationId: string,
+	{
+		fetch = globalThis.fetch,
+		signal
+	}: { fetch?: typeof globalThis.fetch; signal?: AbortSignal } = {}
+): Promise<ArrayBuffer | null> {
+	if (!isLocationId(locationId))
+		throw new Error(`Not a location id: ${JSON.stringify(locationId)}`);
+	return optional(fetch, locationUrls(locationId).glb, (r) => r.arrayBuffer(), signal);
 }
