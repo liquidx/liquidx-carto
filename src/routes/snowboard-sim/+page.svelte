@@ -126,30 +126,70 @@
 		apply();
 	}
 
-	// On-screen controls: each button holds an input while a finger is on it, and several can
-	// be held at once since every pointer is captured by its own button.
-	type Control = 'left' | 'right' | 'tuck' | 'brake' | 'jump';
-	function hold(control: Control, on: boolean) {
+	// Touch: gestures on the view instead of on-screen buttons. The first finger steers by how
+	// far it has dragged sideways from where it landed, tucks while it is held dragged down, and
+	// jumps on a quick flick up. A second finger on the screen brakes.
+	/** Sideways drag for a full carve, and the drag down that tucks, in pixels. */
+	const CARVE_PX = 60;
+	const TUCK_PX = 45;
+	/** A flick: moving up faster than this, in pixels a millisecond, over at least `FLICK_PX`. */
+	const FLICK_SPEED = 0.9;
+	const FLICK_PX = 30;
+	type Touch = { id: number; x0: number; y0: number; y: number; t: number; low: number };
+	let primary: Touch | null = null;
+	let fingers = 0;
+	let jumpTimer: ReturnType<typeof setTimeout> | undefined;
+	function pulseJump() {
 		if (!game) return;
-		const i = game.input;
-		if (control === 'left') i.steer = on ? -1 : i.steer < 0 ? 0 : i.steer;
-		else if (control === 'right') i.steer = on ? 1 : i.steer > 0 ? 0 : i.steer;
-		else i[control] = on;
+		game.input.jump = true;
+		clearTimeout(jumpTimer);
+		jumpTimer = setTimeout(() => game && (game.input.jump = false), 150);
 	}
-	function press(control: Control) {
-		return {
-			onpointerdown: (e: PointerEvent) => {
-				// Keep the pointer on the button even when the finger slides off it.
-				try {
-					(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-				} catch {
-					// Not an active pointer (synthetic events): the button still works.
-				}
-				hold(control, true);
-			},
-			onpointerup: () => hold(control, false),
-			onpointercancel: () => hold(control, false)
+	function onTouchDown(e: PointerEvent) {
+		if (e.pointerType === 'mouse' || !game) return;
+		fingers++;
+		if (fingers > 1) {
+			game.input.brake = true;
+			return;
+		}
+		primary = {
+			id: e.pointerId,
+			x0: e.clientX,
+			y0: e.clientY,
+			y: e.clientY,
+			t: e.timeStamp,
+			low: e.clientY
 		};
+	}
+	function onTouchMove(e: PointerEvent) {
+		if (!primary || e.pointerId !== primary.id || !game) return;
+		const dx = e.clientX - primary.x0;
+		const dy = e.clientY - primary.y0;
+		game.input.steer = Math.max(-1, Math.min(1, dx / CARVE_PX));
+		game.input.tuck = dy > TUCK_PX;
+		// A flick up: fast, and risen enough from the lowest point the finger reached.
+		const dt = e.timeStamp - primary.t;
+		const rise = primary.low - e.clientY;
+		if (dt > 0 && (primary.y - e.clientY) / dt > FLICK_SPEED && rise > FLICK_PX) {
+			pulseJump();
+			primary.low = e.clientY;
+		}
+		primary.low = Math.max(primary.low, e.clientY);
+		primary.y = e.clientY;
+		primary.t = e.timeStamp;
+	}
+	function onTouchUp(e: PointerEvent) {
+		if (e.pointerType === 'mouse' || !game) return;
+		fingers = Math.max(0, fingers - 1);
+		if (fingers < 2) game.input.brake = false;
+		if (primary && e.pointerId === primary.id) {
+			// The steering finger is up: let go of everything, whatever else is still down.
+			primary = null;
+			fingers = 0;
+			game.input.steer = 0;
+			game.input.tuck = false;
+			game.input.brake = false;
+		}
 	}
 
 	const credits: Credit[] = [
@@ -168,7 +208,15 @@
 <svelte:window onkeydown={onKeyDown} onkeyup={onKeyUp} onblur={onBlur} />
 
 <div class="game" class:menu class:coarse>
-	<canvas class="view" bind:this={canvas} tabindex="-1"></canvas>
+	<canvas
+		class="view"
+		bind:this={canvas}
+		tabindex="-1"
+		onpointerdown={onTouchDown}
+		onpointermove={onTouchMove}
+		onpointerup={onTouchUp}
+		onpointercancel={onTouchUp}
+	></canvas>
 
 	{#if hud && !menu}
 		<div class="hud">
@@ -206,17 +254,6 @@
 			<span class="fps">{hud.fps} fps</span>
 		</div>
 		{#if coarse}
-			<div class="touch">
-				<div class="pad">
-					<button class="key" aria-label="carve left" {...press('left')}>◀</button>
-					<button class="key" aria-label="carve right" {...press('right')}>▶</button>
-				</div>
-				<div class="pad">
-					<button class="key" aria-label="tuck" {...press('tuck')}>tuck</button>
-					<button class="key" aria-label="brake" {...press('brake')}>brake</button>
-					<button class="key" aria-label="jump" {...press('jump')}>jump</button>
-				</div>
-			</div>
 			<button class="menu-button" aria-label="menu" onclick={pause}>≡</button>
 		{/if}
 	{/if}
@@ -286,8 +323,8 @@
 					</ul>
 					<p class="keys">
 						{#if coarse}
-							on-screen buttons to carve, tuck, brake and jump · tap the lift prompt to ride it ·
-							tap the map to teleport
+							drag left or right to carve · drag down and hold to tuck · flick up to jump · a second
+							finger to brake · tap the lift prompt to ride it · tap the map to teleport
 						{:else}
 							<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake ·
 							<kbd>space</kbd> jump · <kbd>E</kbd> ride a lift · <kbd>R</kbd> back to the top
@@ -556,39 +593,6 @@
 		color: var(--color-danger);
 	}
 	/* Touch controls */
-	.touch {
-		position: absolute;
-		left: var(--spacing-gutter-mobile);
-		right: var(--spacing-gutter-mobile);
-		bottom: calc(16px + env(safe-area-inset-bottom));
-		display: flex;
-		justify-content: space-between;
-		align-items: flex-end;
-		pointer-events: none;
-	}
-	.pad {
-		display: flex;
-		gap: 10px;
-		pointer-events: auto;
-	}
-	.key {
-		min-width: 64px;
-		height: 64px;
-		padding: 0 14px;
-		font: inherit;
-		font-size: var(--text-small);
-		letter-spacing: var(--tracking-label);
-		text-transform: uppercase;
-		color: #fff;
-		background: rgba(8, 8, 10, 0.45);
-		border: 1px solid rgba(255, 255, 255, 0.3);
-		backdrop-filter: blur(6px);
-		touch-action: none;
-	}
-	.key:active {
-		background: var(--color-accent-tint);
-		border-color: var(--color-accent);
-	}
 	.menu-button {
 		position: absolute;
 		top: 12px;
@@ -639,11 +643,6 @@
 			right: var(--spacing-gutter-mobile);
 			width: 150px;
 			height: 120px;
-		}
-		.touch .key {
-			min-width: 54px;
-			height: 54px;
-			padding: 0 10px;
 		}
 		.overlay {
 			align-items: flex-start;
