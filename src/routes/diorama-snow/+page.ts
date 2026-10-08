@@ -1,24 +1,21 @@
 import { error } from '@sveltejs/kit';
-import type { FeatureCollection } from 'geojson';
-import { asset } from '$app/paths';
 import { findTool } from '$lib/tools';
+import { DEFAULT_LOCATION_ID, isLocationId } from '$lib/diorama/location';
 import type { PageLoad } from './$types';
 
 // three.js needs the browser.
 export const ssr = false;
 
-export const load: PageLoad = async ({ fetch }) => {
+/**
+ * The location comes from `?locationId=`; the page fetches its data itself so it can show a
+ * loading state and switch locations without a navigation.
+ */
+export const load: PageLoad = ({ url }) => {
 	const tool = findTool('diorama-snow');
 	if (!tool) error(404, 'not found');
-	const [features, woods] = await Promise.all(
-		['appi-kogen-ski-features', 'appi-kogen-woods'].map((name) =>
-			fetch(asset(`/diorama/${name}.geojson`)).then((response) => response.json())
-		)
-	);
+	const requested = url.searchParams.get('locationId')?.trim();
 	return {
 		tool,
-		features: features as FeatureCollection & { metadata?: { name?: string } },
-		/** Wooded areas from OpenStreetMap, written by `pnpm diorama-woods build`. */
-		woods: woods as FeatureCollection
+		locationId: requested && isLocationId(requested) ? requested : DEFAULT_LOCATION_ID
 	};
 };
