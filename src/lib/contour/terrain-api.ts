@@ -127,6 +127,36 @@ export interface Tile {
 	data: Float32Array;
 }
 
+/** The pixels of a tile image, 8-bit RGBA row-major from the top left. */
+export interface RgbaImage {
+	width: number;
+	height: number;
+	data: Uint8ClampedArray;
+}
+
+export type ImageDecoder = (image: Blob) => Promise<RgbaImage>;
+
+/** Decode with the browser's own codecs, untouched: no premultiplied alpha or colour management. */
+const decodeInBrowser: ImageDecoder = async (image) => {
+	const bmp = await createImageBitmap(image, {
+		premultiplyAlpha: 'none',
+		colorSpaceConversion: 'none'
+	});
+	const canvas = new OffscreenCanvas(bmp.width, bmp.height);
+	const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
+	ctx.drawImage(bmp, 0, 0);
+	const { data } = ctx.getImageData(0, 0, bmp.width, bmp.height, { colorSpace: 'srgb' });
+	bmp.close();
+	return { width: bmp.width, height: bmp.height, data };
+};
+
+let decodeImage = decodeInBrowser;
+
+/** Decode tile images another way, for runtimes without a canvas such as Node. */
+export function setImageDecoder(decoder: ImageDecoder) {
+	decodeImage = decoder;
+}
+
 const cache = new Map<string, Promise<Tile | null>>();
 const CACHE_LIMIT = 400;
 /** And by size: decoded tiles are 256 KB to 1 MB each, so a count alone is a poor limit. */
@@ -149,16 +179,8 @@ async function fetchTile(
 	const res = await fetch(p.url(z, x, y));
 	if (res.status === 404 || res.status === 204) return null;
 	if (!res.ok) throw new Error(`${p.label} ${z}/${x}/${y}: http ${res.status}`);
-	const bmp = await createImageBitmap(await res.blob(), {
-		premultiplyAlpha: 'none',
-		colorSpaceConversion: 'none'
-	});
-	const canvas = new OffscreenCanvas(bmp.width, bmp.height);
-	const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
-	ctx.drawImage(bmp, 0, 0);
-	const { data } = ctx.getImageData(0, 0, bmp.width, bmp.height, { colorSpace: 'srgb' });
-	bmp.close();
-	return { size: canvas.width, data: decodePixels(data, p.encoding) };
+	const { width, data } = await decodeImage(await res.blob());
+	return { size: width, data: decodePixels(data, p.encoding) };
 }
 
 /** How many zoom levels to climb looking for an ancestor when a tile is missing. */

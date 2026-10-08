@@ -25,11 +25,10 @@
 	import Segmented from '$lib/components/Segmented.svelte';
 	import Slider from '$lib/components/Slider.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
-	import { frameAt, frameBox } from '$lib/contour/mercator';
-	import { PROVIDERS, sampleApiGrid } from '$lib/contour/terrain-api';
+	import { PROVIDERS } from '$lib/contour/terrain-api';
 	import { CREDITS, type Credit } from '$lib/credits';
 	import { circleBounds, fitCircle } from '$lib/diorama/fit';
-	import { gridSampler } from '$lib/diorama/sampler';
+	import { circleSampler } from '$lib/diorama/sampler';
 
 	let { data } = $props();
 
@@ -128,11 +127,9 @@
 
 	// Fetch elevation for the circle and build the mesh from it.
 	async function build() {
-		const frame = frameAt(circle.lon, circle.lat, circle.radius * 2);
-		const box = frameBox({ ...frame, w: frame.w * 1.04 }, 1);
 		const rings = 220;
-		const { grid } = await sampleApiGrid(PROVIDERS[0], box, rings * 2 + 1, rings * 2 + 1);
-		model = buildDiorama(gridSampler(grid, box), circle, { rings });
+		const { sample } = await circleSampler(PROVIDERS[0], circle, rings);
+		model = buildDiorama(sample, circle, { rings });
 	}
 	build().catch((e) => (message = e instanceof Error ? e.message : String(e)));
 
