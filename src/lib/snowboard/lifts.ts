@@ -13,8 +13,12 @@ const GAUGE = 5;
 /** Carrier spacing and speed, metres and metres a second. */
 const CARRIER_EVERY = { gondola: 70, chair: 26 };
 export const LIFT_SPEED = { gondola: 6, chair: 3.2 };
-/** How far below the cable a rider sits. */
-export const SEAT_DROP = 2.4;
+/**
+ * Where a rider's feet go on each carrier, below the cable and ahead of its hanger: on a chair
+ * the seat top is 2.5 m down and the seated figure's feet hang 0.6 m below its hips and a
+ * little in front; in a cabin they stand on the floor.
+ */
+const SEAT = { chair: { drop: 3.09, forward: 0.34 }, gondola: { drop: 3.3, forward: 0 } };
 
 export interface LiftLine {
 	lift: Lift;
@@ -28,6 +32,10 @@ export interface LiftLine {
 	top: THREE.Vector3;
 	/** Unit direction of travel on the map at the top, for dropping riders off. */
 	heading: number;
+	/** Where a rider's feet are, riding the carrier that is `d` metres up the line, into `target`. */
+	seat(d: number, target: THREE.Vector3): THREE.Vector3;
+	/** Distance up the line of the carrier nearest the bottom station and heading up. */
+	nextCarrier(): number;
 	/** Position on the cable `d` metres from the bottom, `drop` metres below it. */
 	at(d: number, drop: number, target: THREE.Vector3): THREE.Vector3;
 }
@@ -163,6 +171,10 @@ export function buildLifts(lifts: Lift[], terrain: Terrain): Lifts {
 		for (let i = 1; i < tops.length; i++)
 			lengths.push(lengths[i - 1] + tops[i].distanceTo(tops[i - 1]));
 		const total = lengths[lengths.length - 1];
+		// Assigned below; the line's methods only run once it exists.
+		let fleet!: Fleet;
+		const seat = SEAT[lift.kind];
+		const forward = new THREE.Vector3(Math.sin(bearing), 0, Math.cos(bearing));
 		const line: LiftLine = {
 			lift,
 			path: tops,
@@ -175,6 +187,19 @@ export function buildLifts(lifts: Lift[], terrain: Terrain): Lifts {
 				alongPath(tops, lengths, d, target);
 				target.y -= drop;
 				return target;
+			},
+			seat: (d, target) =>
+				line
+					.at(d, seat.drop, target)
+					.addScaledVector(side, GAUGE / 2)
+					.addScaledVector(forward, seat.forward),
+			nextCarrier: () => {
+				let best = Infinity;
+				for (let i = 0; i < fleet.mesh.count; i++) {
+					const d = (fleet.travelled + i * fleet.gap) % (total * 2);
+					if (d < total && d < best) best = d;
+				}
+				return best === Infinity ? 0 : best;
 			}
 		};
 		lines.push(line);
@@ -190,7 +215,7 @@ export function buildLifts(lifts: Lift[], terrain: Terrain): Lifts {
 		for (let i = 0; i < count; i++) mesh.setColorAt(i, colour);
 		mesh.frustumCulled = false;
 		group.add(mesh);
-		fleets.push({
+		fleet = {
 			mesh,
 			line,
 			gap: (total * 2) / count,
@@ -201,7 +226,8 @@ export function buildLifts(lifts: Lift[], terrain: Terrain): Lifts {
 				heading,
 				heading.clone().multiply(new THREE.Quaternion().setFromAxisAngle(up, Math.PI))
 			]
-		});
+		};
+		fleets.push(fleet);
 	}
 
 	const postMesh = new THREE.InstancedMesh(post, structure, posts.length);

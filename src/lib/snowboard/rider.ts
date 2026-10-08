@@ -7,7 +7,7 @@ import * as THREE from 'three';
 import type { Forest } from './trees';
 import type { Ground } from './ground';
 import type { LiftLine } from './lifts';
-import { SEAT_DROP, LIFT_SPEED } from './lifts';
+import { LIFT_SPEED } from './lifts';
 import type { Terrain } from './terrain';
 
 export interface Input {
@@ -63,7 +63,8 @@ export class Rider {
 
 	board(line: LiftLine) {
 		this.lift = line;
-		this.liftDistance = 0;
+		// Onto the carrier just leaving the bottom station.
+		this.liftDistance = line.nextCarrier();
 		this.mode = 'lift';
 		this.velocity.set(0, 0, 0);
 	}
@@ -99,7 +100,7 @@ export class Rider {
 		const line = this.lift!;
 		const pace = LIFT_SPEED[line.lift.kind];
 		this.liftDistance += pace * dt;
-		line.at(this.liftDistance, SEAT_DROP, this.position);
+		line.seat(this.liftDistance, this.position);
 		this.heading = Math.atan2(line.top.z - line.bottom.z, line.top.x - line.bottom.x);
 		this.lean = 0;
 		if (this.liftDistance >= line.total) {

@@ -596,10 +596,14 @@ function buildFigure() {
 	 */
 	const outward = (i: number, angle: number) => (i === 0 ? -angle : angle);
 
-	/** Bend the legs so the feet stay on the board: thighs forward, shins back. */
-	function pose(crouch: number) {
-		const a = 0.3 + crouch * 0.85; // thigh from vertical, knees towards +z
-		const b = -a * 0.95; // shin leans back
+	/**
+	 * Bend the legs so the feet stay on the board: thighs forward, shins back. With `sit` the
+	 * legs go to a chairlift seat instead: thighs out level, shins hanging.
+	 */
+	function pose(crouch: number, sit: number) {
+		const stand = 0.3 + crouch * 0.85; // thigh from vertical, knees towards +z
+		const a = stand * (1 - sit) + 1.45 * sit;
+		const b = -stand * 0.95 * (1 - sit) - 0.1 * sit; // shin leans back, or hangs
 		// A limb of length L at angle t hangs to (0, -L cos t, L sin t).
 		hips.position.y = LEG * (Math.cos(a) + Math.cos(b)) + 0.1;
 		hips.position.z = -LEG * (Math.sin(a) + Math.sin(b));
@@ -610,6 +614,7 @@ function buildFigure() {
 	}
 
 	let crouch = 0.25;
+	let sit = 0;
 	let fall = 0;
 	let lean = 0;
 	/** Where the arms are heading: spread from the body, and swung forward or back. */
@@ -625,7 +630,9 @@ function buildFigure() {
 		update(rider: Rider, dt: number, input: Input) {
 			group.position.copy(rider.position);
 			// Yaw to the heading: the board's long axis is x, the heading is a bearing in x–z.
-			q.setFromAxisAngle(up, -rider.heading);
+			// On a lift the rider faces the way the carrier is going, board hanging across it.
+			const onLift = rider.mode === 'lift';
+			q.setFromAxisAngle(up, onLift ? Math.PI / 2 - rider.heading : -rider.heading);
 			// Then settle onto the slope.
 			if (rider.mode === 'ride' || rider.mode === 'crash') {
 				tilt.setFromUnitVectors(up, rider.normal);
@@ -647,11 +654,13 @@ function buildFigure() {
 									? 0.6
 									: 0.3 + Math.min(0.25, rider.speed / 80);
 			crouch += (wantCrouch - crouch) * ease(dt, 6);
-			pose(crouch);
+			const seated = onLift && rider.lift?.lift.kind === 'chair';
+			sit += ((seated ? 1 : 0) - sit) * ease(dt, 6);
+			pose(crouch, sit);
 
 			// Lean into the turn centre, which is across the board, and turn the shoulders with it.
 			lean += (rider.lean - lean) * ease(dt, 7);
-			torso.rotation.x = lean * 0.55 + (input.tuck ? 0.35 : 0.12);
+			torso.rotation.x = lean * 0.55 + (input.tuck ? 0.35 : 0.12) * (1 - sit);
 			torso.rotation.y = -lean * 0.4;
 			torso.rotation.z = 0;
 
@@ -662,10 +671,13 @@ function buildFigure() {
 				? 1.9
 				: rider.mode === 'crash'
 					? 1.2
-					: input.tuck
-						? 0.1
-						: 0.35 + Math.abs(lean) * 1.1;
-			const wantSwing = air ? -0.4 : input.tuck ? 0.5 : -lean * 1.1;
+					: seated
+						? 0.2
+						: input.tuck
+							? 0.1
+							: 0.35 + Math.abs(lean) * 1.1;
+			// Seated, the hands rest forward on the lap.
+			const wantSwing = air ? -0.4 : seated ? 0.5 : input.tuck ? 0.5 : -lean * 1.1;
 			spread += (wantSpread - spread) * ease(dt, air ? 10 : 6);
 			swing += (wantSwing - swing) * ease(dt, 6);
 			flail = rider.mode === 'crash' ? flail + dt * 14 : 0;
