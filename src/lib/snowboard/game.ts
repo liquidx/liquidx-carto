@@ -355,7 +355,7 @@ export async function createGame(
 			}
 			placeCamera(dt);
 		}
-		figure.update(rider, dt);
+		figure.update(rider, dt, input);
 		// The dome rides with the camera so it is never clipped.
 		sky.position.copy(camera.position);
 		sun.position.copy(rider.position).addScaledVector(SUN, 400);
@@ -509,40 +509,92 @@ function buildPoles(resort: Resort, terrain: Terrain) {
 	return group;
 }
 
-/** A blocky snowboarder standing sideways on the board. */
+/**
+ * A blocky snowboarder standing sideways on the board: hips over the board, knees that bend,
+ * a torso that leans into turns, and a tumble when things go wrong. The board's long axis is
+ * x; the rider faces +z, so knees bend towards +z and turns lean about the x axis.
+ */
 function buildFigure() {
 	const group = new THREE.Group();
-	const body = new THREE.Group();
-	group.add(body);
 	const mat = (color: string) => new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
-	const board = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.05, 0.28), mat('#1864ab'));
-	board.position.y = 0.04;
-	group.add(board);
-	const part = (w: number, h: number, d: number, color: string, x: number, y: number) => {
+	const box = (w: number, h: number, d: number, color: string) => {
 		const mesh = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
-		mesh.position.set(x, y, 0);
 		mesh.castShadow = true;
-		body.add(mesh);
 		return mesh;
 	};
-	part(0.2, 0.75, 0.22, '#343a40', -0.28, 0.45); // legs
-	part(0.2, 0.75, 0.22, '#343a40', 0.28, 0.45);
-	const torso = part(0.62, 0.6, 0.34, '#e8590c', 0, 1.15);
-	part(0.14, 0.5, 0.14, '#e8590c', -0.44, 1.1); // arms
-	part(0.14, 0.5, 0.14, '#e8590c', 0.44, 1.1);
-	const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), mat('#f1f3f5'));
-	head.position.set(0, 1.66, 0);
-	head.castShadow = true;
-	body.add(head);
-	board.castShadow = true;
+	const board = box(1.55, 0.05, 0.28, '#1864ab');
+	board.position.y = 0.04;
+	group.add(board);
 
+	// Everything above the board pivots at the feet, so a fall rotates the whole rider.
+	const rig = new THREE.Group();
+	group.add(rig);
+	const hips = new THREE.Group();
+	rig.add(hips);
+	const LEG = 0.44;
+	type Leg = { thigh: THREE.Group; knee: THREE.Group };
+	const legs: Leg[] = [-0.3, 0.3].map((x) => {
+		const thigh = new THREE.Group();
+		thigh.position.x = x;
+		const upper = box(0.2, LEG, 0.22, '#343a40');
+		upper.position.y = -LEG / 2;
+		thigh.add(upper);
+		const knee = new THREE.Group();
+		knee.position.y = -LEG;
+		const lower = box(0.18, LEG, 0.2, '#2b3036');
+		lower.position.y = -LEG / 2;
+		const boot = box(0.24, 0.12, 0.3, '#16191d');
+		boot.position.set(0, -LEG + 0.02, 0.02);
+		knee.add(lower, boot);
+		thigh.add(knee);
+		hips.add(thigh);
+		return { thigh, knee };
+	});
+	const pelvis = box(0.64, 0.18, 0.3, '#343a40');
+	hips.add(pelvis);
+	// The torso pivots at the hips.
+	const torso = new THREE.Group();
+	hips.add(torso);
+	const chest = box(0.6, 0.6, 0.32, '#e8590c');
+	chest.position.y = 0.38;
+	torso.add(chest);
+	const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), mat('#f1f3f5'));
+	head.position.y = 0.88;
+	head.castShadow = true;
+	torso.add(head);
+	const arms = [-0.4, 0.4].map((x) => {
+		const shoulder = new THREE.Group();
+		shoulder.position.set(x, 0.62, 0);
+		const arm = box(0.13, 0.5, 0.13, '#e8590c');
+		arm.position.y = -0.25;
+		shoulder.add(arm);
+		torso.add(shoulder);
+		return shoulder;
+	});
+
+	/** Bend the legs so the feet stay on the board: thighs forward, shins back. */
+	function pose(crouch: number) {
+		const a = 0.3 + crouch * 0.85; // thigh from vertical, knees towards +z
+		const b = -a * 0.95; // shin leans back
+		// A limb of length L at angle t hangs to (0, -L cos t, L sin t).
+		hips.position.y = LEG * (Math.cos(a) + Math.cos(b)) + 0.1;
+		hips.position.z = -LEG * (Math.sin(a) + Math.sin(b));
+		for (const { thigh, knee } of legs) {
+			thigh.rotation.x = -a;
+			knee.rotation.x = -(b - a);
+		}
+	}
+
+	let crouch = 0.25;
+	let fall = 0;
+	let lean = 0;
 	const q = new THREE.Quaternion();
 	const up = new THREE.Vector3(0, 1, 0);
 	const tilt = new THREE.Quaternion();
-	const axisZ = new THREE.Vector3(0, 0, 1);
+	const ease = (dt: number, rate: number) => 1 - Math.exp(-dt * rate);
 	return {
 		group,
-		update(rider: Rider, dt: number) {
+		update(rider: Rider, dt: number, input: Input) {
 			group.position.copy(rider.position);
 			// Yaw to the heading: the board's long axis is x, the heading is a bearing in x–z.
 			q.setFromAxisAngle(up, -rider.heading);
@@ -551,12 +603,41 @@ function buildFigure() {
 				tilt.setFromUnitVectors(up, rider.normal);
 				q.premultiply(tilt);
 			}
-			group.quaternion.slerp(q, 1 - Math.exp(-dt * 12));
-			// Lean into turns; crouch in the air and when crashed.
-			body.quaternion.setFromAxisAngle(axisZ, -rider.lean * 0.45);
-			const crouch = rider.mode === 'air' ? 0.8 : rider.mode === 'crash' ? 0.35 : 1;
-			body.scale.setScalar(1).y = crouch;
-			torso.visible = true;
+			group.quaternion.slerp(q, ease(dt, 12));
+
+			// Knees: easy bend riding, deep in a tuck or a brake, pulled up in the air.
+			const wantCrouch =
+				rider.mode === 'crash'
+					? 0.05
+					: rider.mode === 'air'
+						? 0.9
+						: rider.mode === 'lift'
+							? 0.5
+							: input.tuck
+								? 0.85
+								: input.brake
+									? 0.6
+									: 0.3 + Math.min(0.25, rider.speed / 80);
+			crouch += (wantCrouch - crouch) * ease(dt, 6);
+			pose(crouch);
+
+			// Lean into the turn centre, which is across the board, and turn the shoulders with it.
+			lean += (rider.lean - lean) * ease(dt, 7);
+			torso.rotation.x = lean * 0.55 + (input.tuck ? 0.35 : 0.12);
+			torso.rotation.y = -lean * 0.4;
+			torso.rotation.z = 0;
+			arms[0].rotation.z = 0.25 + Math.abs(lean) * 0.5;
+			arms[1].rotation.z = -0.25 - Math.abs(lean) * 0.5;
+			arms[0].rotation.x = arms[1].rotation.x = -lean * 0.4;
+
+			// A crash: topple over onto the snow, lie there, then get back up.
+			const wantFall =
+				rider.mode === 'crash' ? (rider.crashTimer > 0.6 ? 1 : rider.crashTimer / 0.6) : 0;
+			fall += (wantFall - fall) * ease(dt, wantFall > fall ? 9 : 4);
+			rig.rotation.x = fall * 1.5;
+			rig.position.z = fall * 0.25;
+			rig.position.y = -fall * 0.05;
+			torso.rotation.x += fall * 0.4;
 		}
 	};
 }
