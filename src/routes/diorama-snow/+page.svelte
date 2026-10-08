@@ -155,10 +155,12 @@
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
 	<p>
-		{data.features.metadata?.name ?? 'A ski resort'} on a
-		<a href={resolve('/diorama')}>Mountain Diorama</a>: runs drawn on the terrain by difficulty,
-		with placeholder lifts, trees and buildings from <code>@liquidx/diorama</code> at their true size,
-		and snowboarders riding the runs at a real-world pace. Zoom in to find them.
+		An exploration of drawing and animating more detailed objects on a
+		<a href={resolve('/diorama')}>Mountain Diorama</a>, here
+		{data.features.metadata?.name ?? 'a ski resort'}: runs drawn on the terrain by difficulty, lifts
+		with carriers going round, trees where the map has woodland, buildings at the base, and
+		snowboarders carving down the runs at a realistic size and speed, all from
+		<code>@liquidx/diorama</code>. Zoom in to find them.
 	</p>
 </section>
 
