@@ -9,7 +9,7 @@ import type { PageLoad } from './$types';
 export const ssr = false;
 
 export const load: PageLoad = async ({ fetch }) => {
-	const tool = findTool('snowboard');
+	const tool = findTool('snowboard-sim');
 	if (!tool) error(404, 'not found');
 	const [features, woods] = await Promise.all([
 		fetch(asset('/diorama/appi-kogen-ski-features.geojson')).then((r) => r.json()),
