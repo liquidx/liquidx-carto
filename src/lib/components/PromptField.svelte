@@ -1,7 +1,8 @@
 <!--
 	Command/search field: accent `>` prompt · input · blinking accent block caret · ⏎ hint.
 	The native caret is hidden; because the font is monospace the block caret is
-	placed at selectionStart × 1ch.
+	placed at selectionStart × 1ch. It is a form, so a phone keyboard offers a search key
+	instead of jumping to the next field, and the hint is a button that submits when tapped.
 -->
 <script lang="ts">
 	import type { HTMLInputAttributes } from 'svelte/elements';
@@ -26,13 +27,28 @@
 		scrollLeft = input.scrollLeft;
 	}
 
-	function onkeydown(e: KeyboardEvent) {
-		if (e.key === 'Enter') onsubmit?.(value);
+	function onkeydown() {
 		queueMicrotask(syncCaret);
+	}
+	function submit(e: SubmitEvent) {
+		e.preventDefault();
+		onsubmit?.(value);
 	}
 </script>
 
-<label class="field" class:focused>
+<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+<form
+	class="field"
+	class:focused
+	onsubmit={submit}
+	onpointerdown={(e) => {
+		// The whole field is a click target for the input, as a label would be.
+		if (e.target === e.currentTarget) {
+			e.preventDefault();
+			input?.focus();
+		}
+	}}
+>
 	<span class="prompt" aria-hidden="true">&gt;</span>
 	<span class="input-wrap">
 		<input
@@ -41,6 +57,7 @@
 			{placeholder}
 			spellcheck="false"
 			autocomplete="off"
+			enterkeyhint="search"
 			{onkeydown}
 			oninput={syncCaret}
 			onkeyup={syncCaret}
@@ -62,8 +79,8 @@
 			></span>
 		{/if}
 	</span>
-	{#if hint}<span class="hint">{hint}</span>{/if}
-</label>
+	{#if hint}<button type="submit" class="hint">{hint}</button>{/if}
+</form>
 
 <style>
 	.field {
@@ -116,8 +133,16 @@
 	.hint {
 		flex: none;
 		margin-left: auto;
+		padding: 0;
+		font: inherit;
 		font-size: var(--text-meta);
 		letter-spacing: var(--tracking-micro);
 		color: var(--color-text-dim);
+		background: none;
+		border: 0;
+		cursor: pointer;
+	}
+	.hint:hover {
+		color: var(--color-accent);
 	}
 </style>
