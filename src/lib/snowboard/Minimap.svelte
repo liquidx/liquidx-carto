@@ -31,7 +31,7 @@
 		/** Terrain provider id for the model; coarse tiles are fine for a map this size. */
 		provider?: string;
 		showLabels?: boolean;
-		/** A phone: a coarser model, a smaller drape and no forest, to keep memory down. */
+		/** A phone: a coarser model, a smaller drape and a thinner forest, to keep memory down. */
 		lite?: boolean;
 		onteleport: (lon: number, lat: number) => void;
 	};
@@ -106,14 +106,14 @@
 					width: 3
 				})}
 			/>
-			{#if woods && !lite}
+			{#if woods}
 				<Trees
 					data={woods}
 					avoid={inTheWay}
 					clearance={30}
-					density={2500}
+					density={lite ? 1000 : 2500}
 					height={16}
-					limit={40_000}
+					limit={lite ? 15_000 : 40_000}
 				/>
 			{/if}
 			<Lift data={features} filter={isLift} carrierEvery={0} />
