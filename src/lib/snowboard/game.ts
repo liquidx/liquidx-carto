@@ -590,8 +590,11 @@ function buildFigure() {
 		torso.add(shoulder);
 		return shoulder;
 	});
-	/** Rotation about z that swings an arm away from the body by `angle`. */
-	const outward = (i: number, angle: number) => (i === 0 ? angle : -angle);
+	/**
+	 * Rotation about z that swings an arm away from the body by `angle`: a hanging arm turned
+	 * by a positive angle about z moves its hand towards +x, so the arm on -x needs the opposite.
+	 */
+	const outward = (i: number, angle: number) => (i === 0 ? -angle : angle);
 
 	/** Bend the legs so the feet stay on the board: thighs forward, shins back. */
 	function pose(crouch: number) {
