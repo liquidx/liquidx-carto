@@ -129,6 +129,15 @@ export interface Tile {
 
 const cache = new Map<string, Promise<Tile | null>>();
 const CACHE_LIMIT = 400;
+/** And by size: decoded tiles are 256 KB to 1 MB each, so a count alone is a poor limit. */
+const CACHE_BYTES = 96 * 1024 * 1024;
+const cacheBytes = new Map<string, number>();
+let cachedBytes = 0;
+function forget(key: string) {
+	cache.delete(key);
+	cachedBytes -= cacheBytes.get(key) ?? 0;
+	cacheBytes.delete(key);
+}
 
 async function fetchTile(
 	p: TerrainProvider,
@@ -181,9 +190,20 @@ function getTile(
 			return t;
 		});
 		// Don't cache failures (network errors) so they can be retried.
-		hit.catch(() => cache.delete(key));
+		hit.catch(() => forget(key));
 		cache.set(key, hit);
-		if (cache.size > CACHE_LIMIT) cache.delete(cache.keys().next().value!);
+		hit
+			.then((t) => {
+				if (!t || !cache.has(key)) return;
+				cacheBytes.set(key, t.data.byteLength);
+				cachedBytes += t.data.byteLength;
+				// Oldest first. Tiles something still holds stay alive; this only lets go of ours.
+				for (const old of cache.keys()) {
+					if (cache.size <= CACHE_LIMIT && cachedBytes <= CACHE_BYTES) break;
+					if (old !== key) forget(old);
+				}
+			})
+			.catch(() => {});
 	}
 	return hit;
 }

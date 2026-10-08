@@ -15,6 +15,10 @@ const TREE_CLEARANCE = RUN_WIDTH / 2 + 14;
 const LIFT_CLEARANCE = 10;
 /** Ground covered by one tile of the grain texture. */
 const GRAIN_METRES = 6;
+/** The snow texture's long side is capped at this many pixels. */
+const MAX_TEXTURE_PX = 2048;
+/** The mask need only tell a run from the woods: coarser than the colour. */
+const MASK_METRES_PER_PIXEL = 4;
 
 export interface Ground {
 	texture: THREE.CanvasTexture;
@@ -44,22 +48,32 @@ export function paintGround(
 	woods?: FeatureCollection | null,
 	metresPerPixel = 2
 ): Ground {
-	const w = Math.ceil(frame.width / metresPerPixel);
-	const h = Math.ceil(frame.height / metresPerPixel);
-	const sx = w / frame.width;
-	const sy = h / frame.height;
-	const toPx = ([x, z]: [number, number]): [number, number] => [
-		(x + frame.width / 2) * sx,
-		(z + frame.height / 2) * sy
-	];
-	const stroke = (ctx: CanvasRenderingContext2D, path: [number, number][], width: number) => {
-		ctx.lineWidth = width * sx;
-		ctx.beginPath();
-		path.map(toPx).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
-		ctx.stroke();
+	// A resort several kilometres across would make a texture of tens of millions of pixels,
+	// which is what runs phones out of memory: cap the long side, and the mask (only read by
+	// the physics and the tree scatter, at a 10 m clearance) coarser still.
+	const long = Math.max(frame.width, frame.height);
+	const colourMpp = Math.max(metresPerPixel, long / MAX_TEXTURE_PX);
+	const maskMpp = Math.max(colourMpp, MASK_METRES_PER_PIXEL);
+	const scaled = (mpp: number) => {
+		const w = Math.ceil(frame.width / mpp);
+		const h = Math.ceil(frame.height / mpp);
+		const sx = w / frame.width;
+		const sy = h / frame.height;
+		const toPx = ([x, z]: [number, number]): [number, number] => [
+			(x + frame.width / 2) * sx,
+			(z + frame.height / 2) * sy
+		];
+		const stroke = (ctx: CanvasRenderingContext2D, path: [number, number][], width: number) => {
+			ctx.lineWidth = width * sx;
+			ctx.beginPath();
+			path.map(toPx).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+			ctx.stroke();
+		};
+		return { w, h, toPx, stroke };
 	};
 
 	// Colour.
+	const { w, h, stroke } = scaled(colourMpp);
 	const canvas = document.createElement('canvas');
 	canvas.width = w;
 	canvas.height = h;
@@ -68,14 +82,20 @@ export function paintGround(
 	ctx.lineJoin = 'round';
 	ctx.fillStyle = '#e4e9f1';
 	ctx.fillRect(0, 0, w, h);
-	// Wind-worked off-piste snow: faint speckle so the untouched slopes read as a surface.
-	const speckle = ctx.createImageData(w, h);
+	// Wind-worked off-piste snow: faint speckle so the untouched slopes read as a surface,
+	// as a small tile repeated rather than noise the size of the whole canvas.
+	const speckleTile = document.createElement('canvas');
+	speckleTile.width = speckleTile.height = 128;
+	const st = speckleTile.getContext('2d')!;
+	const speckle = st.createImageData(128, 128);
 	for (let i = 0; i < speckle.data.length; i += 4) {
 		const v = Math.random();
 		speckle.data[i] = speckle.data[i + 1] = speckle.data[i + 2] = v > 0.5 ? 255 : 190;
 		speckle.data[i + 3] = 14;
 	}
-	ctx.putImageData(speckle, 0, 0);
+	st.putImageData(speckle, 0, 0);
+	ctx.fillStyle = ctx.createPattern(speckleTile, 'repeat')!;
+	ctx.fillRect(0, 0, w, h);
 	// Lift lines: a cleared strip, slightly shaded.
 	ctx.strokeStyle = 'rgba(190, 200, 214, 0.6)';
 	for (const lift of resort.lifts) stroke(ctx, lift.path, LIFT_CLEARANCE);
@@ -91,20 +111,21 @@ export function paintGround(
 	for (const run of resort.runs) stroke(ctx, run.path, 2);
 
 	// Mask: red where trees must stay away, green on groomed snow.
+	const { w: mw, h: mh, toPx: maskPx, stroke: maskStroke } = scaled(maskMpp);
 	const maskCanvas = document.createElement('canvas');
-	maskCanvas.width = w;
-	maskCanvas.height = h;
+	maskCanvas.width = mw;
+	maskCanvas.height = mh;
 	const m = maskCanvas.getContext('2d', { willReadFrequently: true })!;
 	m.lineCap = 'round';
 	m.lineJoin = 'round';
 	m.fillStyle = '#000';
-	m.fillRect(0, 0, w, h);
+	m.fillRect(0, 0, mw, mh);
 	m.strokeStyle = '#f00';
-	for (const run of resort.runs) stroke(m, run.path, TREE_CLEARANCE * 2);
-	for (const lift of resort.lifts) stroke(m, lift.path, LIFT_CLEARANCE * 2);
+	for (const run of resort.runs) maskStroke(m, run.path, TREE_CLEARANCE * 2);
+	for (const lift of resort.lifts) maskStroke(m, lift.path, LIFT_CLEARANCE * 2);
 	// Yellow keeps the red: the groomed corridor is still no place for a tree.
 	m.strokeStyle = '#ff0';
-	for (const run of resort.runs) stroke(m, run.path, RUN_WIDTH);
+	for (const run of resort.runs) maskStroke(m, run.path, RUN_WIDTH);
 	// Blue where there is woodland, within the box the woods file covers.
 	let woodBox: [number, number, number, number] | null = null;
 	if (woods?.features.length) {
@@ -125,7 +146,7 @@ export function paintGround(
 						b[1] = Math.min(b[1], z);
 						b[2] = Math.max(b[2], x);
 						b[3] = Math.max(b[3], z);
-						const [px, py] = toPx([x, z]);
+						const [px, py] = maskPx([x, z]);
 						if (i) m.lineTo(px, py);
 						else m.moveTo(px, py);
 					});
@@ -136,13 +157,15 @@ export function paintGround(
 		}
 		m.globalCompositeOperation = 'source-over';
 	}
-	const mask = m.getImageData(0, 0, w, h).data;
+	const mask = m.getImageData(0, 0, mw, mh).data;
+	// Let the canvas go: the pixels are all that is kept.
+	maskCanvas.width = maskCanvas.height = 0;
 	const index = (x: number, z: number) => {
-		const [px, py] = toPx([x, z]);
+		const [px, py] = maskPx([x, z]);
 		const i = Math.floor(px);
 		const j = Math.floor(py);
-		if (i < 0 || j < 0 || i >= w || j >= h) return -1;
-		return (j * w + i) * 4;
+		if (i < 0 || j < 0 || i >= mw || j >= mh) return -1;
+		return (j * mw + i) * 4;
 	};
 
 	const texture = new THREE.CanvasTexture(canvas);

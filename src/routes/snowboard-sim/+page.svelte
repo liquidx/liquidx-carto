@@ -262,6 +262,7 @@
 		<div class="minimap" class:hidden={menu}>
 			<Minimap
 				{game}
+				lite={coarse}
 				features={data.features}
 				woods={data.woods}
 				onteleport={(lon, lat) => {

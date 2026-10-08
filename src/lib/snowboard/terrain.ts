@@ -28,6 +28,14 @@ const FINE_RADIUS = 1;
 const DROP_RADIUS = 2;
 /** How far chunk edges hang down, to hide seams between levels of detail. */
 const SKIRT = 8;
+/** Base tiles fetched at once. */
+const LOAD_CONCURRENCY = 12;
+
+/** Once a buffer is on the GPU its CPU copy is dead weight: nothing here reads it back. */
+function freeAfterUpload(this: THREE.BufferAttribute) {
+	// @ts-expect-error three allows this: the attribute keeps its count and item size.
+	this.array = null;
+}
 
 interface Cell {
 	tx: number;
@@ -92,18 +100,25 @@ export class Terrain {
 		return this.cells.size;
 	}
 
-	/** Fetch every base tile and build the coarse meshes. */
+	/**
+	 * Fetch every base tile and build the coarse meshes. A few tiles at a time: each one in
+	 * flight holds a bitmap, its pixels and the decoded heights, and two hundred at once is a
+	 * spike a phone cannot take.
+	 */
 	async loadBase(onProgress?: (p: TerrainProgress) => void) {
 		const cells = [...this.cells.values()];
 		let loaded = 0;
+		let next = 0;
 		onProgress?.({ loaded, total: cells.length });
-		await Promise.all(
-			cells.map(async (cell) => {
+		const worker = async () => {
+			while (next < cells.length && !this.disposed) {
+				const cell = cells[next++];
 				cell.base = await loadTile(this.provider, BASE_ZOOM, cell.tx, cell.ty);
 				loaded++;
 				onProgress?.({ loaded, total: cells.length });
-			})
-		);
+			}
+		};
+		await Promise.all(Array.from({ length: LOAD_CONCURRENCY }, worker));
 		if (this.disposed) return;
 		for (const cell of cells) {
 			cell.baseMesh = this.buildMesh(cell, BASE_ZOOM, BASE_SEGMENTS);
@@ -274,7 +289,9 @@ export class Terrain {
 		};
 		for (let j = 0; j < N; j++) for (let i = 0; i < N; i++) put(i, j, 0);
 
-		const index = new Uint32Array(segments * segments * 6 + 4 * segments * 6);
+		const indices = segments * segments * 6 + 4 * segments * 6;
+		// Coarse chunks fit 16-bit indices, which halves their index buffers.
+		const index = count > 65535 ? new Uint32Array(indices) : new Uint16Array(indices);
 		let k = 0;
 		const quad = (a: number, b: number, c: number, d: number) => {
 			// a—b along one row, c—d along the next, wound to face up.
@@ -311,7 +328,10 @@ export class Terrain {
 		geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
 		geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
 		geometry.setIndex(new THREE.BufferAttribute(index, 1));
+		// Culling needs the sphere, so work it out while the positions are still here.
 		geometry.computeBoundingSphere();
+		for (const attribute of [...Object.values(geometry.attributes), geometry.index!])
+			(attribute as THREE.BufferAttribute).onUpload(freeAfterUpload);
 		const mesh = new THREE.Mesh(geometry, this.material);
 		mesh.receiveShadow = true;
 		mesh.matrixAutoUpdate = false;

@@ -426,7 +426,15 @@ export async function createGame(
 			forest.dispose();
 			lifts.dispose();
 			ground.dispose();
+			// Whatever is left (sky, poles, figure): geometry and materials go with the scene.
+			scene.traverse((o) => {
+				const mesh = o as THREE.Mesh;
+				mesh.geometry?.dispose();
+				for (const m of [mesh.material].flat()) m?.dispose();
+			});
 			renderer.dispose();
+			// Give the GPU memory back now rather than when the context is collected.
+			renderer.forceContextLoss();
 		}
 	};
 }

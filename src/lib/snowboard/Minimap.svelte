@@ -31,6 +31,8 @@
 		/** Terrain provider id for the model; coarse tiles are fine for a map this size. */
 		provider?: string;
 		showLabels?: boolean;
+		/** A phone: a coarser model, a smaller drape and no forest, to keep memory down. */
+		lite?: boolean;
 		onteleport: (lon: number, lat: number) => void;
 	};
 	let {
@@ -39,6 +41,7 @@
 		woods = null,
 		provider = 'gsi',
 		showLabels = true,
+		lite = false,
 		onteleport
 	}: Props = $props();
 	const inTheWay = $derived(features.features.filter((f) => isRun(f) || isLift(f)));
@@ -67,7 +70,7 @@
 		const circle = fit();
 		const frame = frameAt(circle.lon, circle.lat, circle.radius * 2);
 		const box = frameBox({ ...frame, w: frame.w * 1.04 }, 1);
-		const rings = 140;
+		const rings = lite ? 90 : 140;
 		sampleApiGrid(findProvider(provider), box, rings * 2 + 1, rings * 2 + 1)
 			.then(({ grid }) => {
 				if (cancelled) return;
@@ -93,6 +96,7 @@
 			objectScale={5}
 			autoRotate={false}
 			minDistance={0.6}
+			drapeResolution={lite ? 1024 : 2048}
 		>
 			<Drape
 				data={features}
@@ -102,7 +106,7 @@
 					width: 3
 				})}
 			/>
-			{#if woods}
+			{#if woods && !lite}
 				<Trees
 					data={woods}
 					avoid={inTheWay}
