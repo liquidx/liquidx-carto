@@ -443,8 +443,10 @@
 			<Lift
 				data={features}
 				filter={isAerial}
-				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : isRopeTow(f) ? 1.1 : 9)}
+				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : isRopeTow(f) ? 1.1 : 4.5)}
+				clearance={(f) => (isCabin(f) || isRopeTow(f) ? 0 : 4.2)}
 				stations={(f) => !isRopeTow(f)}
+				stationModel={(f) => (isCabin(f) ? null : asset('/diorama/lift-station.glb'))}
 				carrier={(f) => (isCabin(f) ? 'cabin' : isRopeTow(f) ? 'ball' : 'chair')}
 				shuttle={isCableCar}
 				carrierEvery={(f) => (isGondola(f) ? 45 : isRopeTow(f) ? 12 : seats(f) >= 4 ? 28 : 14)}

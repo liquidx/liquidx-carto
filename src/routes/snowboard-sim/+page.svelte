@@ -51,6 +51,7 @@
 				},
 				cabinModel: asset('/diorama/gondola.glb'),
 				ropewayModel: asset('/diorama/ropeway.glb'),
+				stationModel: asset('/diorama/lift-station.glb'),
 				treeSpacing: coarse ? 18 : 14,
 				maxPixelRatio: coarse ? 1.5 : 2
 			},

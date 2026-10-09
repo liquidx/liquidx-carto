@@ -7,12 +7,15 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { Lift } from './resort';
 import type { Terrain } from './terrain';
 
-const TOWER_EVERY = 90;
+/** Metres between towers; closer on a chairlift, whose low cable has to follow the ground. */
+const TOWER_EVERY = { gondola: 90, chair: 45, cableCar: 90, ropeTow: 90 };
 /**
  * Height of the cable at each tower: a cable car's cabin hangs far lower than a chair, and
  * the rope of a rope tow is at arm's height.
  */
-const CABLE_HEIGHT = { gondola: 11, chair: 11, cableCar: 17, ropeTow: 1.1 };
+const CABLE_HEIGHT = { gondola: 11, chair: 5.5, cableCar: 17, ropeTow: 1.1 };
+/** The least a chairlift's cable is above the snow anywhere: a chair, a rider's legs and a little. */
+const CHAIR_CLEARANCE = 4.2;
 const GAUGE = 5;
 /**
  * Carrier spacing and speed, metres and metres a second. A cable car has no spacing: just two
@@ -83,14 +86,17 @@ function alongPath(path: THREE.Vector3[], lengths: number[], d: number, target: 
  * `chairModels` are hung as the chairs in place of the plain bench, by how many the lift's
  * chairs seat and in their own materials: in metres, the cable through the origin, facing +z.
  * The `Hood` node of one is left off the lifts without a bubble. `cabinModels` are hung as
- * the cabins of the gondolas and of the cable cars in the same way. The lifts dispose of
- * them with themselves.
+ * the cabins of the gondolas and of the cable cars in the same way. `stationModel` stands at
+ * each end of the chairlifts in place of the shed: origin on the ground where the line ends,
+ * facing +z along it, its `Mast` stretched and its `Head` raised to the cable and its
+ * `Bullwheel` turning. The lifts dispose of them all with themselves.
  */
 export function buildLifts(
 	lifts: Lift[],
 	terrain: Terrain,
 	chairModels: Record<number, THREE.Object3D> = {},
-	cabinModels: Partial<Record<'gondola' | 'cableCar', THREE.Object3D>> = {}
+	cabinModels: Partial<Record<'gondola' | 'cableCar', THREE.Object3D>> = {},
+	stationModel?: THREE.Object3D
 ): Lifts {
 	const group = new THREE.Group();
 	const structure = new THREE.MeshStandardMaterial({
@@ -167,6 +173,8 @@ export function buildLifts(
 		turns: [THREE.Quaternion, THREE.Quaternion];
 	};
 	const fleets: Fleet[] = [];
+	// The bullwheels of the station models, with how fast each turns in radians a second.
+	const wheels: { wheel: THREE.Object3D; turn: number }[] = [];
 	const lines: LiftLine[] = [];
 
 	for (const lift of lifts) {
@@ -181,7 +189,7 @@ export function buildLifts(
 				lengths2d[i - 1] + Math.hypot(pts[i].x - pts[i - 1].x, pts[i].z - pts[i - 1].z)
 			);
 		const groundTotal = lengths2d[lengths2d.length - 1];
-		const towers = Math.max(1, Math.round(groundTotal / TOWER_EVERY));
+		const towers = Math.max(1, Math.round(groundTotal / TOWER_EVERY[lift.kind]));
 		const feet: THREE.Vector3[] = [];
 		for (let i = 0; i <= towers; i++) {
 			const p = alongPath(pts, lengths2d, (groundTotal * i) / towers, new THREE.Vector3());
@@ -190,6 +198,21 @@ export function buildLifts(
 		}
 		const cableHeight = CABLE_HEIGHT[lift.kind];
 		const tops = feet.map((p) => p.clone().setY(p.y + cableHeight));
+		// Where the ground bulges up under a span of a chairlift, the towers at its ends stand
+		// taller, so the chairs and the feet of those on them stay clear of the snow.
+		if (lift.kind === 'chair') {
+			const probe = new THREE.Vector3();
+			for (let pass = 0; pass < 3; pass++)
+				for (let i = 1; i < tops.length; i++) {
+					let short = 0;
+					for (let k = 1; k < 8; k++) {
+						probe.lerpVectors(tops[i - 1], tops[i], k / 8);
+						short = Math.max(short, CHAIR_CLEARANCE - (probe.y - terrain.height(probe.x, probe.z)));
+					}
+					tops[i - 1].y += short;
+					tops[i].y += short;
+				}
+		}
 		const bearing = Math.atan2(
 			tops[tops.length - 1].x - tops[0].x,
 			tops[tops.length - 1].z - tops[0].z
@@ -201,7 +224,20 @@ export function buildLifts(
 			const end = i === 0 || i === feet.length - 1;
 			const tow = lift.kind === 'ropeTow';
 			// A rope tow has no stations, and slim posts to carry its rope.
-			if (end && !tow) {
+			if (end && stationModel && lift.kind === 'chair') {
+				// A copy shares the model's geometry and materials. It faces along the line.
+				const station = stationModel.clone();
+				station.getObjectByName('Mast')?.scale.setY(tops[i].y - foot.y);
+				station.getObjectByName('Head')?.position.setY(tops[i].y - foot.y);
+				station.position.copy(foot);
+				station.quaternion.copy(heading);
+				if (i) station.rotateY(Math.PI);
+				station.traverse((o) => (o.castShadow = true));
+				group.add(station);
+				const wheel = station.getObjectByName('Bullwheel');
+				// The rim keeps pace with the cable, half the gauge out from the hub.
+				if (wheel) wheels.push({ wheel, turn: LIFT_SPEED.chair / (GAUGE / 2) });
+			} else if (end && !tow) {
 				// A shed over the end of the line: a roof on legs, open at the sides.
 				const roof = new THREE.Vector3(GAUGE + 5, 0.6, 12);
 				boxes.push(
@@ -367,6 +403,7 @@ export function buildLifts(
 				fleet.travelled = (fleet.travelled + fleet.pace * dt) % (fleet.line.total * 2);
 				place(fleet);
 			}
+			for (const { wheel, turn } of wheels) wheel.rotation.y += turn * dt;
 		},
 		dispose() {
 			for (const g of [post, box, chairShape, cabinShape, ballShape, cableGeometry]) g.dispose();
@@ -374,7 +411,11 @@ export function buildLifts(
 			carrierMaterial.dispose();
 			cableMaterial.dispose();
 			for (const shapes of chairShapes.values()) for (const s of shapes) s.geometry.dispose();
-			for (const model of [...Object.values(chairModels), ...Object.values(cabinModels)])
+			for (const model of [
+				...Object.values(chairModels),
+				...Object.values(cabinModels),
+				stationModel
+			])
 				model?.traverse((o) => {
 					const mesh = o as THREE.Mesh;
 					if (!mesh.isMesh) return;

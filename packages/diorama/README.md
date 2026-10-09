@@ -220,6 +220,10 @@ a 0.55 m, a cabin is a little longer than wide) every `carrierEvery` metres roun
 the right of the line and back down the left. Give it a `speed` in metres a second and they
 travel; at 0, the default, they stand still. With `shuttle` a line is an aerial tramway
 instead: two carriers, one on each side, going up and down their own side and passing halfway.
+With a `clearance` the towers stand taller than `height` wherever the ground bulges up under
+the cable, to keep it that many metres clear. A `stationModel` stands your own glTF at each end in place of the built-in station: origin on
+the ground where the line ends, facing +z along it. Its `Mast` node is stretched and its `Head`
+raised to the `height` of the cable, and its `Bullwheel` turns with the carriers.
 For a rope tow, lower the `height` to arm's reach, turn the `stations` at the ends off and make
 the `carrier` a `'ball'`.
 

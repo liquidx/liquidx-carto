@@ -26,10 +26,22 @@
 		towerEvery?: number;
 		/** Height of the cable above the ground at each tower, in metres. */
 		height?: PerFeature<number>;
+		/**
+		 * The least the cable is above the ground anywhere, in metres: where the ground bulges up
+		 * under a span, the towers at its ends stand taller than `height` to keep this clear.
+		 */
+		clearance?: PerFeature<number>;
 		/** Colour of the towers, cable and stations. */
 		color?: PerFeature<THREE.ColorRepresentation>;
 		/** Whether a station stands over each end of the line; without, a tower like the others. */
 		stations?: PerFeature<boolean>;
+		/**
+		 * A model to stand at each end instead of the built-in station: the URL of a glTF or GLB,
+		 * or an object. It is in metres with its origin on the ground where the line ends, and
+		 * faces +z along the line. Of its named nodes, `Mast` is stretched (its y scale) and
+		 * `Head` raised to the `height` of the cable, and `Bullwheel` turns with the carriers.
+		 */
+		stationModel?: PerFeature<string | THREE.Object3D | null | undefined>;
 		/** What hangs from the cable: open chairs or closed cabins, or the ball of a rope tow on it. */
 		carrier?: PerFeature<'chair' | 'cabin' | 'ball'>;
 		/** Distance between carriers in metres, 0 for none. */
@@ -67,8 +79,10 @@
 		filter,
 		towerEvery = 80,
 		height = 10,
+		clearance = 0,
 		color = '#30343b',
 		stations = true,
+		stationModel,
 		carrier = 'chair',
 		carrierEvery = 15,
 		carrierSize = 2.2,
@@ -92,22 +106,23 @@
 	// the effect so that they stay where they are when the lifts are rebuilt or stopped.
 	const travelled: number[] = [];
 
-	// Carrier models given as URLs, once they have loaded.
+	// Carrier and station models given as URLs, once they have loaded.
 	let models = $state.raw<Record<string, THREE.Object3D>>({});
 	const asked: Record<string, true> = {};
 	let gone = false;
 	$effect(() => {
 		for (const { feature } of lines.current) {
-			const source = perFeature(carrierModel, feature);
-			if (typeof source !== 'string' || asked[source]) continue;
-			asked[source] = true;
-			new GLTFLoader().loadAsync(source).then(
-				({ scene }) => {
-					if (gone) release(scene);
-					else models = { ...models, [source]: scene };
-				},
-				(e) => console.error('Lift: could not load', source, e)
-			);
+			for (const source of [perFeature(carrierModel, feature), perFeature(stationModel, feature)]) {
+				if (typeof source !== 'string' || asked[source]) continue;
+				asked[source] = true;
+				new GLTFLoader().loadAsync(source).then(
+					({ scene }) => {
+						if (gone) release(scene);
+						else models = { ...models, [source]: scene };
+					},
+					(e) => console.error('Lift: could not load', source, e)
+				);
+			}
 		}
 	});
 	onDestroy(() => {
@@ -275,6 +290,10 @@
 		const cableColors: number[] = [];
 		const unit = diorama.size(1);
 		const half = (GAUGE / 2) * unit;
+		// Station models stood at the ends of the lines, and their bullwheels with how fast each
+		// turns, in radians a second.
+		const placed: THREE.Object3D[] = [];
+		const wheels: { wheel: THREE.Object3D; turn: number }[] = [];
 
 		/** The carriers of one lift, and the loop they go round. */
 		type Fleet = {
@@ -305,18 +324,51 @@
 				p.setY(diorama.heightAt(p.x, p.z))
 			);
 			const tops = feet.map((p) => p.clone().setY(p.y + cableHeight));
+			const clear = diorama.size(perFeature(clearance, feature));
+			if (clear > 0) {
+				const probe = new THREE.Vector3();
+				for (let pass = 0; pass < 3; pass++)
+					for (let i = 1; i < tops.length; i++) {
+						let short = 0;
+						for (let k = 1; k < 8; k++) {
+							probe.lerpVectors(tops[i - 1], tops[i], k / 8);
+							short = Math.max(short, clear - (probe.y - diorama.heightAt(probe.x, probe.z)));
+						}
+						tops[i - 1].y += short;
+						tops[i].y += short;
+					}
+			}
 			// Which way the line runs on the map, to turn the stations, tower arms and carriers.
 			const bearing = Math.atan2(
 				tops[tops.length - 1].x - tops[0].x,
 				tops[tops.length - 1].z - tops[0].z
 			);
 			const heading = new THREE.Quaternion().setFromAxisAngle(up, bearing);
+			const back = new THREE.Quaternion().setFromAxisAngle(up, bearing + Math.PI);
+			const stationSource = perFeature(stationModel, feature);
+			// Until a model has loaded, the built-in station stands in for it.
+			const station = typeof stationSource === 'string' ? models[stationSource] : stationSource;
 			// To the right of the line, where the carriers go up.
 			const side = new THREE.Vector3(-Math.cos(bearing), 0, Math.sin(bearing));
 
 			feet.forEach((foot, i) => {
 				const end = i === 0 || i === feet.length - 1;
-				if (end && perFeature(stations, feature)) {
+				if (end && station && perFeature(stations, feature)) {
+					// A copy shares the model's geometry and materials. It faces along the line.
+					const copy = station.clone();
+					const metres = (tops[i].y - foot.y) / unit;
+					copy.getObjectByName('Mast')?.scale.setY(metres);
+					copy.getObjectByName('Head')?.position.setY(metres);
+					copy.position.copy(foot);
+					copy.quaternion.copy(i ? back : heading);
+					copy.scale.setScalar(unit);
+					copy.traverse((o) => (o.castShadow = o.receiveShadow = true));
+					placed.push(copy);
+					const wheel = copy.getObjectByName('Bullwheel');
+					// The rim keeps pace with the cable, half the gauge out from the hub.
+					if (wheel)
+						wheels.push({ wheel, turn: diorama.metres(perFeature(speed, feature)) / half });
+				} else if (end && perFeature(stations, feature)) {
 					// A shed over the end of the line, set into the slope, that the carriers turn in.
 					const sunk = unit * 2.5;
 					const size = new THREE.Vector3(
@@ -383,7 +435,7 @@
 				shuttle: shuttling,
 				pace: diorama.metres(perFeature(speed, feature)),
 				side,
-				turns: [heading, new THREE.Quaternion().setFromAxisAngle(up, bearing + Math.PI)],
+				turns: [heading, back],
 				scale: new THREE.Vector3(unit, unit, unit)
 			};
 		});
@@ -417,11 +469,12 @@
 				}
 				for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
 			});
+			for (const { wheel, turn } of wheels) wheel.rotation.y += turn * seconds;
 			diorama.stage.invalidate();
 		};
 		place(0);
 		let stop: (() => void) | undefined;
-		if (fleets.some((fleet) => fleet?.pace)) {
+		if (fleets.some((fleet) => fleet?.pace) || wheels.some(({ turn }) => turn)) {
 			let last = performance.now();
 			stop = diorama.stage.onFrame(() => {
 				const now = performance.now();
@@ -450,10 +503,10 @@
 		wire.setAttribute('color', new THREE.Float32BufferAttribute(cableColors, 3));
 		const wireMaterial = new THREE.LineBasicMaterial({ vertexColors: true });
 		const wires = new THREE.LineSegments(wire, wireMaterial);
-		diorama.group.add(...meshes, wires);
+		diorama.group.add(...meshes, wires, ...placed);
 		return () => {
 			stop?.();
-			diorama.group.remove(...meshes, wires);
+			diorama.group.remove(...meshes, wires, ...placed);
 			for (const mesh of meshes) mesh.dispose();
 			for (const geometry of [post, box, ...carriers.values(), ...posed, wire]) geometry.dispose();
 			material.dispose();
