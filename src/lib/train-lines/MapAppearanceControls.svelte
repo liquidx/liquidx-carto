@@ -36,6 +36,7 @@
 <!-- Map Appearance Panel (bottom-right, collapsible) with zoom controls in header -->
 <div
 	class="hud-controls absolute right-5 bottom-5 z-10 hidden max-w-84 md:block"
+	role="presentation"
 	ontouchstart={(e) => e.stopPropagation()}
 	ontouchmove={(e) => e.stopPropagation()}
 	ontouchend={(e) => e.stopPropagation()}
