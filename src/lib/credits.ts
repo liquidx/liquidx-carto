@@ -69,6 +69,12 @@ export const CREDITS = {
 		use: 'gsi basemap',
 		url: 'https://maps.gsi.go.jp/development/ichiran.html'
 	},
+	overture: {
+		name: 'overture maps',
+		by: '© openstreetmap contributors, odbl · via overture maps',
+		use: 'woods, water, buildings, roads and car parks',
+		url: 'https://overturemaps.org'
+	},
 	nominatim: {
 		name: 'nominatim',
 		by: '© openstreetmap contributors, odbl',

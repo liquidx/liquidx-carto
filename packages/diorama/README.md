@@ -210,8 +210,8 @@ own.
 They all take `data` and `filter` like `Drape`, so several can read the same file. `Building`,
 `Model` and `Marker` also take `at={[lon, lat]}` for a single position. Sizes are in metres.
 A `Building` that would reach past the rim of the diorama is left out.
-Props typed as `PerFeature` (colours, sizes, headings, the carrier props) accept a value or a
-function of the feature.
+Props typed as `PerFeature` (colours, sizes, headings, the carrier props, the `clearance` of
+`Trees` from each thing it avoids) accept a value or a function of the feature.
 
 `Lift` hangs a `carrier` (`'chair'` or `'cabin'`, `carrierSize` metres wide) every
 `carrierEvery` metres round the loop, up the right of the line and back down the left. Give it

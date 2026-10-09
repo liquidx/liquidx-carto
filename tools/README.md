@@ -4,14 +4,14 @@ Command-line tools that fetch, build and explore the data behind the prototypes.
 TypeScript run directly by Node's type stripping, so shared code in `src/lib` uses relative
 imports with `.ts` extensions. They're type-checked with the app by `pnpm check`.
 
-| Command                  | Prototype         | What it does                                                   |
-| ------------------------ | ----------------- | -------------------------------------------------------------- |
-| `pnpm ev-jp`             | EV Charging Japan | builds charger, distance-grid and route data from the source   |
-| `pnpm japan-train-lines` | Japan Train Lines | downloads railway data, builds region polygons and line index  |
-| `pnpm diorama-woods`     | Snow Diorama      | fetches wooded areas from OpenStreetMap for a ski resort       |
-| `pnpm diorama-glb`       | Mountain Diorama  | exports the diorama GLB for a features file, without a browser |
-| `pnpm odpt`              | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                |
-| `pnpm ekispert`          | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                         |
+| Command                  | Prototype         | What it does                                                          |
+| ------------------------ | ----------------- | --------------------------------------------------------------------- |
+| `pnpm ev-jp`             | EV Charging Japan | builds charger, distance-grid and route data from the source          |
+| `pnpm japan-train-lines` | Japan Train Lines | downloads railway data, builds region polygons and line index         |
+| `pnpm diorama-scene`     | Snow Diorama      | fetches woods, water, buildings, roads and car parks for a ski resort |
+| `pnpm diorama-glb`       | Mountain Diorama  | exports the diorama GLB for a features file, without a browser        |
+| `pnpm odpt`              | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                       |
+| `pnpm ekispert`          | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                                |
 
 Run any of them with `help` for their subcommands.
 
@@ -42,24 +42,39 @@ Sources in `tools/ev-jp/source/`:
 `data/ev-jp/` (gitignored) gets the full-attribute exports: `hokkaido_chargers_all.geojson`,
 `hokkaido_chademo_dc.geojson`, `hokkaido_chargers_all.csv` and `hokkaido_outline.geojson`.
 
-## diorama-woods
+## diorama-scene
 
 ```sh
-pnpm diorama-woods build                      # static/diorama/appi-kogen-woods.geojson
-pnpm diorama-woods build path/to/x.geojson    # another resort's features → x-woods.geojson beside it
-pnpm diorama-woods build path/to/x.geojson out/woods.geojson   # … written to the given path instead
+pnpm diorama-scene build                      # static/diorama/appi-kogen-scene.geojson
+pnpm diorama-scene build path/to/x.geojson    # another resort's features → x-scene.geojson beside it
+pnpm diorama-scene build path/to/x.geojson out/scene.geojson   # … written to the given path instead
+tools/diorama-scene-multi.sh dir/             # every *-ski-features.geojson in dir without a scene
 ```
 
 Reads the runs and lifts in a ski features file, fits the same circle around them as the
-/diorama-snow page, and reads the forest and wood areas there from
-[Overture Maps](https://overturemaps.org)' `base/land` data: OpenStreetMap's `natural=wood` and
-`landuse=forest`, republished monthly as Parquet on S3. DuckDB (in-process, via
-`@duckdb/node-api`) reads just the row groups overlapping the area, about 15 s with no API or
-rate limit in the way; its `httpfs` and `spatial` extensions are downloaded once into `~/.duckdb`.
-The areas are clipped to the circle's square, simplified to 2 m and written beside the features
-file. Rerun after changing the runs or lifts; bump `OVERTURE_RELEASE` in the tool for newer mapping.
+/diorama-snow page, and reads what OpenStreetMap maps there from
+[Overture Maps](https://overturemaps.org), which republishes it monthly as Parquet on S3. One
+GeoJSON file comes out, each feature with a `kind`:
 
-Source: © OpenStreetMap contributors, ODbL, via Overture Maps.
+| `kind`     | Overture                                | OpenStreetMap                       | Properties                                 |
+| ---------- | --------------------------------------- | ----------------------------------- | ------------------------------------------ |
+| `wood`     | `base/land` subtype `forest`            | `natural=wood`, `landuse=forest`    | `leafType`                                 |
+| `water`    | `base/water` polygons                   | lakes, ponds, reservoirs, riverbeds | `waterType`, `name`, `intermittent`        |
+| `waterway` | `base/water` lines                      | `waterway=river`, `stream`, `canal` | `waterType`, `name`, `intermittent`        |
+| `building` | `buildings/building`                    | `building=*`, plus other footprints | `height`, `levels`, `buildingType`, `name` |
+| `road`     | `transportation/segment` subtype `road` | `highway=*` except paths            | `roadClass`, `name`                        |
+| `carpark`  | `base/infrastructure` class `parking`   | `amenity=parking`                   | `name`                                     |
+
+Paths (footways, trails, steps, cycleways, bridleways, sidewalks, crossings and pedestrian
+streets) are left out of the roads; tracks stay in. DuckDB (in-process, via `@duckdb/node-api`)
+reads just the row groups overlapping the area, the layers in parallel, about a minute and a
+half with no API or rate limit in the way; its `httpfs` and `spatial` extensions are downloaded
+once into `~/.duckdb`. The features are clipped to the circle's square and simplified to 2 m
+(buildings keep every corner) and written beside the features file. Rerun after changing the
+runs or lifts; bump `OVERTURE_RELEASE` in the tool for newer mapping.
+
+Source: © OpenStreetMap contributors, ODbL, via Overture Maps. Some building footprints are
+Overture's own (Microsoft and Google), with no OpenStreetMap id.
 
 ## diorama-glb
 

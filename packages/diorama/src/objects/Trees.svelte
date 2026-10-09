@@ -7,7 +7,12 @@
 	import type { Feature } from 'geojson';
 	import * as THREE from 'three';
 	import { getDiorama } from '../context.js';
-	import { featureShapes, type GeoJSONSource } from '../geojson.svelte.js';
+	import {
+		featureShapes,
+		perFeature,
+		type GeoJSONSource,
+		type PerFeature
+	} from '../geojson.svelte.js';
 
 	type Props = {
 		/** Polygons to cover: GeoJSON in any form, or a URL. */
@@ -22,8 +27,8 @@
 		color?: THREE.ColorRepresentation;
 		/** Lines and polygon outlines to keep trees away from. */
 		avoid?: GeoJSONSource;
-		/** Distance in metres to keep from `avoid`. */
-		clearance?: number;
+		/** Distance in metres to keep from `avoid`: one for everything, or by feature. */
+		clearance?: PerFeature<number>;
 		seed?: number;
 		/** Upper bound on the number of trees. Past it the cover is thinned evenly. */
 		limit?: number;
@@ -77,16 +82,24 @@
 	/** Side of the squares the trees are grouped into for drawing, in model units. */
 	const CHUNK = 0.25;
 
-	// How far trees stay from `avoid`: the clearance, and room for the tree's own width.
-	const keepOut = $derived(diorama.metres(clearance) + diorama.size(height) * 0.17);
+	// Room for the tree's own width, past the clearance.
+	const margin = $derived(diorama.size(height) * 0.17);
+	// The clearance of each obstacle in model units, with the largest of them.
+	const clearances = $derived.by(() => {
+		const byShape = obstacles.current.map((s) => diorama.metres(perFeature(clearance, s.feature)));
+		return { byShape, most: Math.max(0, ...byShape) };
+	});
 	// As far as the scatter needs to measure to `avoid`. It moves in steps, so that the trees
 	// growing or shrinking with the object scale does not scatter them again.
-	const reach = $derived(2 ** Math.ceil(Math.log2(keepOut)));
+	const reach = $derived(2 ** Math.ceil(Math.log2(clearances.most + margin)));
 
-	/** Where a tree may stand: x, the ground's height, z, two random numbers, and the gap to `avoid`. */
-	type Spot = [x: number, y: number, z: number, a: number, b: number, gap: number];
+	/**
+	 * Where a tree may stand: x, the ground's height, z, two random numbers, and the slack: how
+	 * far past its clearance the nearest of `avoid` is.
+	 */
+	type Spot = [x: number, y: number, z: number, a: number, b: number, slack: number];
 
-	// Every spot in the polygons that clears `avoid` by `clearance`, whatever the size of the
+	// Every spot in the polygons that clears `avoid` by its clearance, whatever the size of the
 	// trees. When there are more than `limit`, that many are kept from all over the polygons.
 	const spots = $derived.by((): Spot[] => {
 		const polygons = areas.current
@@ -94,21 +107,22 @@
 			.map((s) => s.coords.map((ring) => ring.map(diorama.toModel)));
 		if (!polygons.length || density <= 0) return [];
 
-		// Segments to stay clear of, as [x0, z0, x1, z1] in model space.
-		const segments: [number, number, number, number][] = [];
-		for (const shape of obstacles.current) {
-			if (shape.kind === 'point') continue;
+		// Segments to stay clear of, as [x0, z0, x1, z1, clearance] in model space.
+		const segments: [number, number, number, number, number][] = [];
+		obstacles.current.forEach((shape, n) => {
+			if (shape.kind === 'point') return;
+			const c = clearances.byShape[n];
 			for (const path of shape.coords) {
 				const p = path.map(diorama.toModel);
-				for (let i = 1; i < p.length; i++) segments.push([...p[i - 1], ...p[i]]);
+				for (let i = 1; i < p.length; i++) segments.push([...p[i - 1], ...p[i], c]);
 			}
-		}
+		});
 		// The segments each square of a grid comes within `reach` of, so that a spot only measures
 		// to the few around it.
 		const side = Math.max(reach, 1 / 64);
 		const across = Math.ceil(2 / side);
 		const square = (v: number) => Math.min(across - 1, Math.max(0, Math.floor((v + 1) / side)));
-		const near: [number, number, number, number][][] = [];
+		const near: [number, number, number, number, number][][] = [];
 		for (const segment of segments) {
 			const [x0, z0, x1, z1] = segment;
 			for (let j = square(Math.min(z0, z1) - reach); j <= square(Math.max(z0, z1) + reach); j++) {
@@ -117,28 +131,27 @@
 				}
 			}
 		}
-		/** Distance to the nearest segment, measured no further than `reach`. */
-		const gapAt = (x: number, z: number) => {
-			let gap = reach;
+		/** The least slack to any segment, measured no further than `reach` past its clearance. */
+		const slackAt = (x: number, z: number) => {
+			let slack = reach;
 			const around = near[square(z) * across + square(x)];
-			if (!around) return gap;
+			if (!around) return slack;
 			for (let i = 0; i < around.length; i++) {
-				const [x0, z0, x1, z1] = around[i];
+				const [x0, z0, x1, z1, c] = around[i];
 				const dx = x1 - x0;
 				const dz = z1 - z0;
 				const t = Math.min(
 					1,
 					Math.max(0, ((x - x0) * dx + (z - z0) * dz) / (dx * dx + dz * dz || 1))
 				);
-				gap = Math.min(gap, Math.hypot(x - x0 - t * dx, z - z0 - t * dz));
+				slack = Math.min(slack, Math.hypot(x - x0 - t * dx, z - z0 - t * dz) - c);
 			}
-			return gap;
+			return slack;
 		};
 
 		// One candidate per cell of a grid shared by all polygons, jittered within its cell.
 		const cell = diorama.metres(1000 / Math.sqrt(density));
-		const least = diorama.metres(clearance);
-		const found: [x: number, z: number, ix: number, iz: number, gap: number][] = [];
+		const found: [x: number, z: number, ix: number, iz: number, slack: number][] = [];
 		// Local to this run, never read reactively.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const seen = new Set<string>();
@@ -180,11 +193,11 @@
 					const x = (ix + hash(ix, iz, 1)) * cell;
 					const z = (iz + hash(ix, iz, 2)) * cell;
 					if (x * x + z * z > 0.97 || !inside(x, z, edges)) continue;
-					const gap = gapAt(x, z);
+					const slack = slackAt(x, z);
 					// Too close whatever the size of the trees.
-					if (gap < least) continue;
+					if (slack < 0) continue;
 					seen.add(key);
-					found.push([x, z, ix, iz, gap]);
+					found.push([x, z, ix, iz, slack]);
 				}
 			}
 		}
@@ -197,13 +210,13 @@
 			const most = order.slice().sort()[Math.max(0, limit)];
 			kept = found.filter((_, i) => order[i] < most);
 		}
-		return kept.map(([x, z, ix, iz, gap]) => [
+		return kept.map(([x, z, ix, iz, slack]) => [
 			x,
 			diorama.heightAt(x, z),
 			z,
 			hash(ix, iz, 3),
 			hash(ix, iz, 4),
-			gap
+			slack
 		]);
 	});
 
@@ -213,7 +226,7 @@
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const chunks = new Map<string, Spot[]>();
 		for (const spot of spots) {
-			if (spot[5] < keepOut) continue;
+			if (spot[5] < margin) continue;
 			const key = `${Math.floor(spot[0] / CHUNK)},${Math.floor(spot[2] / CHUNK)}`;
 			const chunk = chunks.get(key);
 			if (chunk) chunk.push(spot);

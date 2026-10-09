@@ -24,12 +24,19 @@ function serve(files: Record<string, unknown>): typeof fetch {
 }
 
 describe('location data', () => {
-	it('names the three files by id', () => {
+	it('names the files by id', () => {
 		expect(locationUrls('appi-kogen')).toEqual({
 			features: 'https://content.snowline.jp/terrain/appi-kogen-ski-features.geojson',
+			scene: 'https://content.snowline.jp/terrain/appi-kogen-scene.geojson',
 			woods: 'https://content.snowline.jp/terrain/appi-kogen-woods.geojson',
 			glb: 'https://content.snowline.jp/terrain/appi-kogen.glb'
 		});
+	});
+
+	it('reads from another base', () => {
+		expect(locationUrls('appi-kogen', '/diorama/').features).toBe(
+			'/diorama/appi-kogen-ski-features.geojson'
+		);
 	});
 
 	it('only accepts ids that are a single path segment', () => {
@@ -40,28 +47,37 @@ describe('location data', () => {
 		expect(isLocationId('')).toBe(false);
 	});
 
-	it('fetches all three files', async () => {
+	it('fetches the features, scene and glb', async () => {
 		const glb = new Uint8Array([1, 2, 3]).buffer;
 		const data = await fetchLocation('x', {
 			fetch: serve({
 				'x-ski-features.geojson': collection(2),
+				'x-scene.geojson': collection(3),
 				'x-woods.geojson': collection(1),
 				'x.glb': glb
 			})
 		});
 		expect(data.features.features).toHaveLength(2);
-		expect(data.woods.features).toHaveLength(1);
+		expect(data.scene.features).toHaveLength(3);
 		expect(data.glb?.byteLength).toBe(3);
 		expect(data.missing).toEqual([]);
 	});
 
-	it('does without the woods and the glb', async () => {
+	it('falls back to the woods file of a location without a scene', async () => {
+		const data = await fetchLocation('x', {
+			fetch: serve({ 'x-ski-features.geojson': collection(2), 'x-woods.geojson': collection(1) })
+		});
+		expect(data.scene.features).toHaveLength(1);
+		expect(data.missing).toEqual(['glb']);
+	});
+
+	it('does without the scene and the glb', async () => {
 		const data = await fetchLocation('x', {
 			fetch: serve({ 'x-ski-features.geojson': collection(2) })
 		});
-		expect(data.woods.features).toEqual([]);
+		expect(data.scene.features).toEqual([]);
 		expect(data.glb).toBeNull();
-		expect(data.missing).toEqual(['woods', 'glb']);
+		expect(data.missing).toEqual(['scene', 'glb']);
 	});
 
 	it('fails without the features', async () => {

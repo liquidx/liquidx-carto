@@ -38,7 +38,7 @@ export interface Ground {
 }
 
 /**
- * Paint the ground. With `woods` (wood and forest polygons, as `pnpm diorama-woods` writes
+ * Paint the ground. With `woods` (wood and forest polygons, as `pnpm diorama-scene` writes
  * them) trees only stand inside those polygons; beyond the area the woods file covers, and
  * without one, they stand everywhere the runs and lifts leave free.
  */

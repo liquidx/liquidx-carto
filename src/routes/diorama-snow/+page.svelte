@@ -1,9 +1,11 @@
 <!--
-	A ski resort on a diorama. The resort's runs, lifts, woods and terrain GLB are fetched from
-	snowline by location id (`?locationId=`, or the field below the title) and swapped
-	in place when it changes; a location without a GLB has its terrain built from elevation tiles.
-	Runs are draped on the snow, with placeholder lifts, trees, buildings and labels from
-	`@liquidx/diorama` on it.
+	A ski resort on a diorama. The resort's runs and lifts, its scene (woods, water, buildings,
+	roads and car parks from OpenStreetMap) and its terrain GLB are fetched from snowline by
+	location id (`?locationId=`, or the field below the title) and swapped in place when it
+	changes; without an id, the default location comes from the app's own `static/diorama`
+	files. A location without a GLB has its terrain built from elevation tiles. Runs, roads
+	and water are draped on the snow, with lifts, trees, buildings and labels from
+	`@liquidx/diorama` standing on it.
 -->
 <script lang="ts">
 	import type { Feature, FeatureCollection, Polygon } from 'geojson';
@@ -53,43 +55,52 @@
 	let loading = $state(false);
 	let message = $state('');
 
-	/** Each request is a new object, so submitting the same id again after a failure retries it. */
-	let request = $state.raw({ id: untrack(() => data.locationId) });
+	/**
+	 * Each request is a new object, so submitting the same id again after a failure retries it.
+	 * `local` reads the app's own files instead of snowline: only for the default location,
+	 * when the URL names none.
+	 */
+	let request = $state.raw(untrack(() => ({ id: data.locationId, local: data.local })));
+	const local = $derived(location !== null && request.local);
 
 	/** Switch locations: from the field, or from the URL changing under us. */
-	function go(id: string) {
+	function go(id: string, local = false) {
 		id = id.trim();
-		if (!id || (id === locationId && (loading || location))) return;
+		if (!id || (id === locationId && local === request.local && (loading || location))) return;
 		if (!isLocationId(id)) {
 			message = `"${id}" is not a location id: use letters, digits, - and _`;
 			return;
 		}
 		locationId = id;
-		request = { id };
+		request = { id, local };
 	}
 	// Back/forward, or a link to another location.
 	$effect(() => {
-		const fromUrl = data.locationId;
+		const { locationId: fromUrl, local } = data;
 		untrack(() => {
 			draft = fromUrl;
-			go(fromUrl);
+			go(fromUrl, local);
 		});
 	});
 
-	// Fetch the features, woods and GLB whenever the id changes, dropping a fetch that is overtaken.
+	// Fetch the features, scene and GLB whenever the id changes, dropping a fetch that is overtaken.
 	$effect(() => {
-		const { id } = request;
+		const { id, local } = request;
 		const controller = new AbortController();
 		loading = true;
 		message = '';
 		location = null;
-		fetchLocation(id, { signal: controller.signal }).then(
+		fetchLocation(id, {
+			signal: controller.signal,
+			...(local ? { base: asset('/diorama/') } : {})
+		}).then(
 			(next) => {
 				if (controller.signal.aborted) return;
 				location = next;
 				loading = false;
 				const url = new URL(window.location.href);
-				if (url.searchParams.get('locationId') !== id) {
+				// A URL without an id means the local files; it only gets one once snowline is read.
+				if (!local && url.searchParams.get('locationId') !== id) {
 					url.searchParams.set('locationId', id);
 					// eslint-disable-next-line svelte/no-navigation-without-resolve -- same page, query only
 					replaceState(url, {});
@@ -106,14 +117,24 @@
 
 	const EMPTY: FeatureCollection = { type: 'FeatureCollection', features: [] };
 	const features = $derived<LocationFeatures>(location?.features ?? EMPTY);
-	const woods = $derived<FeatureCollection>(location?.woods ?? EMPTY);
+	const scene = $derived<FeatureCollection>(location?.scene ?? EMPTY);
 	const title = $derived(location?.features.metadata?.name ?? locationId);
 
 	const kind = (k: string) => (f: Feature) => f.properties?.kind === k;
 	const isRun = kind('runSegment');
 	const isLift = kind('lift');
+	// The scene, by what `pnpm diorama-scene` found.
+	const isWood = kind('wood');
+	const isWater = kind('water');
+	const isWaterway = kind('waterway');
+	const isBuilding = kind('building');
+	const isRoad = kind('road');
+	const isCarpark = kind('carpark');
+	const woods = $derived<FeatureCollection>({
+		type: 'FeatureCollection',
+		features: scene.features.filter(isWood)
+	});
 	const isGondola = (f: Feature) => f.properties?.liftType === 'gondola';
-	const find = (k: string) => features.features.find(kind(k));
 	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
 	/** Metres a second: from the ride time where the lift has one, else typical for its kind. */
 	function liftSpeed(f: Feature) {
@@ -131,34 +152,63 @@
 	const RIDING_SPEED: Record<string, number> = { easy: 8, intermediate: 11, advanced: 14 };
 	const ridingSpeed = (f: Feature) => RIDING_SPEED[f.properties?.difficulty] ?? 10;
 
-	/**
-	 * Stand-in hotel footprints beside the base, as the features have no buildings: rectangles
-	 * `[east, north, width, depth, height]` in metres from the base point.
-	 */
-	const hotels = $derived.by((): Feature<Polygon>[] => {
-		const base = find('locationBase');
-		if (base?.geometry.type !== 'Point') return [];
-		const [lon, lat] = base.geometry.coordinates;
-		const perLon = 111_320 * Math.cos((lat * Math.PI) / 180);
-		return [
-			[160, 60, 70, 26, 38],
-			[250, 20, 26, 60, 52],
-			[150, -30, 50, 22, 24]
-		].map(([east, north, width, depth, height]) => {
-			const corner = (dx: number, dy: number) => [
-				lon + (east + dx * width) / perLon,
-				lat + (north + dy * depth) / 111_320
-			];
-			return {
-				type: 'Feature',
-				properties: { height },
-				geometry: {
-					type: 'Polygon',
-					coordinates: [[corner(0, 0), corner(1, 0), corner(1, 1), corner(0, 1), corner(0, 0)]]
-				}
-			};
-		});
-	});
+	/** Metres a storey, for buildings that only have a storey count. */
+	const STOREY = 3.2;
+	/** Wall heights in metres by building type, for the many with neither height nor storeys. */
+	const BUILDING_HEIGHT: Record<string, number> = { hotel: 16, commercial: 8, retail: 6 };
+	function buildingHeight(f: Feature) {
+		const { height, levels, buildingType } = f.properties ?? {};
+		return height ?? (levels ? levels * STOREY : (BUILDING_HEIGHT[buildingType] ?? 6));
+	}
+
+	/** Water on the snow is a hazard off the runs: an icy pale blue, unlike anything else on it. */
+	const WATER = { fill: '#d0ebff', stroke: '#8fcbf2' };
+	function waterPaint(f: Feature) {
+		const { kind, waterType, intermittent } = f.properties ?? {};
+		const dash = intermittent ? [6, 4] : undefined;
+		if (kind === 'water') return { fill: WATER.fill, stroke: WATER.stroke, width: 1, dash };
+		return { stroke: WATER.stroke, width: waterType === 'river' ? 2.5 : 1.5, dash };
+	}
+
+	/** Road widths by Overture class; the rest (service roads, tracks) are narrow. */
+	const ROAD_WIDTH: Record<string, number> = {
+		motorway: 3,
+		trunk: 3,
+		primary: 3,
+		secondary: 2.2,
+		tertiary: 2.2,
+		residential: 1.6,
+		unclassified: 1.6,
+		living_street: 1.6
+	};
+	/** Roads are a very light grey, so that they are never taken for runs. */
+	const ROAD_STROKE = '#c6cbd2';
+	function roadPaint(f: Feature) {
+		const roadClass = f.properties?.roadClass;
+		return {
+			stroke: ROAD_STROKE,
+			width: ROAD_WIDTH[roadClass] ?? 1.1,
+			dash: roadClass === 'track' ? [4, 3] : undefined
+		};
+	}
+	const CARPARK_PAINT = { fill: '#dde1e6', stroke: ROAD_STROKE, width: 0.8 };
+
+	/** The scene's lines and footprints the trees keep clear of, with the runs and lifts. */
+	const inTheWay = $derived([
+		...features.features.filter((f) => isRun(f) || isLift(f)),
+		...scene.features.filter((f) => !isWood(f))
+	]);
+	/** How far the trees stay from each, in metres: wider of the pistes than of everything else. */
+	const TREE_CLEARANCE: Record<string, number> = {
+		runSegment: 10,
+		lift: 10,
+		road: 5,
+		building: 3,
+		carpark: 3,
+		water: 4,
+		waterway: 4
+	};
+	const treeClearance = (f: Feature) => TREE_CLEARANCE[f.properties?.kind] ?? 10;
 
 	/** Depth of the base below the lowest ground, as a fraction of the radius. */
 	const BASE_DEPTH = 0.2;
@@ -175,6 +225,9 @@
 	let liftsMoving = $state(true);
 	let riders = $state(true);
 	let trees = $state<'none' | 'woods' | 'all'>('woods');
+	let showBuildings = $state(true);
+	let showRoads = $state(true);
+	let showWater = $state(true);
 	let showLabels = $state(true);
 	let sunAzimuth = $state(231);
 	let sunElevation = $state(48);
@@ -182,7 +235,7 @@
 	let backgroundGradient = $state(0.5);
 	let autoRotate = $state(true);
 
-	// The circle around the runs and lifts, which `pnpm diorama-woods` fits its woods to.
+	// The circle around the runs and lifts, which `pnpm diorama-scene` fits its scene to.
 	const circle = $derived.by(() => {
 		const points = shapesOf(features)
 			.filter((s) => isRun(s.feature) || isLift(s.feature))
@@ -274,9 +327,10 @@
 		{
 			name: 'openskidata',
 			by: 'openskidata.org · © openstreetmap contributors, odbl',
-			use: 'ski runs, lifts and woodland',
+			use: 'ski runs and lifts',
 			url: 'https://openskidata.org/'
-		}
+		},
+		CREDITS.overture
 	];
 </script>
 
@@ -289,8 +343,9 @@
 		{#if location}<span>{title}</span>{/if}
 	</div>
 	<p>
-		A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> but with moving
-		ski lifts, life-sized snowboards and trees. Zoom in to find them.
+		A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> with moving ski lifts, life-sized
+		snowboarders and trees, and the buildings, roads, car parks and water around the resort as OpenStreetMap
+		has them. Zoom in to find them.
 	</p>
 	<div class="location">
 		<PromptField
@@ -300,10 +355,14 @@
 			aria-label="location id"
 			onsubmit={go}
 		/>
-		{#if location?.missing.length}
+		{#if local || location?.missing.length}
 			<div class="note">
-				no {location.missing.map((m) => (m === 'glb' ? 'terrain glb' : m)).join(' or ')} for
-				{locationId}{#if location.missing.includes('glb')}: terrain built from elevation tiles{/if}
+				{#if local}from the app's own files{/if}{#if local && location?.missing.length};
+				{/if}
+				{#if location?.missing.length}
+					no {location.missing.map((m) => (m === 'glb' ? 'terrain glb' : m)).join(' or ')} for
+					{locationId}{#if location.missing.includes('glb')}: terrain built from elevation tiles{/if}
+				{/if}
 			</div>
 		{/if}
 	</div>
@@ -329,19 +388,29 @@
 			onerror={(e) => (message = e instanceof Error ? e.message : String(e))}
 		>
 			<Compass sun />
+			{#if showRoads}
+				<Drape data={scene} filter={isRoad} paint={roadPaint} />
+			{/if}
+			{#if showBuildings}
+				<Drape data={scene} filter={isCarpark} paint={CARPARK_PAINT} />
+			{/if}
 			<Drape
 				data={features}
 				filter={isRun}
 				paint={(f) => ({ stroke: DIFFICULTY[f.properties?.difficulty] ?? '#868e96', width: 3 })}
 			/>
+			{#if showWater}
+				<!-- Over the contour lines: a hazard should never be hidden by them. -->
+				<Drape data={scene} filter={(f) => isWater(f) || isWaterway(f)} paint={waterPaint} above />
+			{/if}
 			{#if riders}
 				<Riders data={features} filter={isRun} every={90} speed={ridingSpeed} />
 			{/if}
 			{#if trees !== 'none'}
 				<Trees
 					data={trees === 'all' ? (everywhere ?? woods) : woods}
-					avoid={[...features.features.filter((f) => isRun(f) || isLift(f)), ...hotels]}
-					clearance={30}
+					avoid={inTheWay}
+					clearance={treeClearance}
 					density={6000}
 					height={16}
 					limit={120_000}
@@ -357,8 +426,9 @@
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isGondola(f) ? '#f08c00' : '#e03131')}
 			/>
-			<Building data={features} filter={kind('locationBase')} footprint={[60, 24]} height={14} />
-			<Building data={hotels} height={(f) => f.properties?.height} roofColor="#5c6670" />
+			{#if showBuildings}
+				<Building data={scene} filter={isBuilding} height={buildingHeight} roofColor="#5c6670" />
+			{/if}
 			<Model
 				src={asset('/diorama/summit-hut.glb')}
 				data={features}
@@ -451,6 +521,9 @@
 		/>
 		<Toggle label="moving lifts" bind:checked={liftsMoving} />
 		<Toggle label="snowboarders" bind:checked={riders} />
+		<Toggle label="buildings" bind:checked={showBuildings} />
+		<Toggle label="roads" bind:checked={showRoads} />
+		<Toggle label="water" bind:checked={showWater} />
 		<Toggle label="labels" bind:checked={showLabels} />
 		<Toggle label="auto-rotate" bind:checked={autoRotate} />
 	</div>

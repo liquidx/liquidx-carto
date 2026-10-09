@@ -11,16 +11,23 @@ export const ssr = false;
 export const load: PageLoad = async ({ fetch }) => {
 	const tool = findTool('snowboard-sim');
 	if (!tool) error(404, 'not found');
-	const [features, woods] = await Promise.all([
+	const [features, scene] = await Promise.all([
 		fetch(asset('/diorama/appi-kogen-ski-features.geojson')).then((r) => r.json()),
-		// Wooded areas from OpenStreetMap, written by `pnpm diorama-woods build`; optional.
-		fetch(asset('/diorama/appi-kogen-woods.geojson')).then((r) => (r.ok ? r.json() : null))
+		// The scene from OpenStreetMap, written by `pnpm diorama-scene build`; optional.
+		fetch(asset('/diorama/appi-kogen-scene.geojson')).then((r) =>
+			r.ok ? (r.json() as Promise<FeatureCollection>) : null
+		)
 	]);
+	// The sim only plants trees, so it keeps the scene's woods.
+	const woods: FeatureCollection | null = scene && {
+		type: 'FeatureCollection',
+		features: scene.features.filter((f) => f.properties?.kind === 'wood')
+	};
 	return {
 		tool,
 		// Fills the viewport below the header; the crumb names the page.
 		fullBleed: true,
 		features: features as FeaturesFile,
-		woods: woods as FeatureCollection | null
+		woods
 	};
 };

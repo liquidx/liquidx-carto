@@ -54,8 +54,15 @@
 
 		const owned: { dispose(): void }[] = [];
 		const keep = <T extends { dispose(): void }>(item: T) => (owned.push(item), item);
-		const paint = (c: THREE.ColorRepresentation) =>
-			keep(new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }));
+		// One material per colour, however many buildings share it.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this run
+		const paints = new Map<THREE.ColorRepresentation, THREE.MeshStandardMaterial>();
+		const paint = (c: THREE.ColorRepresentation) => {
+			let m = paints.get(c);
+			if (!m)
+				paints.set(c, (m = keep(new THREE.MeshStandardMaterial({ color: c, roughness: 0.85 }))));
+			return m;
+		};
 
 		// For buildings at points: unit walls standing on the ground, and a unit roof with its
 		// ridge along x.

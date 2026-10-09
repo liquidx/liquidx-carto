@@ -18,7 +18,7 @@
 		"odpt": "node --env-file-if-exists=.env tools/odpt.ts",
 		"ekispert": "node --env-file-if-exists=.env tools/ekispert.ts",
 		"ev-jp": "node tools/ev-jp.ts",
-		"diorama-woods": "node tools/diorama-woods.ts",
+		"diorama-scene": "node tools/diorama-scene.ts",
 		"japan-train-lines": "node tools/japan-train-lines.ts"
 	},
 	"devDependencies": {
