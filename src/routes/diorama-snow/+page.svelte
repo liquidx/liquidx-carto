@@ -1,6 +1,6 @@
 <!--
 	A ski resort on a diorama. The resort's runs, lifts, woods and terrain GLB are fetched from
-	content.snowline.jp by location id (`?locationId=`, or the field below the title) and swapped
+	snowline by location id (`?locationId=`, or the field below the title) and swapped
 	in place when it changes; a location without a GLB has its terrain built from elevation tiles.
 	Runs are draped on the snow, with placeholder lifts, trees, buildings and labels from
 	`@liquidx/diorama` on it.
@@ -284,10 +284,8 @@
 		{#if location}<span>{title}</span>{/if}
 	</div>
 	<p>
-		A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> but with animated objects
-		like ski lifts and snowboards along with a layer of trees placed in areas defined by a GeoJSON
-		file. Zoom in to find them. The runs, woods and terrain are fetched by location id from
-		<code>content.snowline.jp/terrain</code>; type another id to switch.
+		A variation of the <a href={resolve('/diorama')}>Mountain Diorama</a> but with moving
+		ski lifts, life-sized snowboards and trees. Zoom in to find them.
 	</p>
 	<div class="location">
 		<PromptField
