@@ -215,6 +215,11 @@ async function build(source: string, target = scenePathFor(source)) {
 	}
 	// The same circle as the page: around the runs, lifts and resort area.
 	const circle = fitCircle(points);
+	// A resort known only as a single point fits a circle of no size: nothing to read either.
+	if (!circle.radius) {
+		console.log(`only a point for the resort in ${source}, skipping`);
+		return;
+	}
 	const box = circleBounds(circle);
 
 	const perLat = 111_320;
@@ -251,6 +256,8 @@ async function build(source: string, target = scenePathFor(source)) {
 				// come back as a line; each becomes its own feature.
 				const { rings, lines } = parts(geometry);
 				for (const [outer, ...holes] of rings) {
+					// A shape that only touches the square's edge clips to an empty polygon: no rings.
+					if (!outer) continue;
 					const ring = tidy(outer, true, layer.simplify);
 					if (!ring.length) continue;
 					const inner = holes.map((h) => tidy(h, true, layer.simplify)).filter((h) => h.length);
