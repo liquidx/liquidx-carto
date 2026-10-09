@@ -1,7 +1,7 @@
 /**
  * A diorama GLB for a GeoJSON file, with no browser. Run `pnpm diorama-glb help`.
  *
- * Fits a circle around the features (the runs and lifts, where the file has them, as the
+ * Fits a circle around the features (the runs, lifts and resort area, where the file has them, as the
  * /diorama-snow page does), fetches terrain tiles for it and builds and exports the model with
  * the same code as the /diorama page, so the file is what the page's "export glb" would give
  * for that circle and settings.
@@ -11,15 +11,13 @@ import { dirname, join } from 'node:path';
 import type { FeatureCollection } from 'geojson';
 import { PNG } from 'pngjs';
 import { findProvider, PROVIDERS, setImageDecoder } from '../src/lib/contour/terrain-api.ts';
-import { fitCircle } from '../src/lib/diorama/fit.ts';
+import { fitCircle, fitPoints } from '../src/lib/diorama/fit.ts';
 import { circleSampler, MAX_RINGS } from '../src/lib/diorama/sampler.ts';
 import { buildDiorama } from '../packages/diorama/src/build.ts';
 import { dioramaFileName, exportDioramaData } from '../packages/diorama/src/format.ts';
 import { shapesOf } from '../packages/diorama/src/geojson.ts';
 
 const OUT_DIR = join('data', 'diorama');
-/** Feature kinds the circle is fitted to when the file has any; otherwise every feature. */
-const FIT_KINDS = ['runSegment', 'lift'];
 
 /** The /diorama page's defaults. */
 const DEFAULTS = {
@@ -65,13 +63,13 @@ function parse(args: string[]): { source?: string; options: Options } {
 
 async function build(source: string, options: Options) {
 	const collection = JSON.parse(await readFile(source, 'utf8')) as FeatureCollection;
-	const shapes = shapesOf(collection);
-	const fitted = shapes.filter((s) => FIT_KINDS.includes(s.feature.properties?.kind));
-	const points = (fitted.length ? fitted : shapes).flatMap((s) => s.coords.flat());
+	// The runs, lifts and resort area when the file has any; otherwise every feature.
+	const fitted = fitPoints(collection);
+	const points = fitted.length ? fitted : shapesOf(collection).flatMap((s) => s.coords.flat());
 	if (!points.length) throw new Error(`no geometry in ${source}`);
 	const circle = fitCircle(points);
 	console.log(
-		`${fitted.length ? 'runs and lifts' : 'features'}: ${circle.lat.toFixed(4)}, ${circle.lon.toFixed(4)}, radius ${Math.round(circle.radius)} m`
+		`${fitted.length ? 'runs, lifts and resort area' : 'features'}: ${circle.lat.toFixed(4)}, ${circle.lon.toFixed(4)}, radius ${Math.round(circle.radius)} m`
 	);
 
 	const provider = findProvider(options.provider);
@@ -109,7 +107,7 @@ if (command === 'build' && source) {
 } else {
 	console.log(`usage: pnpm diorama-glb build features.geojson [options]
 
-  build   fit a circle around the features (the runs and lifts when there are any), fetch
+  build   fit a circle around the features (the runs, lifts and resort area when there are any), fetch
           terrain tiles and export the diorama as ${join(OUT_DIR, 'diorama_<lat>_<lon>_<radius>m.glb')}
 
 options, with the /diorama page's defaults:

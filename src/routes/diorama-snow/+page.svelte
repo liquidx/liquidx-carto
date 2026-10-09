@@ -25,7 +25,6 @@
 		Riders,
 		Trees,
 		buildDiorama,
-		shapesOf,
 		terrainStyles,
 		type DioramaData,
 		type TerrainPreset,
@@ -38,7 +37,7 @@
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { PROVIDERS } from '$lib/contour/terrain-api';
 	import { CREDITS, type Credit } from '$lib/credits';
-	import { circleBounds, fitCircle } from '$lib/diorama/fit';
+	import { circleBounds, fitCircle, fitPoints } from '$lib/diorama/fit';
 	import {
 		fetchLocation,
 		isLocationId,
@@ -254,11 +253,9 @@
 	let backgroundGradient = $state(0.5);
 	let autoRotate = $state(true);
 
-	// The circle around the runs and lifts, which `pnpm diorama-scene` fits its scene to.
+	// The circle around the runs, lifts and resort area, which `pnpm diorama-scene` fits its scene to.
 	const circle = $derived.by(() => {
-		const points = shapesOf(features)
-			.filter((s) => isRun(s.feature) || isLift(s.feature))
-			.flatMap((s) => s.coords.flat());
+		const points = fitPoints(features);
 		return points.length ? fitCircle(points) : null;
 	});
 	/**
@@ -310,7 +307,7 @@
 			return;
 		}
 		if (!c) {
-			message = 'The features have no runs or lifts to fit the terrain to.';
+			message = 'The features have no runs, lifts or resort area to fit the terrain to.';
 			return;
 		}
 		// Fetch elevation for the circle and build the mesh from it.

@@ -1,4 +1,4 @@
-import type { Position } from 'geojson';
+import type { FeatureCollection, Geometry, Position } from 'geojson';
 
 const M_PER_DEG_LAT = 111_320;
 
@@ -7,6 +7,30 @@ export interface FitCircle {
 	lon: number;
 	lat: number;
 	radius: number;
+}
+
+function positionsOf(g: Geometry | null): Position[] {
+	if (!g) return [];
+	if (g.type === 'Point') return [g.coordinates];
+	if (g.type === 'MultiPoint' || g.type === 'LineString') return g.coordinates;
+	if (g.type === 'MultiLineString' || g.type === 'Polygon') return g.coordinates.flat();
+	if (g.type === 'MultiPolygon') return g.coordinates.flat(2);
+	return g.geometries.flatMap(positionsOf);
+}
+
+/**
+ * The positions of a ski features file to fit the circle around: its runs and lifts, and the
+ * outline of the resort so that the diorama holds all of it. That is its `skiArea`, or its
+ * `locationArea` when it has no ski area.
+ */
+export function fitPoints(features: FeatureCollection): Position[] {
+	const kind = (k: string) => features.features.filter((f) => f.properties?.kind === k);
+	const skiArea = kind('skiArea');
+	return [
+		...kind('runSegment'),
+		...kind('lift'),
+		...(skiArea.length ? skiArea : kind('locationArea'))
+	].flatMap((f) => positionsOf(f.geometry));
 }
 
 /**
