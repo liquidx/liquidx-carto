@@ -3,3 +3,7 @@ packages:
 
 allowBuilds:
   esbuild: true
+
+overrides:
+  # @sveltejs/kit 2.x pins cookie ^0.6.0 (GHSA-pxg6-pf52-xh8x); 0.7 is API-compatible
+  '@sveltejs/kit>cookie': ^0.7.2
