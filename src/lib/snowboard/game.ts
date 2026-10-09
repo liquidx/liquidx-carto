@@ -40,6 +40,8 @@ export interface GameOptions {
 	chairModels?: Record<number, string>;
 	/** URL of the glTF or GLB to hang as the gondola cabins; a plain box without. */
 	cabinModel?: string;
+	/** URL of the glTF or GLB to hang as the two cabins of a cable car; a plain box without. */
+	ropewayModel?: string;
 }
 
 export interface LoadProgress {
@@ -121,10 +123,13 @@ export async function createGame(
 			chairs[+seats] = (await new GLTFLoader().loadAsync(url)).scene;
 		})
 	);
-	const cabin = options.cabinModel
-		? (await new GLTFLoader().loadAsync(options.cabinModel)).scene
-		: undefined;
-	const lifts = buildLifts(resort.lifts, terrain, chairs, cabin);
+	const load = async (url?: string) =>
+		url ? (await new GLTFLoader().loadAsync(url)).scene : undefined;
+	const [cabin, ropeway] = await Promise.all([
+		load(options.cabinModel),
+		load(options.ropewayModel)
+	]);
+	const lifts = buildLifts(resort.lifts, terrain, chairs, { gondola: cabin, cableCar: ropeway });
 
 	onProgress({ stage: 'planting the forest' });
 	await tick();

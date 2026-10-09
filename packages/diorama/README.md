@@ -216,7 +216,8 @@ Props typed as `PerFeature` (colours, sizes, headings, the carrier props, the `c
 `Lift` hangs a `carrier` (`'chair'` or `'cabin'`, `carrierSize` metres wide: a chair seats one
 a 0.55 m, a cabin is a little longer than wide) every `carrierEvery` metres round the loop, up
 the right of the line and back down the left. Give it a `speed` in metres a second and they
-travel; at 0, the default, they stand still.
+travel; at 0, the default, they stand still. With `shuttle` a line is an aerial tramway
+instead: two carriers, one on each side, going up and down their own side and passing halfway.
 
 To hang your own carrier, give `carrierModel` the URL of a glTF or GLB (or a three.js object):
 in metres, the cable through its origin, facing +z. It keeps its own materials, so

@@ -28,7 +28,8 @@ export interface Run {
 export interface Lift {
 	id: string;
 	name: string;
-	kind: 'gondola' | 'chair';
+	/** A `cableCar` is an aerial tramway: two big cabins shuttling, one on each side. */
+	kind: 'gondola' | 'chair' | 'cableCar';
 	seats: number;
 	/** Whether its chairs have a bubble hood. */
 	bubble: boolean;
@@ -116,7 +117,8 @@ export function parseResort(features: FeaturesFile, frame: LocalFrame): Resort {
 			lifts.push({
 				id: p.id,
 				name: p.nameEn ?? p.name ?? 'Lift',
-				kind: p.liftType === 'gondola' ? 'gondola' : 'chair',
+				kind:
+					p.liftType === 'gondola' ? 'gondola' : p.liftType === 'cable_car' ? 'cableCar' : 'chair',
 				seats: typeof p.occupancy === 'number' ? p.occupancy : 4,
 				bubble: p.bubble === true,
 				path: g.coordinates.map(frame.toWorld)

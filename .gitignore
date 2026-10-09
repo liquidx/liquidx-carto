@@ -33,3 +33,6 @@ test-results
 # Built packages
 packages/*/dist
 packages/*/.svelte-kit
+
+# Blender backups
+*.blend1

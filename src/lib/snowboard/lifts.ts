@@ -8,11 +8,15 @@ import type { Lift } from './resort';
 import type { Terrain } from './terrain';
 
 const TOWER_EVERY = 90;
-const CABLE_HEIGHT = 11;
+/** Height of the cable at each tower; a cable car's cabin hangs far lower than a chair. */
+const CABLE_HEIGHT = { gondola: 11, chair: 11, cableCar: 17 };
 const GAUGE = 5;
-/** Carrier spacing and speed, metres and metres a second. */
+/**
+ * Carrier spacing and speed, metres and metres a second. A cable car has no spacing: just two
+ * cabins, one on each side, going up and down their own side in turn.
+ */
 const CARRIER_EVERY = { gondola: 70, chair: 26 };
-export const LIFT_SPEED = { gondola: 6, chair: 3.2 };
+export const LIFT_SPEED = { gondola: 6, chair: 3.2, cableCar: 8 };
 /**
  * Where a rider's feet go on each carrier, below the cable, ahead of its hanger and across
  * from its middle: on a chair the seat top is 2.5 m down and the seated figure's feet hang
@@ -20,12 +24,18 @@ export const LIFT_SPEED = { gondola: 6, chair: 3.2 };
  */
 const SEAT = {
 	chair: { drop: 3.09, forward: 0.34, across: 0 },
-	gondola: { drop: 3.3, forward: 0, across: 0 }
+	gondola: { drop: 3.3, forward: 0, across: 0 },
+	cableCar: { drop: 3.3, forward: 0, across: 0 }
 };
-/** The same on a chair model: its seat top is 2.74 m down, and the rider sits right of the middle. */
-const MODEL_SEAT = { drop: 3.33, forward: 0.37, across: 0.28 };
-/** And in a cabin model, whose floor is 3.97 m down. */
-const MODEL_FLOOR = { drop: 3.97, forward: 0, across: 0 };
+/**
+ * The same on the models: a chair's seat top is 2.74 m down and the rider sits right of the
+ * middle; the floor of a gondola cabin is 3.97 m down and of a cable car 5.88 m.
+ */
+const MODEL_SEAT = {
+	chair: { drop: 3.33, forward: 0.37, across: 0.28 },
+	gondola: { drop: 3.97, forward: 0, across: 0 },
+	cableCar: { drop: 5.88, forward: 0, across: 0 }
+};
 
 export interface LiftLine {
 	lift: Lift;
@@ -67,14 +77,15 @@ function alongPath(path: THREE.Vector3[], lengths: number[], d: number, target: 
 /**
  * `chairModels` are hung as the chairs in place of the plain bench, by how many the lift's
  * chairs seat and in their own materials: in metres, the cable through the origin, facing +z.
- * The `Hood` node of one is left off the lifts without a bubble. `cabinModel` is hung as the
- * gondola cabins in the same way. The lifts dispose of them with themselves.
+ * The `Hood` node of one is left off the lifts without a bubble. `cabinModels` are hung as
+ * the cabins of the gondolas and of the cable cars in the same way. The lifts dispose of
+ * them with themselves.
  */
 export function buildLifts(
 	lifts: Lift[],
 	terrain: Terrain,
 	chairModels: Record<number, THREE.Object3D> = {},
-	cabinModel?: THREE.Object3D
+	cabinModels: Partial<Record<'gondola' | 'cableCar', THREE.Object3D>> = {}
 ): Lifts {
 	const group = new THREE.Group();
 	const structure = new THREE.MeshStandardMaterial({
@@ -142,6 +153,8 @@ export function buildLifts(
 		line: LiftLine;
 		gap: number;
 		pace: number;
+		/** Two carriers half a loop apart that keep to their own side, instead of going round. */
+		shuttle: boolean;
 		travelled: number;
 		side: THREE.Vector3;
 		turns: [THREE.Quaternion, THREE.Quaternion];
@@ -168,7 +181,8 @@ export function buildLifts(
 			p.y = terrain.height(p.x, p.z);
 			feet.push(p);
 		}
-		const tops = feet.map((p) => p.clone().setY(p.y + CABLE_HEIGHT));
+		const cableHeight = CABLE_HEIGHT[lift.kind];
+		const tops = feet.map((p) => p.clone().setY(p.y + cableHeight));
 		const bearing = Math.atan2(
 			tops[tops.length - 1].x - tops[0].x,
 			tops[tops.length - 1].z - tops[0].z
@@ -182,7 +196,7 @@ export function buildLifts(
 				// A shed over the end of the line: a roof on legs, open at the sides.
 				const roof = new THREE.Vector3(GAUGE + 5, 0.6, 12);
 				boxes.push(
-					new THREE.Matrix4().compose(foot.clone().setY(foot.y + CABLE_HEIGHT + 1.6), heading, roof)
+					new THREE.Matrix4().compose(foot.clone().setY(foot.y + cableHeight + 1.6), heading, roof)
 				);
 				for (const sx of [-1, 1])
 					for (const sz of [-1, 1]) {
@@ -194,7 +208,7 @@ export function buildLifts(
 								(sz * roof.z) / 2
 							);
 						leg.y = terrain.height(leg.x, leg.z) - 1;
-						rod(leg, leg.clone().setY(foot.y + CABLE_HEIGHT + 1.6), 0.6);
+						rod(leg, leg.clone().setY(foot.y + cableHeight + 1.6), 0.6);
 					}
 			} else {
 				rod(foot.clone().setY(foot.y - 1), tops[i], 0.9);
@@ -216,8 +230,8 @@ export function buildLifts(
 		const total = lengths[lengths.length - 1];
 		// Assigned below; the line's methods only run once it exists.
 		let fleet!: Fleet;
-		const model = lift.kind === 'chair' ? chairModels[lift.seats] : cabinModel;
-		const seat = !model ? SEAT[lift.kind] : lift.kind === 'chair' ? MODEL_SEAT : MODEL_FLOOR;
+		const model = lift.kind === 'chair' ? chairModels[lift.seats] : cabinModels[lift.kind];
+		const seat = (model ? MODEL_SEAT : SEAT)[lift.kind];
 		const forward = new THREE.Vector3(Math.sin(bearing), 0, Math.cos(bearing));
 		const line: LiftLine = {
 			lift,
@@ -235,7 +249,11 @@ export function buildLifts(
 			seat: (d, target) =>
 				line
 					.at(d, seat.drop, target)
-					.addScaledVector(side, GAUGE / 2 + seat.across)
+					// The cabin of a shuttle that is going up is on the right, then on the left.
+					.addScaledVector(
+						side,
+						(fleet.shuttle && fleet.travelled >= total ? -1 : 1) * (GAUGE / 2 + seat.across)
+					)
 					.addScaledVector(forward, seat.forward),
 			nextCarrier: () => {
 				let best = Infinity;
@@ -248,8 +266,10 @@ export function buildLifts(
 		};
 		lines.push(line);
 
-		const gap = CARRIER_EVERY[lift.kind];
-		const count = Math.max(2, Math.round((total * 2) / gap));
+		const count =
+			lift.kind === 'cableCar'
+				? 2
+				: Math.max(2, Math.round((total * 2) / CARRIER_EVERY[lift.kind]));
 		let meshes: THREE.InstancedMesh[];
 		if (model) {
 			const key = `${lift.kind}:${lift.seats}:${lift.bubble}`;
@@ -259,11 +279,11 @@ export function buildLifts(
 				.map(({ geometry, material }) => new THREE.InstancedMesh(geometry, material, count));
 		} else {
 			const mesh = new THREE.InstancedMesh(
-				lift.kind === 'gondola' ? cabinShape : chairShape,
+				lift.kind === 'chair' ? chairShape : cabinShape,
 				carrierMaterial,
 				count
 			);
-			const colour = new THREE.Color(lift.kind === 'gondola' ? '#f08c00' : '#c92a2a');
+			const colour = new THREE.Color(lift.kind === 'chair' ? '#c92a2a' : '#f08c00');
 			for (let i = 0; i < count; i++) mesh.setColorAt(i, colour);
 			meshes = [mesh];
 		}
@@ -275,6 +295,7 @@ export function buildLifts(
 			line,
 			gap: (total * 2) / count,
 			pace: LIFT_SPEED[lift.kind],
+			shuttle: lift.kind === 'cableCar',
 			travelled: 0,
 			side,
 			turns: [
@@ -308,8 +329,10 @@ export function buildLifts(
 			const d = (fleet.travelled + i * gap) % loop;
 			const goingUp = d < line.total;
 			line.at(goingUp ? d : loop - d, 0, position);
-			position.addScaledVector(side, goingUp ? GAUGE / 2 : -GAUGE / 2);
-			matrix.compose(position, turns[goingUp ? 0 : 1], one);
+			// The first of a shuttle stays on the right and the second on the left.
+			const right = fleet.shuttle ? i === 0 : goingUp;
+			position.addScaledVector(side, right ? GAUGE / 2 : -GAUGE / 2);
+			matrix.compose(position, turns[right ? 0 : 1], one);
 			for (const mesh of meshes) mesh.setMatrixAt(i, matrix);
 		}
 		for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
@@ -331,7 +354,7 @@ export function buildLifts(
 			carrierMaterial.dispose();
 			cableMaterial.dispose();
 			for (const shapes of chairShapes.values()) for (const s of shapes) s.geometry.dispose();
-			for (const model of [...Object.values(chairModels), cabinModel])
+			for (const model of [...Object.values(chairModels), ...Object.values(cabinModels)])
 				model?.traverse((o) => {
 					const mesh = o as THREE.Mesh;
 					if (!mesh.isMesh) return;

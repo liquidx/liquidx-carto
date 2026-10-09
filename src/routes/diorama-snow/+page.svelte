@@ -135,10 +135,14 @@
 		features: scene.features.filter(isWood)
 	});
 	const isGondola = (f: Feature) => f.properties?.liftType === 'gondola';
+	/** An aerial tramway: two big cabins that shuttle up and down, one on each side. */
+	const isCableCar = (f: Feature) => f.properties?.liftType === 'cable_car';
+	const isCabin = (f: Feature) => isGondola(f) || isCableCar(f);
 	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
 	/** Width of a carrier in metres: a seat's worth each for a chair, a cabin by how many it holds. */
 	function carrierWidth(f: Feature) {
 		const n = seats(f);
+		if (isCableCar(f)) return 2.8;
 		if (!isGondola(f)) return n * 0.55 + 0.2;
 		return n >= 8 ? 2.4 : n >= 6 ? 2.1 : 1.8;
 	}
@@ -146,7 +150,7 @@
 	function liftSpeed(f: Feature) {
 		const { lengthMeters, durationSecs } = f.properties ?? {};
 		if (lengthMeters && durationSecs) return lengthMeters / durationSecs;
-		return isGondola(f) ? 5 : seats(f) >= 4 ? 4 : 2;
+		return isCableCar(f) ? 8 : isGondola(f) ? 5 : seats(f) >= 4 ? 4 : 2;
 	}
 
 	const DIFFICULTY: Record<string, string> = {
@@ -425,18 +429,21 @@
 			<Lift
 				data={features}
 				filter={isLift}
-				height={(f) => (isGondola(f) ? 14 : 9)}
-				carrier={(f) => (isGondola(f) ? 'cabin' : 'chair')}
+				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : 9)}
+				carrier={(f) => (isCabin(f) ? 'cabin' : 'chair')}
+				shuttle={isCableCar}
 				carrierEvery={(f) => (isGondola(f) ? 45 : seats(f) >= 4 ? 28 : 14)}
 				carrierSize={carrierWidth}
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
-				carrierColor={(f) => (isGondola(f) ? '#f08c00' : '#e03131')}
+				carrierColor={(f) => (isCabin(f) ? '#f08c00' : '#e03131')}
 				carrierModel={(f) =>
-					isGondola(f)
-						? asset('/diorama/gondola.glb')
-						: seats(f) === 2 || seats(f) === 4
-							? asset(`/diorama/chairlift-${seats(f)}.glb`)
-							: null}
+					isCableCar(f)
+						? asset('/diorama/ropeway.glb')
+						: isGondola(f)
+							? asset('/diorama/gondola.glb')
+							: seats(f) === 2 || seats(f) === 4
+								? asset(`/diorama/chairlift-${seats(f)}.glb`)
+								: null}
 				carrierParts={(f) => ({ Hood: f.properties?.bubble ? 0 : false })}
 			/>
 			{#if showBuildings}

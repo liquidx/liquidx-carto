@@ -50,6 +50,7 @@
 					4: asset('/diorama/chairlift-4.glb')
 				},
 				cabinModel: asset('/diorama/gondola.glb'),
+				ropewayModel: asset('/diorama/ropeway.glb'),
 				treeSpacing: coarse ? 18 : 14,
 				maxPixelRatio: coarse ? 1.5 : 2
 			},

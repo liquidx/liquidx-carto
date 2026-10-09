@@ -49,6 +49,12 @@
 		 * open, from 0 (closed) to 1, the `openRotationX` in its extras.
 		 */
 		carrierParts?: PerFeature<Record<string, number | boolean>>;
+		/**
+		 * An aerial tramway: just two carriers, one on each side, which keep to their own side
+		 * and go up and down it in turn, passing halfway. `carrierEvery` then only says whether
+		 * there are any.
+		 */
+		shuttle?: PerFeature<boolean>;
 		/** Speed of the carriers along the cable in metres a second, 0 to stand still. */
 		speed?: PerFeature<number>;
 	};
@@ -65,6 +71,7 @@
 		carrierColor = '#e03131',
 		carrierModel,
 		carrierParts = {},
+		shuttle = false,
 		speed = 0
 	}: Props = $props();
 
@@ -271,6 +278,7 @@
 			gap: number;
 			/** Model units a second. */
 			pace: number;
+			shuttle: boolean;
 			/** Sideways from the middle to the cable going up. */
 			side: THREE.Vector3;
 			/** Facing up the line, and back down it. */
@@ -337,7 +345,8 @@
 				lengths.push(lengths[i - 1] + tops[i].distanceTo(tops[i - 1]));
 			// Evenly round the whole loop: up one side and back down the other.
 			const loop = lengths[lengths.length - 1] * 2;
-			const count = Math.max(1, Math.round(loop / diorama.metres(spacing)));
+			const shuttling = perFeature(shuttle, feature);
+			const count = shuttling ? 2 : Math.max(1, Math.round(loop / diorama.metres(spacing)));
 			const source = perFeature(carrierModel, feature);
 			// Until a model has loaded, the built-in carrier stands in for it.
 			const model = typeof source === 'string' ? models[source] : source;
@@ -361,6 +370,7 @@
 				path: tops,
 				lengths,
 				gap: loop / count,
+				shuttle: shuttling,
 				pace: diorama.metres(perFeature(speed, feature)),
 				side,
 				turns: [heading, new THREE.Quaternion().setFromAxisAngle(up, bearing + Math.PI)],
@@ -381,8 +391,11 @@
 				travelled[n] = moved;
 				for (let i = 0; i < count; i++) {
 					let d = (i * fleet.gap + moved) % (length * 2);
-					const down = d > length;
+					let down = d > length;
 					if (down) d = length * 2 - d;
+					// The two of a shuttle are half a loop apart, so one is up when the other is
+					// down; each keeps its side and its facing instead of turning at the ends.
+					if (fleet.shuttle) down = i === 1;
 					let k = 1;
 					while (k < path.length - 1 && lengths[k] < d) k++;
 					const span = lengths[k] - lengths[k - 1] || 1;
