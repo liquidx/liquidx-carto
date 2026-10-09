@@ -21,7 +21,6 @@
 		Label,
 		Lift,
 		Marker,
-		Model,
 		Riders,
 		Trees,
 		buildDiorama,
@@ -463,13 +462,6 @@
 			{#if showBuildings}
 				<Building data={scene} filter={isBuilding} height={buildingHeight} roofColor="#5c6670" />
 			{/if}
-			<Model
-				src={asset('/diorama/summit-hut.glb')}
-				data={features}
-				filter={kind('locationPeak')}
-				size={25}
-				heading={200}
-			/>
 			<Marker data={features} filter={kind('locationPeak')} height={pinHeight} />
 			{#if showLabels}
 				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />
