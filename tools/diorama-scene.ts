@@ -208,7 +208,11 @@ function simplify(path: Path, perLon: number, perLat: number, closed: boolean): 
 async function build(source: string, target = scenePathFor(source)) {
 	const features = JSON.parse(await readFile(source, 'utf8')) as FeatureCollection;
 	const points = fitPoints(features);
-	if (!points.length) throw new Error(`no runs, lifts or resort area in ${source}`);
+	// Nothing to fit a circle around, so no square to read: leave the file without a scene.
+	if (!points.length) {
+		console.log(`no runs, lifts or resort area in ${source}, skipping`);
+		return;
+	}
 	// The same circle as the page: around the runs, lifts and resort area.
 	const circle = fitCircle(points);
 	const box = circleBounds(circle);
