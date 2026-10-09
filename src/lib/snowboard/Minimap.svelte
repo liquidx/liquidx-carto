@@ -116,7 +116,12 @@
 					limit={lite ? 15_000 : 40_000}
 				/>
 			{/if}
-			<Lift data={features} filter={isLift} carrierEvery={0} />
+			<!-- Magic carpets lie on the snow; they have no towers or cable to draw. -->
+			<Lift
+				data={features}
+				filter={(f) => isLift(f) && f.properties?.liftType !== 'magic_carpet'}
+				carrierEvery={0}
+			/>
 			{#if showLabels}
 				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />
 			{/if}

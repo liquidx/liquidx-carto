@@ -185,6 +185,7 @@ own.
 ```svelte
 <Diorama src="/models/appi.glb" terrain="snow" objectScale={4}>
 	<Trees data={skiArea} avoid={runs} clearance={30} />
+	<Carpet data={lifts} filter={(f) => f.properties?.liftType === 'magic_carpet'} speed={0.7} />
 	<Lift
 		data={lifts}
 		carrier={(f) => (f.properties?.liftType === 'gondola' ? 'cabin' : 'chair')}
@@ -202,6 +203,7 @@ own.
 | ---------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
 | `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `avoid`, `clearance` |
 | `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`       |
+| `Carpet`   | lines               | a magic carpet: a moving belt on the ground, railed    | `width`, `color`, `railColor`, `speed`                                    |
 | `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                             |
 | `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor` |
 | `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                       |

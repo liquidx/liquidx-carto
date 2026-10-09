@@ -14,6 +14,7 @@
 	import { asset, resolve } from '$app/paths';
 	import {
 		Building,
+		Carpet,
 		Compass,
 		Diorama,
 		Drape,
@@ -138,6 +139,10 @@
 	/** An aerial tramway: two big cabins that shuttle up and down, one on each side. */
 	const isCableCar = (f: Feature) => f.properties?.liftType === 'cable_car';
 	const isCabin = (f: Feature) => isGondola(f) || isCableCar(f);
+	/** A magic carpet is a belt on the snow, not a cable in the air. */
+	const isCarpet = (f: Feature) => f.properties?.liftType === 'magic_carpet';
+	const isAerial = (f: Feature) => isLift(f) && !isCarpet(f);
+	const isMagicCarpet = (f: Feature) => isLift(f) && isCarpet(f);
 	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
 	/** Width of a carrier in metres: a seat's worth each for a chair, a cabin by how many it holds. */
 	function carrierWidth(f: Feature) {
@@ -150,6 +155,7 @@
 	function liftSpeed(f: Feature) {
 		const { lengthMeters, durationSecs } = f.properties ?? {};
 		if (lengthMeters && durationSecs) return lengthMeters / durationSecs;
+		if (isCarpet(f)) return 0.7;
 		return isCableCar(f) ? 8 : isGondola(f) ? 5 : seats(f) >= 4 ? 4 : 2;
 	}
 
@@ -426,9 +432,14 @@
 					limit={120_000}
 				/>
 			{/if}
+			<Carpet
+				data={features}
+				filter={isMagicCarpet}
+				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
+			/>
 			<Lift
 				data={features}
-				filter={isLift}
+				filter={isAerial}
 				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : 9)}
 				carrier={(f) => (isCabin(f) ? 'cabin' : 'chair')}
 				shuttle={isCableCar}
