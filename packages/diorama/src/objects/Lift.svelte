@@ -28,13 +28,16 @@
 		height?: PerFeature<number>;
 		/** Colour of the towers, cable and stations. */
 		color?: PerFeature<THREE.ColorRepresentation>;
-		/** What hangs from the cable: open chairs or closed cabins. */
-		carrier?: PerFeature<'chair' | 'cabin'>;
+		/** Whether a station stands over each end of the line; without, a tower like the others. */
+		stations?: PerFeature<boolean>;
+		/** What hangs from the cable: open chairs or closed cabins, or the ball of a rope tow on it. */
+		carrier?: PerFeature<'chair' | 'cabin' | 'ball'>;
 		/** Distance between carriers in metres, 0 for none. */
 		carrierEvery?: PerFeature<number>;
 		/**
 		 * Width of a carrier in metres across the line. A chair gets a seat every 0.55 m of it,
-		 * so 1.3 is a double and 2.4 a quad; a cabin is a little longer than it is wide.
+		 * so 1.3 is a double and 2.4 a quad; a cabin is a little longer than it is wide; a ball is
+		 * this wide.
 		 */
 		carrierSize?: PerFeature<number>;
 		carrierColor?: PerFeature<THREE.ColorRepresentation>;
@@ -65,6 +68,7 @@
 		towerEvery = 80,
 		height = 10,
 		color = '#30343b',
+		stations = true,
 		carrier = 'chair',
 		carrierEvery = 15,
 		carrierSize = 2.2,
@@ -213,12 +217,16 @@
 					slab(width, 1.75, length, -2.025),
 					skirt
 				];
+			},
+			/** A ball on the rope to hold on to. */
+			ball(width: number) {
+				return [new THREE.SphereGeometry(width / 2, 12, 8)];
 			}
 		};
 		// Local to this run, never read reactively.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
 		const carriers = new Map<string, THREE.BufferGeometry>();
-		const carrierGeometry = (kind: 'chair' | 'cabin', width: number) => {
+		const carrierGeometry = (kind: keyof typeof carrierShapes, width: number) => {
 			const key = `${kind}:${width.toFixed(2)}`;
 			let geometry = carriers.get(key);
 			if (!geometry) {
@@ -308,7 +316,7 @@
 
 			feet.forEach((foot, i) => {
 				const end = i === 0 || i === feet.length - 1;
-				if (end) {
+				if (end && perFeature(stations, feature)) {
 					// A shed over the end of the line, set into the slope, that the carriers turn in.
 					const sunk = unit * 2.5;
 					const size = new THREE.Vector3(
@@ -318,8 +326,10 @@
 					);
 					block(foot.clone().setY(foot.y + size.y / 2 - sunk), size, heading, structure);
 				} else {
-					rod(foot.clone().setY(foot.y - unit), tops[i], unit * 0.8, structure);
-					const arm = new THREE.Vector3(unit * (GAUGE + 1), unit * 0.5, unit * 0.5);
+					// A low line, such as a rope tow, stands on posts in proportion.
+					const girth = unit * Math.min(1, perFeature(height, feature) / 8);
+					rod(foot.clone().setY(foot.y - unit), tops[i], girth * 0.8, structure);
+					const arm = new THREE.Vector3(unit * (GAUGE + 1), girth * 0.5, girth * 0.5);
 					block(tops[i], arm, heading, structure);
 				}
 				if (!i) return;

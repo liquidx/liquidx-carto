@@ -139,6 +139,8 @@
 	/** An aerial tramway: two big cabins that shuttle up and down, one on each side. */
 	const isCableCar = (f: Feature) => f.properties?.liftType === 'cable_car';
 	const isCabin = (f: Feature) => isGondola(f) || isCableCar(f);
+	/** A rope at arm's height with balls to hold on to, and no stations. */
+	const isRopeTow = (f: Feature) => f.properties?.liftType === 'rope_tow';
 	/** A magic carpet is a belt on the snow, not a cable in the air. */
 	const isCarpet = (f: Feature) => f.properties?.liftType === 'magic_carpet';
 	const isAerial = (f: Feature) => isLift(f) && !isCarpet(f);
@@ -148,6 +150,7 @@
 	function carrierWidth(f: Feature) {
 		const n = seats(f);
 		if (isCableCar(f)) return 2.8;
+		if (isRopeTow(f)) return 0.3;
 		if (!isGondola(f)) return n * 0.55 + 0.2;
 		return n >= 8 ? 2.4 : n >= 6 ? 2.1 : 1.8;
 	}
@@ -156,7 +159,7 @@
 		const { lengthMeters, durationSecs } = f.properties ?? {};
 		if (lengthMeters && durationSecs) return lengthMeters / durationSecs;
 		if (isCarpet(f)) return 0.7;
-		return isCableCar(f) ? 8 : isGondola(f) ? 5 : seats(f) >= 4 ? 4 : 2;
+		return isCableCar(f) ? 8 : isGondola(f) ? 5 : seats(f) >= 4 && !isRopeTow(f) ? 4 : 2;
 	}
 
 	const DIFFICULTY: Record<string, string> = {
@@ -440,10 +443,11 @@
 			<Lift
 				data={features}
 				filter={isAerial}
-				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : 9)}
-				carrier={(f) => (isCabin(f) ? 'cabin' : 'chair')}
+				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : isRopeTow(f) ? 1.1 : 9)}
+				stations={(f) => !isRopeTow(f)}
+				carrier={(f) => (isCabin(f) ? 'cabin' : isRopeTow(f) ? 'ball' : 'chair')}
 				shuttle={isCableCar}
-				carrierEvery={(f) => (isGondola(f) ? 45 : seats(f) >= 4 ? 28 : 14)}
+				carrierEvery={(f) => (isGondola(f) ? 45 : isRopeTow(f) ? 12 : seats(f) >= 4 ? 28 : 14)}
 				carrierSize={carrierWidth}
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isCabin(f) ? '#f08c00' : '#e03131')}
@@ -452,7 +456,7 @@
 						? asset('/diorama/ropeway.glb')
 						: isGondola(f)
 							? asset('/diorama/gondola.glb')
-							: seats(f) === 2 || seats(f) === 4
+							: !isRopeTow(f) && (seats(f) === 2 || seats(f) === 4)
 								? asset(`/diorama/chairlift-${seats(f)}.glb`)
 								: null}
 				carrierParts={(f) => ({ Hood: f.properties?.bubble ? 0 : false })}

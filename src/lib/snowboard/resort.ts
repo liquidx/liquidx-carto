@@ -28,8 +28,11 @@ export interface Run {
 export interface Lift {
 	id: string;
 	name: string;
-	/** A `cableCar` is an aerial tramway: two big cabins shuttling, one on each side. */
-	kind: 'gondola' | 'chair' | 'cableCar';
+	/**
+	 * A `cableCar` is an aerial tramway: two big cabins shuttling, one on each side. A `ropeTow`
+	 * is a rope at arm's height to hold on to.
+	 */
+	kind: 'gondola' | 'chair' | 'cableCar' | 'ropeTow';
 	seats: number;
 	/** Whether its chairs have a bubble hood. */
 	bubble: boolean;
@@ -93,6 +96,12 @@ function difficultyOf(f: Feature): Difficulty {
 	return d === 'easy' || d === 'intermediate' || d === 'advanced' ? d : 'other';
 }
 
+const LIFT_KIND: Record<string, Lift['kind']> = {
+	gondola: 'gondola',
+	cable_car: 'cableCar',
+	rope_tow: 'ropeTow'
+};
+
 export function parseResort(features: FeaturesFile, frame: LocalFrame): Resort {
 	const runs: Run[] = [];
 	const lifts: Lift[] = [];
@@ -117,8 +126,7 @@ export function parseResort(features: FeaturesFile, frame: LocalFrame): Resort {
 			lifts.push({
 				id: p.id,
 				name: p.nameEn ?? p.name ?? 'Lift',
-				kind:
-					p.liftType === 'gondola' ? 'gondola' : p.liftType === 'cable_car' ? 'cableCar' : 'chair',
+				kind: LIFT_KIND[p.liftType as string] ?? 'chair',
 				seats: typeof p.occupancy === 'number' ? p.occupancy : 4,
 				bubble: p.bubble === true,
 				path: g.coordinates.map(frame.toWorld)

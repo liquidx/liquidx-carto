@@ -220,6 +220,8 @@ a 0.55 m, a cabin is a little longer than wide) every `carrierEvery` metres roun
 the right of the line and back down the left. Give it a `speed` in metres a second and they
 travel; at 0, the default, they stand still. With `shuttle` a line is an aerial tramway
 instead: two carriers, one on each side, going up and down their own side and passing halfway.
+For a rope tow, lower the `height` to arm's reach, turn the `stations` at the ends off and make
+the `carrier` a `'ball'`.
 
 To hang your own carrier, give `carrierModel` the URL of a glTF or GLB (or a three.js object):
 in metres, the cable through its origin, facing +z. It keeps its own materials, so
