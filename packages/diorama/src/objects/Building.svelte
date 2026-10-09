@@ -1,6 +1,7 @@
 <!--
 	Placeholder buildings. A polygon in `data` is extruded from its footprint with a flat roof;
-	a point (or `at`) gets a box of `footprint` size with a pitched roof.
+	a point (or `at`) gets a box of `footprint` size with a pitched roof. A building that would
+	reach past the rim of the diorama is left out.
 -->
 <script lang="ts">
 	import type { Feature } from 'geojson';
@@ -66,7 +67,7 @@
 				.rotateY(Math.PI / 2)
 		);
 
-		const buildings = sites.map(({ kind, coords, feature }) => {
+		const buildings = sites.flatMap(({ kind, coords, feature }): THREE.Object3D[] => {
 			const h = diorama.size(perFeature(height, feature));
 			const wallPaint = paint(perFeature(color, feature));
 			const roofPaint = paint(perFeature(roofColor, feature));
@@ -77,6 +78,9 @@
 				const cz = rings[0].reduce((sum, p) => sum + p[1], 0) / rings[0].length;
 				// Like every object, the footprint grows about its middle with the object scale.
 				const grow = diorama.size(1) / diorama.metres(1);
+				// The model has a radius of 1, so a corner further out than that overhangs the rim.
+				if (rings[0].some(([x, z]) => Math.hypot(cx + (x - cx) * grow, cz + (z - cz) * grow) > 1))
+					return [];
 				const outline = (ring: [number, number][]) =>
 					ring.map(([x, z]) => new THREE.Vector2((x - cx) * grow, (z - cz) * grow));
 				const plan = new THREE.Shape(outline(rings[0]));
@@ -95,10 +99,13 @@
 				const building = new THREE.Mesh(solid, [roofPaint, wallPaint]);
 				building.position.set(cx, high, cz);
 				building.castShadow = building.receiveShadow = true;
-				return building;
+				return [building];
 			}
 
 			const [w, d] = perFeature(footprint, feature).map(diorama.size);
+			// Whichever way it faces, the roof stays within its half diagonal of the middle.
+			const [x, z] = diorama.toModel(coords[0][0]);
+			if (Math.hypot(x, z) + Math.hypot(w * 1.06, d * 1.12) / 2 > 1) return [];
 			const body = new THREE.Mesh(walls, wallPaint);
 			body.scale.set(w, h, d);
 			const top = new THREE.Mesh(roof, roofPaint);
@@ -111,7 +118,7 @@
 			building.position.y -= h * 0.25;
 			// Model x is east and z is south, so a clockwise heading is a negative turn about y.
 			building.rotation.y = THREE.MathUtils.degToRad(90 - perFeature(heading, feature));
-			return building;
+			return [building];
 		});
 		diorama.group.add(...buildings);
 		return () => {
