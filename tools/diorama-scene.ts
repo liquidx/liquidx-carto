@@ -1,7 +1,7 @@
 /**
  * Scene features for a ski diorama, from Overture Maps. Run `pnpm diorama-scene help`.
  *
- * Reads a ski features file, works out the circle its runs and lifts cover (as the
+ * Reads a ski features file, works out the circle its runs, lifts and resort area cover (as the
  * /diorama-snow page does), and reads what OpenStreetMap maps there from Overture's Parquet
  * files on S3 (no API in the way): woods, water and waterways, buildings, roads and car parks.
  * They are written as one GeoJSON file, each feature with a `kind`, clipped to that circle's
@@ -11,7 +11,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
-import { circleBounds, fitCircle } from '../src/lib/diorama/fit.ts';
+import { circleBounds, fitCircle, fitPoints } from '../src/lib/diorama/fit.ts';
 
 const DEFAULT_FEATURES = join('static', 'diorama', 'appi-kogen-ski-features.geojson');
 /** Overture releases are monthly; bump this to pick up newer mapping. */
@@ -205,24 +205,21 @@ function simplify(path: Path, perLon: number, perLat: number, closed: boolean): 
 	return out.length > (closed ? 3 : 1) ? out : [];
 }
 
-/** The runs and lifts of a ski features file as positions, to fit the circle around. */
-function runAndLiftPoints(features: FeatureCollection): Position[] {
-	return features.features
-		.filter((f) => ['runSegment', 'lift'].includes(f.properties?.kind))
-		.flatMap((f) => {
-			const g = f.geometry;
-			if (g.type === 'LineString') return g.coordinates;
-			if (g.type === 'MultiLineString' || g.type === 'Polygon') return g.coordinates.flat();
-			return [];
-		});
-}
-
 async function build(source: string, target = scenePathFor(source)) {
 	const features = JSON.parse(await readFile(source, 'utf8')) as FeatureCollection;
-	const points = runAndLiftPoints(features);
-	if (!points.length) throw new Error(`no runs or lifts in ${source}`);
-	// The same circle as the page: around the runs and lifts.
+	const points = fitPoints(features);
+	// Nothing to fit a circle around, so no square to read: leave the file without a scene.
+	if (!points.length) {
+		console.log(`no runs, lifts or resort area in ${source}, skipping`);
+		return;
+	}
+	// The same circle as the page: around the runs, lifts and resort area.
 	const circle = fitCircle(points);
+	// A resort known only as a single point fits a circle of no size: nothing to read either.
+	if (!circle.radius) {
+		console.log(`only a point for the resort in ${source}, skipping`);
+		return;
+	}
 	const box = circleBounds(circle);
 
 	const perLat = 111_320;
@@ -259,6 +256,8 @@ async function build(source: string, target = scenePathFor(source)) {
 				// come back as a line; each becomes its own feature.
 				const { rings, lines } = parts(geometry);
 				for (const [outer, ...holes] of rings) {
+					// A shape that only touches the square's edge clips to an empty polygon: no rings.
+					if (!outer) continue;
 					const ring = tidy(outer, true, layer.simplify);
 					if (!ring.length) continue;
 					const inner = holes.map((h) => tidy(h, true, layer.simplify)).filter((h) => h.length);

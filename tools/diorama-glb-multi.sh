@@ -2,7 +2,7 @@
 
 GEOJSON_DIR=$1
 
-for geojson_file in $(find $GEOJSON_DIR -name *.geojson); do
+for geojson_file in $(find $GEOJSON_DIR -name *-ski-features.geojson); do
   filename=$(basename $geojson_file)
   location=$(echo $filename | sed 's|-ski-features.geojson||')
   glb_out_file=${GEOJSON_DIR}/${location}.glb
@@ -10,6 +10,7 @@ for geojson_file in $(find $GEOJSON_DIR -name *.geojson); do
     pnpm diorama-glb build $geojson_file \
       --provider=gsi-1m \
       --rings=128 \
+      --base=0.15 \
       --out=${glb_out_file}
   fi
 done
