@@ -218,6 +218,15 @@ a 0.55 m, a cabin is a little longer than wide) every `carrierEvery` metres roun
 the right of the line and back down the left. Give it a `speed` in metres a second and they
 travel; at 0, the default, they stand still.
 
+To hang your own carrier, give `carrierModel` the URL of a glTF or GLB (or a three.js object):
+in metres, the cable through its origin, facing +z. It keeps its own materials, so
+`carrierSize` and `carrierColor` do not apply. `carrierParts` poses its named nodes: `false`
+leaves one out, and a number swings it open from 0 to 1 by the `openRotationX` in its extras.
+
+```svelte
+<Lift data={lifts} carrierModel="/models/chair.glb" carrierParts={{ Hood: 1, SafetyBar: false }} />
+```
+
 `Riders` sends a snowboarder down each line every `every` metres, from its high end to its
 low end whichever way the line is drawn, at `speed` metres a second on average (10 by
 default, about 36 km/h; each rider is a little faster or slower). They carve `carve` metres

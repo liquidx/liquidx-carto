@@ -3,6 +3,7 @@
  */
 import type { FeatureCollection } from 'geojson';
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { findProvider } from '$lib/contour/terrain-api';
 import { xToLon, yToLat } from '$lib/contour/mercator';
 import { createFrame, type LocalFrame } from './frame';
@@ -32,6 +33,13 @@ export interface GameOptions {
 	labels?: HTMLElement;
 	/** Wood and forest polygons; trees only stand inside them where the data covers. */
 	woods?: FeatureCollection | null;
+	/**
+	 * URLs of the glTF or GLB to hang as the chairs, by how many they seat, see `buildLifts`;
+	 * a plain bench where there is none.
+	 */
+	chairModels?: Record<number, string>;
+	/** URL of the glTF or GLB to hang as the gondola cabins; a plain box without. */
+	cabinModel?: string;
 }
 
 export interface LoadProgress {
@@ -107,7 +115,16 @@ export async function createGame(
 
 	onProgress({ stage: 'building the lifts' });
 	await tick();
-	const lifts = buildLifts(resort.lifts, terrain);
+	const chairs: Record<number, THREE.Object3D> = {};
+	await Promise.all(
+		Object.entries(options.chairModels ?? {}).map(async ([seats, url]) => {
+			chairs[+seats] = (await new GLTFLoader().loadAsync(url)).scene;
+		})
+	);
+	const cabin = options.cabinModel
+		? (await new GLTFLoader().loadAsync(options.cabinModel)).scene
+		: undefined;
+	const lifts = buildLifts(resort.lifts, terrain, chairs, cabin);
 
 	onProgress({ stage: 'planting the forest' });
 	await tick();

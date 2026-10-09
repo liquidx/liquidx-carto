@@ -1,11 +1,14 @@
 <!--
 	Placeholder ski lifts: for each line in `data`, towers standing on the terrain, a cable up
 	one side and back down the other, a station at each end and chairs or cabins hanging from
-	the cable. With a `speed` the carriers travel round the loop.
+	the cable. With a `speed` the carriers travel round the loop. A `carrierModel` hangs your
+	own glTF in place of the built-in chair or cabin, in its own colours.
 -->
 <script lang="ts">
 	import type { Feature } from 'geojson';
+	import { onDestroy } from 'svelte';
 	import * as THREE from 'three';
+	import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 	import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 	import { getDiorama } from '../context.js';
 	import {
@@ -35,6 +38,17 @@
 		 */
 		carrierSize?: PerFeature<number>;
 		carrierColor?: PerFeature<THREE.ColorRepresentation>;
+		/**
+		 * A model to hang instead of the built-in carrier: the URL of a glTF or GLB, or an object.
+		 * It is in metres with the cable through its origin, faces +z and keeps its own materials;
+		 * `carrierSize` and `carrierColor` do not apply to it.
+		 */
+		carrierModel?: PerFeature<string | THREE.Object3D | null | undefined>;
+		/**
+		 * Named parts of the `carrierModel`: `false` to leave one out, or how far it is swung
+		 * open, from 0 (closed) to 1, the `openRotationX` in its extras.
+		 */
+		carrierParts?: PerFeature<Record<string, number | boolean>>;
 		/** Speed of the carriers along the cable in metres a second, 0 to stand still. */
 		speed?: PerFeature<number>;
 	};
@@ -49,6 +63,8 @@
 		carrierEvery = 15,
 		carrierSize = 2.2,
 		carrierColor = '#e03131',
+		carrierModel,
+		carrierParts = {},
 		speed = 0
 	}: Props = $props();
 
@@ -64,6 +80,43 @@
 	// How far along its cable each lift's carriers have moved, in model units. Kept outside
 	// the effect so that they stay where they are when the lifts are rebuilt or stopped.
 	const travelled: number[] = [];
+
+	// Carrier models given as URLs, once they have loaded.
+	let models = $state.raw<Record<string, THREE.Object3D>>({});
+	const asked: Record<string, true> = {};
+	let gone = false;
+	$effect(() => {
+		for (const { feature } of lines.current) {
+			const source = perFeature(carrierModel, feature);
+			if (typeof source !== 'string' || asked[source]) continue;
+			asked[source] = true;
+			new GLTFLoader().loadAsync(source).then(
+				({ scene }) => {
+					if (gone) release(scene);
+					else models = { ...models, [source]: scene };
+				},
+				(e) => console.error('Lift: could not load', source, e)
+			);
+		}
+	});
+	onDestroy(() => {
+		gone = true;
+		Object.values(models).forEach(release);
+	});
+
+	function release(object: THREE.Object3D) {
+		object.traverse((o) => {
+			const mesh = o as THREE.Mesh;
+			if (!mesh.isMesh) return;
+			mesh.geometry.dispose();
+			for (const material of [mesh.material].flat()) {
+				for (const value of Object.values(material)) {
+					if (value instanceof THREE.Texture) value.dispose();
+				}
+				material.dispose();
+			}
+		});
+	}
 
 	/** Points at even spacing along a path (ends included), about `every` apart. */
 	function along(path: THREE.Vector3[], every: number) {
@@ -170,6 +223,37 @@
 			return geometry;
 		};
 
+		// A model as one shape for each of its materials, with its `parts` posed.
+		const posed: THREE.BufferGeometry[] = [];
+		const modelShapes = (model: THREE.Object3D, parts: Record<string, number | boolean>) => {
+			// The copy shares the model's geometry and materials.
+			const copy = model.clone();
+			for (const [name, state] of Object.entries(parts)) {
+				const part = copy.getObjectByName(name);
+				if (!part) continue;
+				if (typeof state === 'boolean') part.visible = state;
+				else part.rotation.x = (part.userData.openRotationX ?? 0) * state;
+			}
+			copy.updateMatrixWorld(true);
+			// Local to this run, never read reactively.
+			// eslint-disable-next-line svelte/prefer-svelte-reactivity
+			const byMaterial = new Map<THREE.Material, THREE.BufferGeometry[]>();
+			copy.traverseVisible((o) => {
+				const mesh = o as THREE.Mesh;
+				if (!mesh.isMesh) return;
+				const material = [mesh.material].flat()[0];
+				const pieces = byMaterial.get(material) ?? [];
+				pieces.push(mesh.geometry.clone().applyMatrix4(mesh.matrixWorld));
+				byMaterial.set(material, pieces);
+			});
+			return [...byMaterial].map(([material, pieces]) => {
+				const geometry = mergeGeometries(pieces);
+				for (const piece of pieces) piece.dispose();
+				posed.push(geometry);
+				return { geometry, material };
+			});
+		};
+
 		const material = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.1 });
 		// The cables are far too thin to model: hairlines, which stay visible from any distance.
 		const cables: number[] = [];
@@ -179,7 +263,8 @@
 
 		/** The carriers of one lift, and the loop they go round. */
 		type Fleet = {
-			mesh: THREE.InstancedMesh;
+			/** One mesh for the built-in carrier, or one for each material of a model. */
+			meshes: THREE.InstancedMesh[];
 			/** The line midway between the two cables, with the distance along it to each point. */
 			path: THREE.Vector3[];
 			lengths: number[];
@@ -253,15 +338,26 @@
 			// Evenly round the whole loop: up one side and back down the other.
 			const loop = lengths[lengths.length - 1] * 2;
 			const count = Math.max(1, Math.round(loop / diorama.metres(spacing)));
-			const mesh = new THREE.InstancedMesh(
-				carrierGeometry(perFeature(carrier, feature), perFeature(carrierSize, feature)),
-				material,
-				count
-			);
-			const c = new THREE.Color(perFeature(carrierColor, feature));
-			for (let i = 0; i < count; i++) mesh.setColorAt(i, c);
+			const source = perFeature(carrierModel, feature);
+			// Until a model has loaded, the built-in carrier stands in for it.
+			const model = typeof source === 'string' ? models[source] : source;
+			let meshes: THREE.InstancedMesh[];
+			if (model) {
+				meshes = modelShapes(model, perFeature(carrierParts, feature)).map(
+					(shape) => new THREE.InstancedMesh(shape.geometry, shape.material, count)
+				);
+			} else {
+				const mesh = new THREE.InstancedMesh(
+					carrierGeometry(perFeature(carrier, feature), perFeature(carrierSize, feature)),
+					material,
+					count
+				);
+				const c = new THREE.Color(perFeature(carrierColor, feature));
+				for (let i = 0; i < count; i++) mesh.setColorAt(i, c);
+				meshes = [mesh];
+			}
 			return {
-				mesh,
+				meshes,
 				path: tops,
 				lengths,
 				gap: loop / count,
@@ -278,11 +374,12 @@
 		const place = (seconds: number) => {
 			fleets.forEach((fleet, n) => {
 				if (!fleet) return;
-				const { mesh, path, lengths, side, turns, scale } = fleet;
+				const { meshes, path, lengths, side, turns, scale } = fleet;
+				const count = meshes[0]?.count ?? 0;
 				const length = lengths[lengths.length - 1];
 				const moved = ((travelled[n] ?? 0) + fleet.pace * seconds) % (length * 2);
 				travelled[n] = moved;
-				for (let i = 0; i < mesh.count; i++) {
+				for (let i = 0; i < count; i++) {
 					let d = (i * fleet.gap + moved) % (length * 2);
 					const down = d > length;
 					if (down) d = length * 2 - d;
@@ -292,9 +389,10 @@
 					position
 						.lerpVectors(path[k - 1], path[k], (d - lengths[k - 1]) / span)
 						.addScaledVector(side, down ? -half : half);
-					mesh.setMatrixAt(i, matrix.compose(position, turns[down ? 1 : 0], scale));
+					matrix.compose(position, turns[down ? 1 : 0], scale);
+					for (const mesh of meshes) mesh.setMatrixAt(i, matrix);
 				}
-				mesh.instanceMatrix.needsUpdate = true;
+				for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;
 			});
 			diorama.stage.invalidate();
 		};
@@ -321,8 +419,8 @@
 		// every frame for what moves through it.
 		for (const fleet of fleets) {
 			if (!fleet) continue;
-			fleet.mesh.receiveShadow = true;
-			meshes.push(fleet.mesh);
+			for (const mesh of fleet.meshes) mesh.receiveShadow = true;
+			meshes.push(...fleet.meshes);
 		}
 		const wire = new THREE.BufferGeometry();
 		wire.setAttribute('position', new THREE.Float32BufferAttribute(cables, 3));
@@ -334,7 +432,7 @@
 			stop?.();
 			diorama.group.remove(...meshes, wires);
 			for (const mesh of meshes) mesh.dispose();
-			for (const geometry of [post, box, ...carriers.values(), wire]) geometry.dispose();
+			for (const geometry of [post, box, ...carriers.values(), ...posed, wire]) geometry.dispose();
 			material.dispose();
 			wireMaterial.dispose();
 		};

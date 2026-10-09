@@ -4,6 +4,7 @@
 -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { asset } from '$app/paths';
 	import Button from '$lib/components/Button.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
@@ -44,6 +45,11 @@
 				shadows,
 				labels: labelHost,
 				woods: data.woods,
+				chairModels: {
+					2: asset('/diorama/chairlift-2.glb'),
+					4: asset('/diorama/chairlift-4.glb')
+				},
+				cabinModel: asset('/diorama/gondola.glb'),
 				treeSpacing: coarse ? 18 : 14,
 				maxPixelRatio: coarse ? 1.5 : 2
 			},

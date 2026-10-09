@@ -431,6 +431,13 @@
 				carrierSize={carrierWidth}
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isGondola(f) ? '#f08c00' : '#e03131')}
+				carrierModel={(f) =>
+					isGondola(f)
+						? asset('/diorama/gondola.glb')
+						: seats(f) === 2 || seats(f) === 4
+							? asset(`/diorama/chairlift-${seats(f)}.glb`)
+							: null}
+				carrierParts={(f) => ({ Hood: f.properties?.bubble ? 0 : false })}
 			/>
 			{#if showBuildings}
 				<Building data={scene} filter={isBuilding} height={buildingHeight} roofColor="#5c6670" />

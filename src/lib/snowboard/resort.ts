@@ -30,6 +30,8 @@ export interface Lift {
 	name: string;
 	kind: 'gondola' | 'chair';
 	seats: number;
+	/** Whether its chairs have a bubble hood. */
+	bubble: boolean;
 	/** World x, z along the line, bottom to top. */
 	path: [number, number][];
 }
@@ -116,6 +118,7 @@ export function parseResort(features: FeaturesFile, frame: LocalFrame): Resort {
 				name: p.nameEn ?? p.name ?? 'Lift',
 				kind: p.liftType === 'gondola' ? 'gondola' : 'chair',
 				seats: typeof p.occupancy === 'number' ? p.occupancy : 4,
+				bubble: p.bubble === true,
 				path: g.coordinates.map(frame.toWorld)
 			});
 		} else if (p.kind === 'locationBase' && g.type === 'Point') {
