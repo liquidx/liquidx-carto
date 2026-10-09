@@ -213,9 +213,10 @@ A `Building` that would reach past the rim of the diorama is left out.
 Props typed as `PerFeature` (colours, sizes, headings, the carrier props, the `clearance` of
 `Trees` from each thing it avoids) accept a value or a function of the feature.
 
-`Lift` hangs a `carrier` (`'chair'` or `'cabin'`, `carrierSize` metres wide) every
-`carrierEvery` metres round the loop, up the right of the line and back down the left. Give it
-a `speed` in metres a second and they travel; at 0, the default, they stand still.
+`Lift` hangs a `carrier` (`'chair'` or `'cabin'`, `carrierSize` metres wide: a chair seats one
+a 0.55 m, a cabin is a little longer than wide) every `carrierEvery` metres round the loop, up
+the right of the line and back down the left. Give it a `speed` in metres a second and they
+travel; at 0, the default, they stand still.
 
 `Riders` sends a snowboarder down each line every `every` metres, from its high end to its
 low end whichever way the line is drawn, at `speed` metres a second on average (10 by

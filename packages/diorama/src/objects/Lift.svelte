@@ -29,7 +29,10 @@
 		carrier?: PerFeature<'chair' | 'cabin'>;
 		/** Distance between carriers in metres, 0 for none. */
 		carrierEvery?: PerFeature<number>;
-		/** Width of a carrier in metres: about 0.55 a seat for a chair, 2 for a cabin. */
+		/**
+		 * Width of a carrier in metres across the line. A chair gets a seat every 0.55 m of it,
+		 * so 1.3 is a double and 2.4 a quad; a cabin is a little longer than it is wide.
+		 */
 		carrierSize?: PerFeature<number>;
 		carrierColor?: PerFeature<THREE.ColorRepresentation>;
 		/** Speed of the carriers along the cable in metres a second, 0 to stand still. */
@@ -115,18 +118,57 @@
 			parts.boxes.colors.push(c);
 		};
 
-		// Carriers one metre wide, in metres, hanging from the cable at the origin and facing +z.
-		const slab = (w: number, h: number, d: number, y: number, z = 0) =>
-			new THREE.BoxGeometry(w, h, d).translate(0, y, z);
-		const shapes = {
-			chair: [slab(0.1, 2.4, 0.1, -1.2), slab(1, 0.6, 0.08, -2.55, -0.2), slab(1, 0.1, 0.5, -2.9)],
-			cabin: [slab(0.1, 1, 0.1, -0.5), slab(1, 2.1, 2.2, -2.05)]
+		// Carriers in metres, hanging from the cable at the origin and facing +z, one shape for
+		// each width asked for.
+		const slab = (w: number, h: number, d: number, y: number, z = 0, x = 0) =>
+			new THREE.BoxGeometry(w, h, d).translate(x, y, z);
+		const carrierShapes = {
+			/** A bench with a back, a safety bar and an armrest between every seat. */
+			chair(width: number) {
+				const seats = Math.max(1, Math.round(width / 0.55));
+				const parts = [
+					slab(0.1, 2.3, 0.1, -1.15, -0.2),
+					slab(width, 0.08, 0.08, -2.3, -0.2),
+					slab(width, 0.6, 0.08, -2.6, -0.25),
+					slab(width, 0.1, 0.55, -2.9),
+					slab(width, 0.05, 0.05, -2.45, 0.3)
+				];
+				for (let i = 0; i <= seats; i++) {
+					const x = -width / 2 + (width * i) / seats;
+					parts.push(slab(0.06, 0.3, 0.5, -2.7, 0, x));
+				}
+				return parts;
+			},
+			/** A cabin a little longer than it is wide, with a roof, a tapered floor and a hanger. */
+			cabin(width: number) {
+				const length = width * 1.15;
+				const skirt = new THREE.CylinderGeometry(1, 0.62, 0.45, 4, 1)
+					.rotateY(Math.PI / 4)
+					.scale(width / Math.SQRT2, 1, length / Math.SQRT2)
+					.translate(0, -3.125, 0);
+				return [
+					slab(0.12, 1, 0.12, -0.5),
+					slab(0.35, 0.3, 0.5, -0.15),
+					slab(width * 0.92, 0.15, length * 0.92, -1.075),
+					slab(width, 1.75, length, -2.025),
+					skirt
+				];
+			}
 		};
-		const carriers = {
-			chair: mergeGeometries(shapes.chair),
-			cabin: mergeGeometries(shapes.cabin)
+		// Local to this run, never read reactively.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const carriers = new Map<string, THREE.BufferGeometry>();
+		const carrierGeometry = (kind: 'chair' | 'cabin', width: number) => {
+			const key = `${kind}:${width.toFixed(2)}`;
+			let geometry = carriers.get(key);
+			if (!geometry) {
+				const parts = carrierShapes[kind](width);
+				geometry = mergeGeometries(parts);
+				for (const part of parts) part.dispose();
+				carriers.set(key, geometry);
+			}
+			return geometry;
 		};
-		for (const shape of Object.values(shapes).flat()) shape.dispose();
 
 		const material = new THREE.MeshStandardMaterial({ roughness: 0.7, metalness: 0.1 });
 		// The cables are far too thin to model: hairlines, which stay visible from any distance.
@@ -211,7 +253,11 @@
 			// Evenly round the whole loop: up one side and back down the other.
 			const loop = lengths[lengths.length - 1] * 2;
 			const count = Math.max(1, Math.round(loop / diorama.metres(spacing)));
-			const mesh = new THREE.InstancedMesh(carriers[perFeature(carrier, feature)], material, count);
+			const mesh = new THREE.InstancedMesh(
+				carrierGeometry(perFeature(carrier, feature), perFeature(carrierSize, feature)),
+				material,
+				count
+			);
 			const c = new THREE.Color(perFeature(carrierColor, feature));
 			for (let i = 0; i < count; i++) mesh.setColorAt(i, c);
 			return {
@@ -222,7 +268,7 @@
 				pace: diorama.metres(perFeature(speed, feature)),
 				side,
 				turns: [heading, new THREE.Quaternion().setFromAxisAngle(up, bearing + Math.PI)],
-				scale: new THREE.Vector3(diorama.size(perFeature(carrierSize, feature)), unit, unit)
+				scale: new THREE.Vector3(unit, unit, unit)
 			};
 		});
 
@@ -288,7 +334,7 @@
 			stop?.();
 			diorama.group.remove(...meshes, wires);
 			for (const mesh of meshes) mesh.dispose();
-			for (const geometry of [post, box, carriers.chair, carriers.cabin, wire]) geometry.dispose();
+			for (const geometry of [post, box, ...carriers.values(), wire]) geometry.dispose();
 			material.dispose();
 			wireMaterial.dispose();
 		};

@@ -136,6 +136,12 @@
 	});
 	const isGondola = (f: Feature) => f.properties?.liftType === 'gondola';
 	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
+	/** Width of a carrier in metres: a seat's worth each for a chair, a cabin by how many it holds. */
+	function carrierWidth(f: Feature) {
+		const n = seats(f);
+		if (!isGondola(f)) return n * 0.55 + 0.2;
+		return n >= 8 ? 2.4 : n >= 6 ? 2.1 : 1.8;
+	}
 	/** Metres a second: from the ride time where the lift has one, else typical for its kind. */
 	function liftSpeed(f: Feature) {
 		const { lengthMeters, durationSecs } = f.properties ?? {};
@@ -422,7 +428,7 @@
 				height={(f) => (isGondola(f) ? 14 : 9)}
 				carrier={(f) => (isGondola(f) ? 'cabin' : 'chair')}
 				carrierEvery={(f) => (isGondola(f) ? 45 : seats(f) >= 4 ? 28 : 14)}
-				carrierSize={(f) => (isGondola(f) ? 2 : seats(f) * 0.55 + 0.2)}
+				carrierSize={carrierWidth}
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isGondola(f) ? '#f08c00' : '#e03131')}
 			/>
