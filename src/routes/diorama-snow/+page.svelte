@@ -189,6 +189,11 @@
 			.flatMap((s) => s.coords.flat());
 		return points.length ? fitCircle(points) : null;
 	});
+	/**
+	 * Height of the summit pin in metres: 70 on a large area, shorter on a small one so that it
+	 * stays the same size against the diorama, and never so short that the hut hides it.
+	 */
+	const pinHeight = $derived(Math.min(70, Math.max(30, (circle?.radius ?? Infinity) * 0.032)));
 	/** A square around the whole diorama, for tree cover everywhere. */
 	const everywhere = $derived.by((): Feature<Polygon> | null => {
 		if (!circle) return null;
@@ -361,10 +366,10 @@
 				size={25}
 				heading={200}
 			/>
-			<Marker data={features} filter={kind('locationPeak')} height={70} />
+			<Marker data={features} filter={kind('locationPeak')} height={pinHeight} />
 			{#if showLabels}
 				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />
-				<Label data={features} filter={kind('locationPeak')} altitude={95}>
+				<Label data={features} filter={kind('locationPeak')} altitude={pinHeight + 25}>
 					{#snippet children(f)}<strong>{f.properties?.maxElevation} m</strong>{/snippet}
 				</Label>
 			{/if}

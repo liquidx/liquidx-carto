@@ -205,10 +205,11 @@ own.
 | `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                             |
 | `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor` |
 | `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                       |
-| `Marker`   | points              | a pin                                                  | `height`, `color`                                                         |
+| `Marker`   | points              | a pin                                                  | `height`, `head` (width of the ball), `color`                             |
 
 They all take `data` and `filter` like `Drape`, so several can read the same file. `Building`,
 `Model` and `Marker` also take `at={[lon, lat]}` for a single position. Sizes are in metres.
+A `Building` that would reach past the rim of the diorama is left out.
 Props typed as `PerFeature` (colours, sizes, headings, the carrier props) accept a value or a
 function of the feature.
 

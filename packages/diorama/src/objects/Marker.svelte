@@ -21,10 +21,12 @@
 		filter?: (feature: Feature) => boolean;
 		/** Height of the pin in metres. */
 		height?: number;
+		/** Width of the ball on top in metres. Defaults to 0.44 of `height`. */
+		head?: number;
 		color?: PerFeature<THREE.ColorRepresentation>;
 	};
 
-	let { data, at, filter, height = 40, color = '#e03131' }: Props = $props();
+	let { data, at, filter, height = 40, head, color = '#e03131' }: Props = $props();
 
 	const diorama = getDiorama();
 	const points = featureShapes(
@@ -42,7 +44,11 @@
 			tall / 2,
 			0
 		);
-		const head = new THREE.SphereGeometry(tall * 0.22, 20, 12).translate(0, tall, 0);
+		const ball = new THREE.SphereGeometry(
+			head === undefined ? tall * 0.22 : diorama.size(head) / 2,
+			20,
+			12
+		).translate(0, tall, 0);
 		const materials: THREE.Material[] = [];
 		const pins = places.map(({ coords, feature }) => {
 			const material = new THREE.MeshStandardMaterial({
@@ -52,7 +58,7 @@
 			materials.push(material);
 			const pin = new THREE.Group().add(
 				new THREE.Mesh(pole, material),
-				new THREE.Mesh(head, material)
+				new THREE.Mesh(ball, material)
 			);
 			pin.traverse((o) => (o.castShadow = true));
 			diorama.project(coords[0][0], 0, pin.position);
@@ -62,7 +68,7 @@
 		return () => {
 			diorama.group.remove(...pins);
 			pole.dispose();
-			head.dispose();
+			ball.dispose();
 			for (const material of materials) material.dispose();
 		};
 	});
