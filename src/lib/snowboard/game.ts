@@ -84,6 +84,11 @@ export interface Game {
 	riderLonLat(): [number, number];
 	/** Get on the lift the rider is standing at, if any. */
 	board(): void;
+	/**
+	 * Get on the lift under a point of the view, in client pixels, wherever the rider is on the
+	 * snow. True when there was one to get on.
+	 */
+	boardAt(clientX: number, clientY: number): boolean;
 	setShadows(on: boolean): void;
 	setPaused(on: boolean): void;
 	input: Input;
@@ -368,6 +373,61 @@ export async function createGame(
 		}
 	}
 
+	// Picking a lift by a tap: the nearest cable on screen, within a fingertip of the tap. A ray
+	// would have to hit a cable a few pixels wide.
+	const PICK_RANGE = 1500;
+	const PICK_PIXELS = 36;
+	const PICK_STEP = 20;
+	const here = new THREE.Vector3();
+	/** The point into `screen` as canvas pixels, or false when it is behind the camera or far off. */
+	function toPixels(point: THREE.Vector3, w: number, h: number) {
+		if (point.distanceTo(camera.position) > PICK_RANGE) return false;
+		screen.copy(point).project(camera);
+		if (screen.z > 1) return false;
+		screen.set(((screen.x + 1) / 2) * w, ((1 - screen.y) / 2) * h, 0);
+		return true;
+	}
+	function liftAt(clientX: number, clientY: number): LiftLine | null {
+		const rect = canvas.getBoundingClientRect();
+		const px = clientX - rect.left;
+		const py = clientY - rect.top;
+		let best: LiftLine | null = null;
+		let bestDistance = PICK_PIXELS;
+		const hit = new THREE.Vector3();
+		for (const line of lifts.lines) {
+			let nearest = bestDistance;
+			let ax = 0,
+				ay = 0,
+				before = false;
+			for (let d = 0; d < line.total + PICK_STEP; d += PICK_STEP) {
+				line.at(d, 0, here);
+				const seen = toPixels(here, rect.width, rect.height);
+				if (seen && before) {
+					// Distance from the tap to this stretch of cable on screen.
+					const dx = screen.x - ax;
+					const dy = screen.y - ay;
+					const t = Math.max(
+						0,
+						Math.min(1, ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy || 1))
+					);
+					const distance = Math.hypot(px - ax - dx * t, py - ay - dy * t);
+					if (distance < nearest) {
+						nearest = distance;
+						line.at(d - PICK_STEP * (1 - t), 0, hit);
+					}
+				}
+				before = seen;
+				ax = screen.x;
+				ay = screen.y;
+			}
+			if (nearest < bestDistance && !occluded(hit)) {
+				bestDistance = nearest;
+				best = line;
+			}
+		}
+		return best;
+	}
+
 	function loop(now: number) {
 		if (disposed) return;
 		requestAnimationFrame(loop);
@@ -399,6 +459,7 @@ export async function createGame(
 		sky.position.copy(camera.position);
 		sun.position.copy(rider.position).addScaledVector(SUN, 400);
 		sun.target.position.copy(rider.position);
+		forest.update(camera.position);
 		renderer.render(scene, camera);
 		placeLabels();
 
@@ -440,6 +501,12 @@ export async function createGame(
 		riderLonLat,
 		board() {
 			if (nearLift) rider.board(nearLift);
+		},
+		boardAt(clientX, clientY) {
+			if (paused || rider.mode !== 'ride') return false;
+			const line = liftAt(clientX, clientY);
+			if (line) rider.board(line);
+			return !!line;
 		},
 		setShadows(on) {
 			sun.castShadow = on;

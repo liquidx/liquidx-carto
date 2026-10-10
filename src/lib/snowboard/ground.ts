@@ -34,6 +34,8 @@ export interface Ground {
 	groomed(x: number, z: number): boolean;
 	/** Whether a tree may stand at world x, z. */
 	treeAllowed(x: number, z: number): boolean;
+	/** Whether the woods file covers world x, z, so where trees stand there is known. */
+	woodsMapped(x: number, z: number): boolean;
 	dispose(): void;
 }
 
@@ -168,6 +170,9 @@ export function paintGround(
 		return (j * mw + i) * 4;
 	};
 
+	const inWoodBox = (x: number, z: number) =>
+		!!woodBox && x >= woodBox[0] && x <= woodBox[2] && z >= woodBox[1] && z <= woodBox[3];
+
 	const texture = new THREE.CanvasTexture(canvas);
 	texture.colorSpace = THREE.SRGBColorSpace;
 	texture.anisotropy = 8;
@@ -222,10 +227,9 @@ export function paintGround(
 		treeAllowed(x, z) {
 			const i = index(x, z);
 			if (i < 0 || mask[i] >= 128) return false;
-			if (!woodBox) return true;
-			const inBox = x >= woodBox[0] && x <= woodBox[2] && z >= woodBox[1] && z <= woodBox[3];
-			return !inBox || mask[i + 2] >= 128;
+			return !inWoodBox(x, z) || mask[i + 2] >= 128;
 		},
+		woodsMapped: inWoodBox,
 		dispose: () => {
 			texture.dispose();
 			grain.dispose();
