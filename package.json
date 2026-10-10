@@ -20,6 +20,7 @@
 		"ev-jp": "node tools/ev-jp.ts",
 		"diorama-glb": "node --import ./tools/node-env.ts tools/diorama-glb.ts",
 		"diorama-scene": "node tools/diorama-scene.ts",
+		"snowboard-locations": "node tools/snowboard-locations.ts",
 		"japan-train-lines": "node tools/japan-train-lines.ts"
 	},
 	"devDependencies": {

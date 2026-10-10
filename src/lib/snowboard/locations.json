@@ -1,0 +1,1758 @@
+[
+	{
+		"id": "abashiri",
+		"name": "Abashiri Lake View Ski Area"
+	},
+	{
+		"id": "adatara",
+		"name": "Adatara Kogen Ski Resort"
+	},
+	{
+		"id": "daikura",
+		"name": "Aizu Kogen Daikura Ski Resort"
+	},
+	{
+		"id": "nango",
+		"name": "Aizu Kogen Nango Ski Area"
+	},
+	{
+		"id": "takatsue",
+		"name": "Aizu Kogen Takatsue Ski Resort"
+	},
+	{
+		"id": "akabane",
+		"name": "Akabane Ski Resort"
+	},
+	{
+		"id": "akagisan-daiichi",
+		"name": "Akagisan Daiichi Ski Area"
+	},
+	{
+		"id": "akakan",
+		"name": "Akakura Kanko Resort"
+	},
+	{
+		"id": "akakura-onsen",
+		"name": "Akakura Onsen Ski Area"
+	},
+	{
+		"id": "akan-royal-valley",
+		"name": "Akan Royal Valley"
+	},
+	{
+		"id": "akasawa",
+		"name": "Akasawa Snow Park"
+	},
+	{
+		"id": "akenogaoka",
+		"name": "Akenogaoka Ski Area"
+	},
+	{
+		"id": "akita-hachimantai",
+		"name": "Akita-Hachimantai Ski Resort"
+	},
+	{
+		"id": "akoyama",
+		"name": "Akoyama Ski Ground"
+	},
+	{
+		"id": "amihari",
+		"name": "Amihari Onsen"
+	},
+	{
+		"id": "ani",
+		"name": "Ani Ski Resort (Mt. Moriyoshi)"
+	},
+	{
+		"id": "anpeizan",
+		"name": "Anpeizan"
+	},
+	{
+		"id": "aomori-spring",
+		"name": "Aomori Spring Ski Resort"
+	},
+	{
+		"id": "appi-kogen",
+		"name": "Appi Kogen Ski Resort"
+	},
+	{
+		"id": "araragi",
+		"name": "Araragi Kogen Ski Resort"
+	},
+	{
+		"id": "asahi-prime",
+		"name": "Asahi Prime"
+	},
+	{
+		"id": "asahi-shizenkan",
+		"name": "Asahi Shizenkan Snow Park"
+	},
+	{
+		"id": "asahi",
+		"name": "Asahi Ski Area"
+	},
+	{
+		"id": "asahi-tengston",
+		"name": "Asahi Tengston Snow Park"
+	},
+	{
+		"id": "asahidake",
+		"name": "Asahidake Ropeway"
+	},
+	{
+		"id": "asarigawa",
+		"name": "Asarigawaonsen Ski Resort"
+	},
+	{
+		"id": "numata",
+		"name": "Ashimoi Kanko Takaho Ski Area"
+	},
+	{
+		"id": "azo-forest",
+		"name": "Azo Forest Park"
+	},
+	{
+		"id": "bankei",
+		"name": "Bankei ski area"
+	},
+	{
+		"id": "banshu-tokura",
+		"name": "Banshu Tokura Snow Park"
+	},
+	{
+		"id": "bibai",
+		"name": "Bibai Kokusetsu Ski Area"
+	},
+	{
+		"id": "biei",
+		"name": "Biei Chomin Ski Area"
+	},
+	{
+		"id": "bifuka",
+		"name": "Bifuka Ski Area"
+	},
+	{
+		"id": "bihoro",
+		"name": "Bihoro Lily Mountain Ski Area"
+	},
+	{
+		"id": "biwako",
+		"name": "Biwako Valley"
+	},
+	{
+		"id": "blanche",
+		"name": "Blanche Takayama Ski Resort"
+	},
+	{
+		"id": "norikura",
+		"name": "Blue Resort Norikura"
+	},
+	{
+		"id": "boyodai",
+		"name": "Boyodai Ski Resort"
+	},
+	{
+		"id": "canmore",
+		"name": "Canmore Ski Village"
+	},
+	{
+		"id": "charmant-hiuchi",
+		"name": "Charmant Hiuchi"
+	},
+	{
+		"id": "chateau-shiozawa",
+		"name": "Chateau Shiozawa"
+	},
+	{
+		"id": "chateraise",
+		"name": "Chateraise Ski Resort Nobeyama"
+	},
+	{
+		"id": "koumi-reex",
+		"name": "Chateraise Ski Valley Koumi"
+	},
+	{
+		"id": "chausuyama",
+		"name": "Chausuyama"
+	},
+	{
+		"id": "chikusa",
+		"name": "Chikusa Mountain Village"
+	},
+	{
+		"id": "chokai",
+		"name": "Chokai Kogen Yashima Ski Resort"
+	},
+	{
+		"id": "classe",
+		"name": "Classe Snow Park"
+	},
+	{
+		"id": "cupid-valley",
+		"name": "Cupid Valley"
+	},
+	{
+		"id": "daisen",
+		"name": "Daisen White Resort"
+	},
+	{
+		"id": "kurodake",
+		"name": "Daisetsuzan Kurodake"
+	},
+	{
+		"id": "dogoyama",
+		"name": "Dogoyama Kogen"
+	},
+	{
+		"id": "dorogawa",
+		"name": "Dorogawa Snow Park"
+	},
+	{
+		"id": "dynaland",
+		"name": "Dynaland"
+	},
+	{
+		"id": "dynasty",
+		"name": "Dynasty Ski Resort"
+	},
+	{
+		"id": "echo-valley",
+		"name": "Echo Valley Ski Area"
+	},
+	{
+		"id": "edelweiss",
+		"name": "Edelweiss Ski Resort"
+	},
+	{
+		"id": "engaru",
+		"name": "Engaru Rock Valley Ski Area"
+	},
+	{
+		"id": "eniwa",
+		"name": "Eniwa City Ski Area"
+	},
+	{
+		"id": "fairy-land",
+		"name": "Fairy Land Kaneyama Ski Area"
+	},
+	{
+		"id": "bandai-x2",
+		"name": "Family Snow Park Bandai X2"
+	},
+	{
+		"id": "fus",
+		"name": "Fu's Snow Area"
+	},
+	{
+		"id": "fujimi-kogen",
+		"name": "Fujimi Kogen Ski Area"
+	},
+	{
+		"id": "fujimi-panorama",
+		"name": "Fujimi Panorama Resort"
+	},
+	{
+		"id": "fujisato",
+		"name": "Fujisato Ski Area"
+	},
+	{
+		"id": "fujiten",
+		"name": "Fujiten Snow Resort"
+	},
+	{
+		"id": "yeti",
+		"name": "Fujiyama Snow Resort Yeti"
+	},
+	{
+		"id": "fukui-izumi",
+		"name": "Fukui Izumi Ski Resort"
+	},
+	{
+		"id": "furano",
+		"name": "Furano Ski Resort"
+	},
+	{
+		"id": "fuyudorigoe",
+		"name": "Fuyudorigoe Ski Garden"
+	},
+	{
+		"id": "gala",
+		"name": "GALA Yuzawa Snow Resort"
+	},
+	{
+		"id": "gassan",
+		"name": "Gassan Ski Resort"
+	},
+	{
+		"id": "gawara",
+		"name": "Gawara City Snow Park"
+	},
+	{
+		"id": "geihoku",
+		"name": "Geihoku Kokusai"
+	},
+	{
+		"id": "geto-kogen",
+		"name": "Geto Kogen Resort"
+	},
+	{
+		"id": "gokase",
+		"name": "Gokase Highland Ski Resort"
+	},
+	{
+		"id": "gokazan",
+		"name": "Gokazan"
+	},
+	{
+		"id": "hanagasa",
+		"name": "Gorillas Park Hanagasa Kogen"
+	},
+	{
+		"id": "gozaisho",
+		"name": "Gozaisho Ski Area"
+	},
+	{
+		"id": "grand-sunpia",
+		"name": "Grand Sunpia Inawashiro Resort Hotel & Ski"
+	},
+	{
+		"id": "grandeco",
+		"name": "Grandeco Snow Resort"
+	},
+	{
+		"id": "grandee",
+		"name": "Grandee Hatoriko Ski Resort"
+	},
+	{
+		"id": "greenpia-onuma",
+		"name": "Green PIA Onuma Ski Area"
+	},
+	{
+		"id": "green-valley-kamuro",
+		"name": "Green Valley Kamuro"
+	},
+	{
+		"id": "gujo-village",
+		"name": "Gujo Vacation Village Ski Resort"
+	},
+	{
+		"id": "hachi-kita",
+		"name": "Hachi Kita Ski Resort"
+	},
+	{
+		"id": "hachi-kogen",
+		"name": "Hachikogen Ski Resort"
+	},
+	{
+		"id": "hachimantai-panorama",
+		"name": "Hachimantai Resort Panorama Ski Area"
+	},
+	{
+		"id": "hachimantai-shimokura",
+		"name": "Hachimantai Resort Shimokura Ski Area"
+	},
+	{
+		"id": "haginoyama",
+		"name": "Haginoyama Ski Area"
+	},
+	{
+		"id": "hagurosan",
+		"name": "Hagurosan Ski Resort"
+	},
+	{
+		"id": "hakkai",
+		"name": "Hakkai Sanroku Ski Area"
+	},
+	{
+		"id": "hakkoda",
+		"name": "Hakkoda Area"
+	},
+	{
+		"id": "hakkoda-kokusai",
+		"name": "Hakkoda Kokusai Ski Resort"
+	},
+	{
+		"id": "hakkoda-ropeway",
+		"name": "Hakkoda Ropeway"
+	},
+	{
+		"id": "hakodate-nanae",
+		"name": "Hakodate Nanae Snow Park"
+	},
+	{
+		"id": "hakodate-yama",
+		"name": "Hakodateyama Ski Resort"
+	},
+	{
+		"id": "hakuba-47-goryu",
+		"name": "Hakuba 47 + Goryu"
+	},
+	{
+		"id": "hakuba-47",
+		"name": "Hakuba 47 Winter Sports Park"
+	},
+	{
+		"id": "hakuba-cortina",
+		"name": "Hakuba Cortina Ski Resort"
+	},
+	{
+		"id": "hakuba-goryu",
+		"name": "Hakuba Goryu Snow Resort"
+	},
+	{
+		"id": "happo-one",
+		"name": "Hakuba Happo-One Snow Resort"
+	},
+	{
+		"id": "hakuba-iwatake",
+		"name": "Hakuba Iwatake Ski Field"
+	},
+	{
+		"id": "hakunori",
+		"name": "Hakuba Norikura Onsen Ski Resort"
+	},
+	{
+		"id": "hakugindai",
+		"name": "Hakugindai Ski Resort"
+	},
+	{
+		"id": "hanami",
+		"name": "Hanamiyama Ski Area"
+	},
+	{
+		"id": "hanawa",
+		"name": "Hanawa Ski Area"
+	},
+	{
+		"id": "happodai",
+		"name": "Happodai Ski Area"
+	},
+	{
+		"id": "hasuike",
+		"name": "Hasuike Ski Area"
+	},
+	{
+		"id": "heavens-sonohara",
+		"name": "Heavens Sonohara"
+	},
+	{
+		"id": "hida-funayama",
+		"name": "Hida Funayama Snow Resort Arkopia"
+	},
+	{
+		"id": "hida-honoki",
+		"name": "Hida Honokidaira"
+	},
+	{
+		"id": "hida-kawai",
+		"name": "Hida Kawai Ski Resort"
+	},
+	{
+		"id": "hida-nagareha",
+		"name": "Hida Nagareha"
+	},
+	{
+		"id": "hida-takayama",
+		"name": "Hida Takayama Municipal Ski Resort"
+	},
+	{
+		"id": "hidaka",
+		"name": "Hidaka International Ski Area"
+	},
+	{
+		"id": "higashitateyama",
+		"name": "Higashitateyama Ski Area"
+	},
+	{
+		"id": "hijiri",
+		"name": "Hijiri Kogen"
+	},
+	{
+		"id": "himekayu",
+		"name": "Himekayu Ski Area"
+	},
+	{
+		"id": "hinode",
+		"name": "Hinode Ski Area"
+	},
+	{
+		"id": "hiraniwa",
+		"name": "Hiraniwa Kogen"
+	},
+	{
+		"id": "hiraya-kogen",
+		"name": "Hiraya Kogen Ski Resort"
+	},
+	{
+		"id": "hirayu-onsen",
+		"name": "Hirayu Onsen Ski Area"
+	},
+	{
+		"id": "kenmori",
+		"name": "Hiroshima Kenminnomori Ski Area"
+	},
+	{
+		"id": "hirugano",
+		"name": "Hirugano Kogen Ski Resort"
+	},
+	{
+		"id": "bear-valley",
+		"name": "Hiruzen Bear Valley Ski Resort"
+	},
+	{
+		"id": "minakami-hodaigi",
+		"name": "Hodaigi Mountain Resort"
+	},
+	{
+		"id": "greenland-white",
+		"name": "Hokkaido Greenland White Park"
+	},
+	{
+		"id": "hoppo",
+		"name": "Hoppo-Bunadaira Ski Area"
+	},
+	{
+		"id": "horonobe",
+		"name": "Horonobecho Higashigaoka Ski Area"
+	},
+	{
+		"id": "horotachi",
+		"name": "Horotachi Ski Area"
+	},
+	{
+		"id": "hunter",
+		"name": "Hunter Mountain Shiobara"
+	},
+	{
+		"id": "hyonosen-kokusai",
+		"name": "Hyonosen Kokusai"
+	},
+	{
+		"id": "hyper-bowl",
+		"name": "Hyper Bowl Tohachi"
+	},
+	{
+		"id": "ibi-kogen",
+		"name": "Ibi Kogen Ski Resort"
+	},
+	{
+		"id": "ibukinosato",
+		"name": "Ibukinosato Ski Area"
+	},
+	{
+		"id": "ichinose-diamond",
+		"name": "Ichinose Diamond Ski area"
+	},
+	{
+		"id": "ichinose-family",
+		"name": "Ichinose Family Ski Area"
+	},
+	{
+		"id": "yamanokami",
+		"name": "Ichinose Yamanokami Ski Area"
+	},
+	{
+		"id": "iizuna",
+		"name": "Iizuna Resort"
+	},
+	{
+		"id": "ikawa-kainayama",
+		"name": "Ikawa Ski Resort Kainayama"
+	},
+	{
+		"id": "ikenotaira-onsen",
+		"name": "Ikenotaira Ski Resort Alpen Blick Resort"
+	},
+	{
+		"id": "ikenotaira-snow-park",
+		"name": "Ikenotaira Snow Park"
+	},
+	{
+		"id": "imajo",
+		"name": "Imajo 365"
+	},
+	{
+		"id": "ina",
+		"name": "Ina Ski Resort"
+	},
+	{
+		"id": "inawashiro",
+		"name": "Inawashiro Ski Resort"
+	},
+	{
+		"id": "inosawa",
+		"name": "Inosawa Citizens Ski "
+	},
+	{
+		"id": "iox-arosa",
+		"name": "IOX-AROSA"
+	},
+	{
+		"id": "ipponsugi",
+		"name": "Ippon Sugi Ski Resort"
+	},
+	{
+		"id": "ishikariheigen",
+		"name": "Ishikari Heigen Ski Slope"
+	},
+	{
+		"id": "ishiuchi-hanaoka",
+		"name": "Ishiuchi Hanaoka Ski Area"
+	},
+	{
+		"id": "ishiuchi-maruyama",
+		"name": "Ishiuchi Maruyama Ski Resort"
+	},
+	{
+		"id": "ishizuchi",
+		"name": "Ishizuchi"
+	},
+	{
+		"id": "seaside-valley",
+		"name": "Itoigawa Seaside Valley Ski Area"
+	},
+	{
+		"id": "itsukamachi",
+		"name": "Itsukamachi"
+	},
+	{
+		"id": "hyakuzawa",
+		"name": "Iwakisan Hyakuzawa"
+	},
+	{
+		"id": "iwanai",
+		"name": "Iwanai Resort"
+	},
+	{
+		"id": "iwappara",
+		"name": "Iwappara Ski Resort"
+	},
+	{
+		"id": "iwate-kogen",
+		"name": "Iwate Kogen Snow Park"
+	},
+	{
+		"id": "izumigatake",
+		"name": "Izumigatake Ski Resort"
+	},
+	{
+		"id": "kurobushi",
+		"name": "Jangle Jungle"
+	},
+	{
+		"id": "jeunesse",
+		"name": "Jeunesse Kurikoma"
+	},
+	{
+		"id": "jib",
+		"name": "Jib Highland Ski Area"
+	},
+	{
+		"id": "jiigatake",
+		"name": "Jigatake Snow Park"
+	},
+	{
+		"id": "joetsu-kokusai",
+		"name": "Joetsu Kokusai Ski Resort"
+	},
+	{
+		"id": "kagamiganru",
+		"name": "Kagamiganaru Ski Area"
+	},
+	{
+		"id": "kagura",
+		"name": "Kagura Snow Resorts"
+	},
+	{
+		"id": "kamihiruzen",
+		"name": "Kamihiruzen"
+	},
+	{
+		"id": "kamoidake",
+		"name": "Kamoidake Ski Resort"
+	},
+	{
+		"id": "misaka",
+		"name": "Kamui Misaka"
+	},
+	{
+		"id": "kamui",
+		"name": "Kamui Ski Links"
+	},
+	{
+		"id": "kanayasan",
+		"name": "Kanayasan Ski Area"
+	},
+	{
+		"id": "kanazawa",
+		"name": "Kanazawa Municipal Ski Resort"
+	},
+	{
+		"id": "kandatsu",
+		"name": "Kandatsu Snow Resort"
+	},
+	{
+		"id": "karigahara",
+		"name": "Karigahara"
+	},
+	{
+		"id": "karuizawa-prince",
+		"name": "Karuizawa Prince Hotel Snow Resort"
+	},
+	{
+		"id": "karuizawa",
+		"name": "Karuizawa Snow Park"
+	},
+	{
+		"id": "kashimayari",
+		"name": "Kashimayari Ski Resort"
+	},
+	{
+		"id": "katashina",
+		"name": "Katashina Kogen Ski Resort"
+	},
+	{
+		"id": "ogura-hotaka",
+		"name": "Katashina Ogna Hotaka Snow Resort"
+	},
+	{
+		"id": "katsurazawa",
+		"name": "Katsurazawa Ski Area"
+	},
+	{
+		"id": "kawaba",
+		"name": "Kawaba Ski Resort"
+	},
+	{
+		"id": "kazawa",
+		"name": "Kazawa Snow Area"
+	},
+	{
+		"id": "kirigamine",
+		"name": "Kirigamine"
+	},
+	{
+		"id": "kiroro",
+		"name": "Kiroro Resort"
+	},
+	{
+		"id": "kiso",
+		"name": "Kiso Fukushima"
+	},
+	{
+		"id": "takahata",
+		"name": "Kita Nikko Takahata Snow Paradise"
+	},
+	{
+		"id": "kitami",
+		"name": "Kitami Wakamatsu Shimin Ski Resort"
+	},
+	{
+		"id": "kiyosato",
+		"name": "Kiyosatocho Midori Ski Area"
+	},
+	{
+		"id": "koeji",
+		"name": "Koeji Ski Area"
+	},
+	{
+		"id": "koide",
+		"name": "Koide Ski Resort"
+	},
+	{
+		"id": "komagane",
+		"name": "Komagane Kogen Skiing Ground"
+	},
+	{
+		"id": "minamifurano",
+		"name": "Kosetsu Minamifurano Ski Area"
+	},
+	{
+		"id": "koshi-kogen",
+		"name": "Koshi Kogen Ski Area"
+	},
+	{
+		"id": "kotobiki",
+		"name": "Kotobiki Forest Park Ski Area"
+	},
+	{
+		"id": "kujyu",
+		"name": "Kujyu Forest Park Skiing Grounds"
+	},
+	{
+		"id": "kuma",
+		"name": "Kuma Ski Land"
+	},
+	{
+		"id": "kumanoyu",
+		"name": "Kumanoyu Ski area"
+	},
+	{
+		"id": "kunimidaira",
+		"name": "Kunimidaira"
+	},
+	{
+		"id": "kunizakai",
+		"name": "Kunizakai Kogen Snow Park"
+	},
+	{
+		"id": "kurohime",
+		"name": "Kurohime Kogen Snow Park"
+	},
+	{
+		"id": "kusatsu-onsen",
+		"name": "Kusatsu Onsen Ski Resort"
+	},
+	{
+		"id": "asahigaoka",
+		"name": "Kutchancho Asahigaoka Ski Area"
+	},
+	{
+		"id": "kutsuki",
+		"name": "Kutsuki Snow Park"
+	},
+	{
+		"id": "kuzuryu",
+		"name": "Kuzuryu"
+	},
+	{
+		"id": "kyowa",
+		"name": "Kyowa Snow Park"
+	},
+	{
+		"id": "akankohan",
+		"name": "Lake Akan Hot Spring Ski Area"
+	},
+	{
+		"id": "listel",
+		"name": "Listel Ski Fantasia"
+	},
+	{
+		"id": "lotte-arai",
+		"name": "Lotte Arai Resort Ski Resort"
+	},
+	{
+		"id": "ashibetsu",
+		"name": "M's Resort Ashibetsu"
+	},
+	{
+		"id": "madarao",
+		"name": "Madarao Mountain Resort"
+	},
+	{
+		"id": "maiko",
+		"name": "Maiko Snow Resort"
+	},
+	{
+		"id": "makado",
+		"name": "Makado Onsen"
+	},
+	{
+		"id": "manba-okukan",
+		"name": "Manba Okukan"
+	},
+	{
+		"id": "manza-onsen",
+		"name": "Manza Onsen Ski Resort"
+	},
+	{
+		"id": "maruike",
+		"name": "Maruike Ski Area"
+	},
+	{
+		"id": "marunuma-kogen",
+		"name": "Marunuma Kogen Ski resort"
+	},
+	{
+		"id": "matsudai",
+		"name": "Matsudai Family"
+	},
+	{
+		"id": "matsumori",
+		"name": "Matsumori Ski Area"
+	},
+	{
+		"id": "matsuyama",
+		"name": "Matsuyama Ski Area"
+	},
+	{
+		"id": "megahira",
+		"name": "Megahira"
+	},
+	{
+		"id": "meiho",
+		"name": "Meiho Ski Resort"
+	},
+	{
+		"id": "memuro",
+		"name": "Memuro Ski Area"
+	},
+	{
+		"id": "kaida-kogen",
+		"name": "Mia Kaida Kogen"
+	},
+	{
+		"id": "miinohara",
+		"name": "Miinohara Ski Area"
+	},
+	{
+		"id": "mikasayama",
+		"name": "Mikasayama Ski Resort"
+	},
+	{
+		"id": "mikata",
+		"name": "Mikata Snow Park"
+	},
+	{
+		"id": "mikawa",
+		"name": "Mikawa Onsen"
+	},
+	{
+		"id": "fujiwara",
+		"name": "Minakami Kogen Fujiwara Ski Resort"
+	},
+	{
+		"id": "minakami-kogen",
+		"name": "Minakami Kogen Ski Resort"
+	},
+	{
+		"id": "minamigaoka",
+		"name": "Minamigaoka Ski Area"
+	},
+	{
+		"id": "mineyama",
+		"name": "Mineyama Kogen Resort WHITE PEAK"
+	},
+	{
+		"id": "minowa",
+		"name": "Minowa Ski Resort"
+	},
+	{
+		"id": "mishima",
+		"name": "Mishima Choei"
+	},
+	{
+		"id": "eboshi",
+		"name": "Miyagi Zao Eboshi Resort"
+	},
+	{
+		"id": "shichikashuku",
+		"name": "Miyagi Zao Shichikashuku"
+	},
+	{
+		"id": "shiroishi",
+		"name": "Miyagi Zao Shiroishi Ski Resort"
+	},
+	{
+		"id": "mizuho",
+		"name": "Mizuho Highland"
+	},
+	{
+		"id": "mombetsu-ooyama",
+		"name": "Mombestu Oyama"
+	},
+	{
+		"id": "outdoor-in-motai",
+		"name": "Motai Ski Resort"
+	},
+	{
+		"id": "mount-racey",
+		"name": "Mount Racey Ski Area"
+	},
+	{
+		"id": "moya",
+		"name": "Moya Hill's"
+	},
+	{
+		"id": "mashike",
+		"name": "Mt Shokanbetsu Ski Area"
+	},
+	{
+		"id": "mt-jeans",
+		"name": "Mt. Jeans Nasu"
+	},
+	{
+		"id": "tanigawadake",
+		"name": "Mt.T (Tanigawadake Tenjindaira)"
+	},
+	{
+		"id": "muica",
+		"name": "Muica Snow Resort"
+	},
+	{
+		"id": "hakkaisan",
+		"name": "Muikamachi Hakkaisan Ski"
+	},
+	{
+		"id": "budo",
+		"name": "Murakami Budo Ski Area"
+	},
+	{
+		"id": "naeba",
+		"name": "Naeba Ski Resort"
+	},
+	{
+		"id": "nagaoka",
+		"name": "Nagaoka City Ski Area"
+	},
+	{
+		"id": "nakafurano-hokusei",
+		"name": "Nakafurano Hokusei Ski Area"
+	},
+	{
+		"id": "nakasato",
+		"name": "Nakasato Kiyotsu Ski Area"
+	},
+	{
+		"id": "nakatonbetsucho",
+		"name": "Nakatonbetsucho Kotobuki Ski Area"
+	},
+	{
+		"id": "nakayama",
+		"name": "Nakayamatoge"
+	},
+	{
+		"id": "nakazato-snow-wood",
+		"name": "Nakazato Snow Wood"
+	},
+	{
+		"id": "namari",
+		"name": "Namari Onsen"
+	},
+	{
+		"id": "nanao-korasa",
+		"name": "Nanao Korosa Ski Lodge"
+	},
+	{
+		"id": "naspa",
+		"name": "NASPA Ski Garden"
+	},
+	{
+		"id": "nasu-onsen",
+		"name": "Nasu Onsen Family"
+	},
+	{
+		"id": "nayoro",
+		"name": "Nayoro Piyashiri"
+	},
+	{
+		"id": "alts-bandai",
+		"name": "Nekoma South (Alts Bandai)"
+	},
+	{
+		"id": "new-greenpia-tsunan",
+		"name": "New Greenpia Tsunan Ski Area"
+	},
+	{
+		"id": "nihonmatsu-shiozawa",
+		"name": "Nihonmatsu Shiozawa"
+	},
+	{
+		"id": "niki-chomin",
+		"name": "Niki Chomin Ski Area"
+	},
+	{
+		"id": "nikko-yumoto",
+		"name": "Nikko Yumoto Ski Park"
+	},
+	{
+		"id": "ninox",
+		"name": "Ninox Snow Park"
+	},
+	{
+		"id": "niseko-moiwa",
+		"name": "Niseko Moiwa Ski Resort"
+	},
+	{
+		"id": "niseko-united",
+		"name": "Niseko United"
+	},
+	{
+		"id": "nishikawa",
+		"name": "Nishikawa Chomin Ski Area"
+	},
+	{
+		"id": "nishitateyama",
+		"name": "Nishitateyama Ski Area"
+	},
+	{
+		"id": "niyama",
+		"name": "Niyama Kogen"
+	},
+	{
+		"id": "nomugitoge",
+		"name": "Nomugitoge"
+	},
+	{
+		"id": "norn",
+		"name": "Norn Ski Resort"
+	},
+	{
+		"id": "northern-arc",
+		"name": "Northern Arc Resort"
+	},
+	{
+		"id": "nozawa-onsen",
+		"name": "Nozawa Onsen Snow Resort"
+	},
+	{
+		"id": "nukabira",
+		"name": "Nukabira Gensenkyo Ski Area"
+	},
+	{
+		"id": "numajiri",
+		"name": "Numajiri Ski"
+	},
+	{
+		"id": "ogaya",
+		"name": "Ogaya Ski Area"
+	},
+	{
+		"id": "ohdai",
+		"name": "Ohdai Ski Resort"
+	},
+	{
+		"id": "oirase",
+		"name": "Oirase Onsen"
+	},
+	{
+		"id": "ojiro",
+		"name": "Ojiro Ski resort"
+	},
+	{
+		"id": "okoppe",
+		"name": "Okoppe Ski Grounds"
+	},
+	{
+		"id": "okudaisen",
+		"name": "Okudaisen Ski Resort"
+	},
+	{
+		"id": "okuibuki",
+		"name": "Okuibuki Ski and Snowboard Resort"
+	},
+	{
+		"id": "okunakayama",
+		"name": "Okunakayama Kogen"
+	},
+	{
+		"id": "okushiga",
+		"name": "Okushiga Kogen Ski Area"
+	},
+	{
+		"id": "okutadami",
+		"name": "Okutadami Maruyama Ski Resort"
+	},
+	{
+		"id": "okutone",
+		"name": "Okutone Snow Park"
+	},
+	{
+		"id": "omagari",
+		"name": "Omagari Family"
+	},
+	{
+		"id": "onikoube",
+		"name": "Onikoube Ski Area"
+	},
+	{
+		"id": "onogawa",
+		"name": "Onogawa Onsen"
+	},
+	{
+		"id": "ontake-2240",
+		"name": "Ontake"
+	},
+	{
+		"id": "ookuradake",
+		"name": "Ookuradake Kogen Ski Area"
+	},
+	{
+		"id": "wakasu-ooya",
+		"name": "Ooyasu Ski Area"
+	},
+	{
+		"id": "orofure",
+		"name": "Orofure Ski Area"
+	},
+	{
+		"id": "geihoku-osa",
+		"name": "Osa"
+	},
+	{
+		"id": "osorakan",
+		"name": "Osorakan Snow Park"
+	},
+	{
+		"id": "otaru-tengu",
+		"name": "Otaru Tenguyama"
+	},
+	{
+		"id": "otoifuji",
+		"name": "Otoifuji Ski Area"
+	},
+	{
+		"id": "owani",
+		"name": "Owani Onsen Ski Resort"
+	},
+	{
+		"id": "oze-hinomata",
+		"name": "Oze Hinoemata Onsen"
+	},
+	{
+		"id": "oze-tokura",
+		"name": "Oze Tokura"
+	},
+	{
+		"id": "tsumagoi",
+		"name": "Palcall Tsumagoi Ski Resort"
+	},
+	{
+		"id": "pilatus",
+		"name": "Pilatus Tateshina Snow Resort"
+	},
+	{
+		"id": "pippu",
+		"name": "Pippu Ski Resort"
+	},
+	{
+		"id": "pirika",
+		"name": "Pirika Ski Area"
+	},
+	{
+		"id": "rewild-ninja",
+		"name": "Rewild Ninja Snow Highland"
+	},
+	{
+		"id": "ringo-kyowakoku",
+		"name": "Ringo Kyowakoku"
+	},
+	{
+		"id": "mt-rokko",
+		"name": "Rokkosan Snow Resort"
+	},
+	{
+		"id": "rusutsu",
+		"name": "Rusutsu Resort"
+	},
+	{
+		"id": "ryuoo",
+		"name": "Ryuoo Ski Park"
+	},
+	{
+		"id": "sado-daira",
+		"name": "Sado Daira"
+	},
+	{
+		"id": "sahoro",
+		"name": "Sahoro Resort"
+	},
+	{
+		"id": "sakae-club",
+		"name": "Sakae Club Ski Area"
+	},
+	{
+		"id": "parada",
+		"name": "Saku Ski Garden Parada"
+	},
+	{
+		"id": "sakuragaoka",
+		"name": "Sakuragaoka Ski Area"
+	},
+	{
+		"id": "sam-hakusan-ichirino",
+		"name": "SAM Hakusan Ichirino Onsen Ski Resort"
+	},
+	{
+		"id": "sam-hakusan-seymour",
+		"name": "SAM Hakusan Seymour Ski Area"
+	},
+	{
+		"id": "san-laiva",
+		"name": "San Laiva Ski"
+	},
+	{
+		"id": "sannokura",
+		"name": "Sannokura"
+	},
+	{
+		"id": "santa-present",
+		"name": "Santa Present Park"
+	},
+	{
+		"id": "sapporo-kokusai",
+		"name": "Sapporo Kokusai Ski Resort"
+	},
+	{
+		"id": "moiwa",
+		"name": "Sapporo Mt. Moiwa Ski Resort"
+	},
+	{
+		"id": "sapporo-teine",
+		"name": "Sapporo Teine Ski Center"
+	},
+	{
+		"id": "saroma",
+		"name": "Saroma Ski Area"
+	},
+	{
+		"id": "sarufutsu",
+		"name": "Sarufutsu Sonei Ski Area"
+	},
+	{
+		"id": "seki",
+		"name": "Seki Onsen Ski Area"
+	},
+	{
+		"id": "chuo-alps",
+		"name": "Senjojiki Ski Area"
+	},
+	{
+		"id": "shibetsu",
+		"name": "Shibetsu Toba Kanayama Ski Resort"
+	},
+	{
+		"id": "shichinohe",
+		"name": "Shichinohe Choei ski area"
+	},
+	{
+		"id": "giant",
+		"name": "Shiga Kogen Giant"
+	},
+	{
+		"id": "shimokawa",
+		"name": "Shimokawa Ski Field"
+	},
+	{
+		"id": "shintokuyama",
+		"name": "Shintokuyama Ski Area"
+	},
+	{
+		"id": "shintotsukawa",
+		"name": "Shintotsukawa Sotchidake Ski Area"
+	},
+	{
+		"id": "shirakaba-2-1",
+		"name": "Shirakaba 2in1"
+	},
+	{
+		"id": "shirakaba-kokusai",
+		"name": "Shirakaba Kogen Kokusai"
+	},
+	{
+		"id": "shirakabako",
+		"name": "Shirakabako Royal Hill"
+	},
+	{
+		"id": "shirakawa",
+		"name": "Shirakawago Hirase Onsen Shirayumi"
+	},
+	{
+		"id": "shizukuishi",
+		"name": "Shizukuishi Ski Resort"
+	},
+	{
+		"id": "ski-jam-katsuyama",
+		"name": "Ski Jam Katsuyama"
+	},
+	{
+		"id": "tenei",
+		"name": "Ski Resort Tenei"
+	},
+	{
+		"id": "sky-valley",
+		"name": "Sky Valley Ski Area"
+	},
+	{
+		"id": "kurumayama",
+		"name": "Skypark Resort"
+	},
+	{
+		"id": "snow-cruise-onze",
+		"name": "Snow Cruise Onze"
+	},
+	{
+		"id": "umpenji",
+		"name": "Snow Park Umpenji"
+	},
+	{
+		"id": "nekoyama",
+		"name": "Snow Resort Nekoyama"
+	},
+	{
+		"id": "shiratori-kogen",
+		"name": "Snow Wave Park Shiratori Kogen"
+	},
+	{
+		"id": "sol-fa-oda",
+		"name": "SOL-FA Oda"
+	},
+	{
+		"id": "soma",
+		"name": "Soma Romantopia"
+	},
+	{
+		"id": "sotogahama",
+		"name": "Sotogahama Kanita Ski"
+	},
+	{
+		"id": "soyumura",
+		"name": "Soyumura 229 Ski Land"
+	},
+	{
+		"id": "spring-valley",
+		"name": "Spring Valley Izumi Kogen"
+	},
+	{
+		"id": "st-mary",
+		"name": "St. Mary"
+	},
+	{
+		"id": "sugadaira",
+		"name": "Sugadaira Kogen Snow Resort"
+	},
+	{
+		"id": "suginohara",
+		"name": "Suginohara Ski Resort"
+	},
+	{
+		"id": "suhara",
+		"name": "Suhara ski area"
+	},
+	{
+		"id": "suisyosan",
+		"name": "Suishozan Ski Area"
+	},
+	{
+		"id": "sumikawa",
+		"name": "Sumikawa Snow Park"
+	},
+	{
+		"id": "kiyosato-sun-meadows",
+		"name": "Sun Meadows Kiyosato Highland Park"
+	},
+	{
+		"id": "sun-valley",
+		"name": "Sun Valley Ski Area"
+	},
+	{
+		"id": "sutto",
+		"name": "Sutto Town Ski Area"
+	},
+	{
+		"id": "swiss-village",
+		"name": "Swiss Village Ski Resort"
+	},
+	{
+		"id": "tadami",
+		"name": "Tadami Ski Area"
+	},
+	{
+		"id": "taiheizan",
+		"name": "Taiheizan Opas Ski Resort"
+	},
+	{
+		"id": "tainai",
+		"name": "Tainai Ski and Snowboard Area"
+	},
+	{
+		"id": "taira",
+		"name": "Taira Snow Park"
+	},
+	{
+		"id": "tajima-farm",
+		"name": "Tajima Farm Park Ski Area"
+	},
+	{
+		"id": "takamagahara",
+		"name": "Takamagahara Mammoth Ski Area"
+	},
+	{
+		"id": "asama-2000",
+		"name": "Takamine Mountain Park"
+	},
+	{
+		"id": "takanbo",
+		"name": "Takanbo"
+	},
+	{
+		"id": "takasu-snow-park",
+		"name": "Takasu Snow Park"
+	},
+	{
+		"id": "mont-deus",
+		"name": "Takayama City Ski Resort"
+	},
+	{
+		"id": "banshogahara",
+		"name": "Takeshi Banshogahara Ski Area"
+	},
+	{
+		"id": "tambara",
+		"name": "Tambara Ski Park"
+	},
+	{
+		"id": "tangram",
+		"name": "Tangram Ski Circus"
+	},
+	{
+		"id": "tanne",
+		"name": "Tanne no mori Okojo Ski Area"
+	},
+	{
+		"id": "tateshina",
+		"name": "Tateshina Tokyu Ski Area"
+	},
+	{
+		"id": "tateyama-sanroku",
+		"name": "Tateyama Sanroku Ski Area"
+	},
+	{
+		"id": "tayama",
+		"name": "Tayama Ski Area"
+	},
+	{
+		"id": "tazawako",
+		"name": "Tazawako Ski Resort"
+	},
+	{
+		"id": "tendo",
+		"name": "Tendo Kogen Ski Resort"
+	},
+	{
+		"id": "tengamori",
+		"name": "Tengamori Ski Area"
+	},
+	{
+		"id": "tengendai",
+		"name": "Tengendai Kogen"
+	},
+	{
+		"id": "tenoko",
+		"name": "Tenoko Ski Area"
+	},
+	{
+		"id": "tenzan",
+		"name": "Tenzan Ski Resort"
+	},
+	{
+		"id": "terakoya",
+		"name": "Terakoya"
+	},
+	{
+		"id": "teshio",
+		"name": "Teshio Town Ski Area"
+	},
+	{
+		"id": "kijimadaira",
+		"name": "The Cupid of Romance"
+	},
+	{
+		"id": "makinoiri",
+		"name": "The Kijima Snow Park"
+	},
+	{
+		"id": "togakushi",
+		"name": "Togakushi Ski Field"
+	},
+	{
+		"id": "togari-onsen",
+		"name": "Togari Onsen Ski Resort"
+	},
+	{
+		"id": "tokusagamine",
+		"name": "Tokusagamine Ski Area"
+	},
+	{
+		"id": "toma-choei",
+		"name": "Toma Choei Ski Area"
+	},
+	{
+		"id": "tomamu",
+		"name": "Tomamu Hoshino Resort"
+	},
+	{
+		"id": "tonami",
+		"name": "Tonami Yumenotaira"
+	},
+	{
+		"id": "toyotomi",
+		"name": "Toyotomi Ski Area"
+	},
+	{
+		"id": "tsugaike",
+		"name": "Tsugaike Kogen Ski Resort"
+	},
+	{
+		"id": "tsuguro-kogen",
+		"name": "Tsuguro Kogen"
+	},
+	{
+		"id": "uenono",
+		"name": "Uenono Ski Area"
+	},
+	{
+		"id": "unabetsu",
+		"name": "Unabetsu Ski Area"
+	},
+	{
+		"id": "unazuki",
+		"name": "Unazuki Snow Park"
+	},
+	{
+		"id": "up-kannabe",
+		"name": "UP Kannabe Ski Resort"
+	},
+	{
+		"id": "ura-bandai",
+		"name": "Urabandai Ski Resort"
+	},
+	{
+		"id": "ushidake",
+		"name": "Ushidake Onsen Ski Resort"
+	},
+	{
+		"id": "utopia-saioto",
+		"name": "Utopia Saioto"
+	},
+	{
+		"id": "wakasa",
+		"name": "Wakasa Hyounosen Ski Area"
+	},
+	{
+		"id": "wakkanai-komadori",
+		"name": "Wakkanaishi Komadori Ski Area"
+	},
+	{
+		"id": "washigatake",
+		"name": "Washigatake Ski Area"
+	},
+	{
+		"id": "wassamu",
+		"name": "Wassamu Higashiyama Ski Area"
+	},
+	{
+		"id": "hakuba-sanosaka",
+		"name": "White Resort Hakuba Sanosaka"
+	},
+	{
+		"id": "white-valley",
+		"name": "White Valley"
+	},
+	{
+		"id": "oze-iwakura",
+		"name": "White World Oze Iwakura"
+	},
+	{
+		"id": "takasu-whitepia",
+		"name": "WhitePIA Takasu"
+	},
+	{
+		"id": "windsor",
+		"name": "Windsor Snow Village"
+	},
+	{
+		"id": "winghills",
+		"name": "Winghills Shirotori"
+	},
+	{
+		"id": "x-jam-takaifuji",
+		"name": "X-JAM Takaifuji"
+	},
+	{
+		"id": "yachihokogen",
+		"name": "Yachihokogen Ski Area"
+	},
+	{
+		"id": "yakebitaiyama",
+		"name": "Yakebitaiyama Ski area"
+	},
+	{
+		"id": "yakurai-garden",
+		"name": "Yakurai Garden Ski Area"
+	},
+	{
+		"id": "yakushi",
+		"name": "Yakushi Ski Area"
+	},
+	{
+		"id": "yakushisan",
+		"name": "Yakushisan Ski Area"
+	},
+	{
+		"id": "yamaboku",
+		"name": "YAMABOKU Wild Snow Park"
+	},
+	{
+		"id": "yawata",
+		"name": "Yawata Highland 191 Resort"
+	},
+	{
+		"id": "yogo-kogen",
+		"name": "Yogo Kogen Resort Yap"
+	},
+	{
+		"id": "yogoshiyama",
+		"name": "Yogoshiyama Ski Area"
+	},
+	{
+		"id": "yokone",
+		"name": "Yokone"
+	},
+	{
+		"id": "yokoteyama",
+		"name": "Yokoteyama Shibutoge Ski area"
+	},
+	{
+		"id": "yomase",
+		"name": "Yomase Onsen Ski Resort"
+	},
+	{
+		"id": "yonezawa",
+		"name": "Yonezawa Snow World"
+	},
+	{
+		"id": "yuda",
+		"name": "Yuda Ski Field"
+	},
+	{
+		"id": "yudonosan",
+		"name": "Yudonosan Ski Area"
+	},
+	{
+		"id": "yuguchinai",
+		"name": "Yuguchinai"
+	},
+	{
+		"id": "yunomaru",
+		"name": "Yunomaru Ski Area"
+	},
+	{
+		"id": "yuzawa-kogen",
+		"name": "Yuzawa Kogen Ski Resort"
+	},
+	{
+		"id": "yuzawa-nakazato",
+		"name": "Yuzawa Nakazato Snow Resort"
+	},
+	{
+		"id": "yuzawa-park",
+		"name": "Yuzawa Park Ski Area"
+	},
+	{
+		"id": "yuzawashi",
+		"name": "Yuzawashi Inakawa Ski Area"
+	},
+	{
+		"id": "zao-liza",
+		"name": "Zao Liza World"
+	},
+	{
+		"id": "zao-onsen",
+		"name": "Zao Onsen Ski Resort"
+	},
+	{
+		"id": "sarukura",
+		"name": "Zao Sarukura"
+	}
+]
