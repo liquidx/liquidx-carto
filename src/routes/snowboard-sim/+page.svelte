@@ -39,15 +39,17 @@
 	let shadows = $state(!coarse);
 
 	const lifts = $derived(game?.lifts ?? []);
+	/** Every resort there is data for, under a prompt until one is picked. */
+	const resorts = $derived([
+		...(data.locationId ? [] : [{ value: '', label: 'choose a resort' }]),
+		...locations.map((l) => ({ value: l.id, label: l.name }))
+	]);
 	const provider = PROVIDERS.find((p) => p.id === 'gsi-1m')!;
 
 	// A game for each resort, on a canvas of its own: the last one's WebGL context is given up.
 	$effect(() => {
 		const { features, woods } = data;
 		const el = canvas;
-		if (!el?.isConnected) return;
-		let g: Game | undefined;
-		let gone = false;
 		untrack(() => {
 			game = null;
 			hud = null;
@@ -57,6 +59,10 @@
 			started = false;
 			locationId = data.locationId;
 		});
+		// Nothing to build until a resort is picked.
+		if (!features || !el?.isConnected) return;
+		let g: Game | undefined;
+		let gone = false;
 		createGame(
 			el,
 			features,
@@ -101,6 +107,7 @@
 
 	/** Ride somewhere else: the page loads that resort's data and the game is built again. */
 	function pickLocation(id: string) {
+		if (!id) return;
 		const url = new URL(page.url);
 		url.searchParams.set('locationId', id);
 		loading = true;
@@ -169,14 +176,25 @@
 
 	// Touch: gestures on the view instead of on-screen buttons. The first finger steers by how
 	// far it has dragged sideways from where it landed, tucks while it is held dragged down, and
-	// jumps on a quick flick up. A second finger on the screen brakes.
+	// jumps on a quick flick up. A second finger on the screen brakes, and a tap on a lift rides it.
 	/** Sideways drag for a full carve, and the drag down that tucks, in pixels. */
 	const CARVE_PX = 60;
 	const TUCK_PX = 45;
 	/** A flick: moving up faster than this, in pixels a millisecond, over at least `FLICK_PX`. */
 	const FLICK_SPEED = 0.9;
 	const FLICK_PX = 30;
-	type Touch = { id: number; x0: number; y0: number; y: number; t: number; low: number };
+	/** A tap: up again within this long, in milliseconds, having moved no further than `TAP_PX`. */
+	const TAP_MS = 300;
+	const TAP_PX = 10;
+	type Touch = {
+		id: number;
+		x0: number;
+		y0: number;
+		t0: number;
+		y: number;
+		t: number;
+		low: number;
+	};
 	let primary: Touch | null = null;
 	let fingers = 0;
 	let jumpTimer: ReturnType<typeof setTimeout> | undefined;
@@ -197,6 +215,7 @@
 			id: e.pointerId,
 			x0: e.clientX,
 			y0: e.clientY,
+			t0: e.timeStamp,
 			y: e.clientY,
 			t: e.timeStamp,
 			low: e.clientY
@@ -224,6 +243,13 @@
 		fingers = Math.max(0, fingers - 1);
 		if (fingers < 2) game.input.brake = false;
 		if (primary && e.pointerId === primary.id) {
+			// A tap on a lift gets on it.
+			if (
+				e.type === 'pointerup' &&
+				e.timeStamp - primary.t0 < TAP_MS &&
+				Math.hypot(e.clientX - primary.x0, e.clientY - primary.y0) < TAP_PX
+			)
+				game.boardAt(e.clientX, e.clientY);
 			// The steering finger is up: let go of everything, whatever else is still down.
 			primary = null;
 			fingers = 0;
@@ -305,7 +331,7 @@
 		{/if}
 	{/if}
 	<div class="labels" bind:this={labelHost}></div>
-	{#if game}
+	{#if game && data.features}
 		<div class="minimap" class:hidden={menu}>
 			<Minimap
 				{game}
@@ -323,7 +349,7 @@
 	{#if menu}
 		<div class="overlay">
 			<div class="panel">
-				<h1>{game?.resort.name ?? data.features.metadata?.name ?? data.tool.title}</h1>
+				<h1>{game?.resort.name ?? data.features?.metadata?.name ?? data.tool.title}</h1>
 				{#if game?.resort.nameJa}<p class="ja">{game.resort.nameJa}</p>{/if}
 				<p class="blurb">
 					A simulation of riding down the actual terrain of the mountain, from GSI Japan elevation
@@ -332,13 +358,15 @@
 				<div class="form">
 					<Select
 						label="resort"
-						options={locations.map((l) => ({ value: l.id, label: l.name }))}
+						options={resorts}
 						bind:value={locationId}
 						onchange={pickLocation}
 					/>
 				</div>
 				{#if message}
 					<p class="error">{message}</p>
+				{:else if !data.features && !loading}
+					<!-- Waiting for a resort to be picked. -->
 				{:else if !game || loading}
 					<div class="loading">
 						<span>{progress.stage}</span>
@@ -378,7 +406,7 @@
 					<p class="keys">
 						{#if coarse}
 							drag left or right to carve · drag down and hold to tuck · flick up to jump · a second
-							finger to brake · tap the lift prompt to ride it · tap the map to teleport
+							finger to brake · tap a lift to ride it · tap the map to teleport
 						{:else}
 							<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake ·
 							<kbd>space</kbd> jump · <kbd>E</kbd> ride a lift · <kbd>R</kbd> back to the top

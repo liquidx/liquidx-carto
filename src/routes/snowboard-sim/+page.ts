@@ -1,8 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { FeatureCollection } from 'geojson';
-import { asset } from '$app/paths';
 import type { FeaturesFile } from '$lib/snowboard/resort';
-import { DEFAULT_LOCATION_ID, isLocationId, locationUrls } from '$lib/diorama/location';
+import { isLocationId, locationUrls } from '$lib/diorama/location';
 import { findTool } from '$lib/tools';
 import type { PageLoad } from './$types';
 
@@ -10,16 +9,19 @@ import type { PageLoad } from './$types';
 export const ssr = false;
 
 /**
- * The resort comes from `?locationId=`, fetched from snowline; without one it is the default
- * location from the app's own static files.
+ * The resort comes from `?locationId=`, fetched from snowline; without one there is nothing to
+ * ride yet, and the start screen asks for a resort.
  */
 export const load: PageLoad = async ({ fetch, url }) => {
 	const tool = findTool('snowboard-sim');
 	if (!tool) error(404, 'not found');
+	// Fills the viewport below the header; the crumb names the page.
+	const page = { tool, fullBleed: true };
 	const requested = url.searchParams.get('locationId')?.trim();
-	const remote = !!requested && isLocationId(requested);
-	const locationId = remote ? requested : DEFAULT_LOCATION_ID;
-	const urls = remote ? locationUrls(locationId) : locationUrls(locationId, asset('/diorama/'));
+	if (!requested || !isLocationId(requested))
+		return { ...page, locationId: '', features: null, woods: null };
+	const locationId = requested;
+	const urls = locationUrls(locationId);
 	const [features, scene] = await Promise.all([
 		fetch(urls.features).then((r) => (r.ok ? r.json() : null)),
 		// The scene from OpenStreetMap, written by `pnpm diorama-scene build`; optional.
@@ -31,12 +33,5 @@ export const load: PageLoad = async ({ fetch, url }) => {
 		type: 'FeatureCollection',
 		features: scene.features.filter((f) => f.properties?.kind === 'wood')
 	};
-	return {
-		tool,
-		// Fills the viewport below the header; the crumb names the page.
-		fullBleed: true,
-		locationId,
-		features: features as FeaturesFile,
-		woods
-	};
+	return { ...page, locationId, features: features as FeaturesFile, woods };
 };
