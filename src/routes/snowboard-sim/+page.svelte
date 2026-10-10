@@ -3,20 +3,23 @@
 	lifts and forest laid out from the resort's GeoJSON. Keyboard to ride, lifts to get back up.
 -->
 <script lang="ts">
-	import { onMount } from 'svelte';
+	import { untrack } from 'svelte';
+	import { goto } from '$app/navigation';
 	import { asset } from '$app/paths';
+	import { page } from '$app/state';
 	import Button from '$lib/components/Button.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { PROVIDERS } from '$lib/contour/terrain-api';
 	import { CREDITS, type Credit } from '$lib/credits';
 	import { createGame, type Game, type Hud, type LoadProgress } from '$lib/snowboard/game';
+	import locations from '$lib/snowboard/locations.json';
 	import Minimap from '$lib/snowboard/Minimap.svelte';
 	import { DIFFICULTY_COLOR } from '$lib/snowboard/resort';
 
 	let { data } = $props();
 
-	let canvas: HTMLCanvasElement;
+	let canvas = $state<HTMLCanvasElement>();
 	let labelHost: HTMLElement;
 	let game = $state.raw<Game | null>(null);
 	let progress = $state<LoadProgress>({ stage: 'loading' });
@@ -26,6 +29,9 @@
 	let menu = $state(true);
 	let started = $state(false);
 	let liftId = $state('');
+	let locationId = $state('');
+	/** The picked resort's data is on its way. */
+	let loading = $state(false);
 	/** A touch screen: on-screen controls and lighter rendering. `?touch` forces it, for testing. */
 	const coarse =
 		typeof window !== 'undefined' &&
@@ -35,16 +41,30 @@
 	const lifts = $derived(game?.lifts ?? []);
 	const provider = PROVIDERS.find((p) => p.id === 'gsi-1m')!;
 
-	onMount(() => {
+	// A game for each resort, on a canvas of its own: the last one's WebGL context is given up.
+	$effect(() => {
+		const { features, woods } = data;
+		const el = canvas;
+		if (!el?.isConnected) return;
 		let g: Game | undefined;
+		let gone = false;
+		untrack(() => {
+			game = null;
+			hud = null;
+			progress = { stage: 'loading' };
+			message = '';
+			menu = true;
+			started = false;
+			locationId = data.locationId;
+		});
 		createGame(
-			canvas,
-			data.features,
+			el,
+			features,
 			{
 				provider: provider.id,
-				shadows,
+				shadows: untrack(() => shadows),
 				labels: labelHost,
-				woods: data.woods,
+				woods,
 				chairModels: {
 					2: asset('/diorama/chairlift-2.glb'),
 					4: asset('/diorama/chairlift-4.glb')
@@ -55,10 +75,12 @@
 				treeSpacing: coarse ? 18 : 14,
 				maxPixelRatio: coarse ? 1.5 : 2
 			},
-			(p) => (progress = p),
-			(h) => (hud = h)
+			(p) => gone || (progress = p),
+			(h) => gone || (hud = h)
 		)
 			.then((created) => {
+				// Another resort was picked while this one was loading.
+				if (gone) return created.dispose();
 				g = created;
 				game = created;
 				if (import.meta.env.DEV) (window as unknown as { __snowboard: Game }).__snowboard = created;
@@ -70,9 +92,21 @@
 				// Stand at the start, paused, so the menu sits over the view from the top.
 				created.startAt(liftId);
 			})
-			.catch((e) => (message = e instanceof Error ? e.message : String(e)));
-		return () => g?.dispose();
+			.catch((e) => gone || (message = e instanceof Error ? e.message : String(e)));
+		return () => {
+			gone = true;
+			g?.dispose();
+		};
 	});
+
+	/** Ride somewhere else: the page loads that resort's data and the game is built again. */
+	function pickLocation(id: string) {
+		const url = new URL(page.url);
+		url.searchParams.set('locationId', id);
+		loading = true;
+		// eslint-disable-next-line svelte/no-navigation-without-resolve -- same page, query only
+		goto(url, { keepFocus: true }).finally(() => (loading = false));
+	}
 
 	function start() {
 		if (!game) return;
@@ -80,13 +114,13 @@
 		started = true;
 		menu = false;
 		game.setPaused(false);
-		canvas.focus();
+		canvas?.focus();
 	}
 	function resume() {
 		if (!game) return;
 		menu = false;
 		game.setPaused(false);
-		canvas.focus();
+		canvas?.focus();
 	}
 	function pause() {
 		if (!game || !started) return;
@@ -215,15 +249,17 @@
 <svelte:window onkeydown={onKeyDown} onkeyup={onKeyUp} onblur={onBlur} />
 
 <div class="game" class:menu class:coarse>
-	<canvas
-		class="view"
-		bind:this={canvas}
-		tabindex="-1"
-		onpointerdown={onTouchDown}
-		onpointermove={onTouchMove}
-		onpointerup={onTouchUp}
-		onpointercancel={onTouchUp}
-	></canvas>
+	{#key data.features}
+		<canvas
+			class="view"
+			bind:this={canvas}
+			tabindex="-1"
+			onpointerdown={onTouchDown}
+			onpointermove={onTouchMove}
+			onpointerup={onTouchUp}
+			onpointercancel={onTouchUp}
+		></canvas>
+	{/key}
 
 	{#if hud && !menu}
 		<div class="hud">
@@ -274,7 +310,7 @@
 				woods={data.woods}
 				onteleport={(lon, lat) => {
 					game?.teleport(lon, lat);
-					canvas.focus();
+					canvas?.focus();
 				}}
 			/>
 		</div>
@@ -289,9 +325,17 @@
 					A simulation of riding down the actual terrain of the mountain, from GSI Japan elevation
 					data at 1 m and 5 m resolution and wooded areas from OpenStreetMap.
 				</p>
+				<div class="form">
+					<Select
+						label="resort"
+						options={locations.map((l) => ({ value: l.id, label: l.name }))}
+						bind:value={locationId}
+						onchange={pickLocation}
+					/>
+				</div>
 				{#if message}
 					<p class="error">{message}</p>
-				{:else if !game}
+				{:else if !game || loading}
 					<div class="loading">
 						<span>{progress.stage}</span>
 						{#if progress.fraction !== undefined}

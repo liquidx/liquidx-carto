@@ -95,6 +95,7 @@
 	class="hud-controls absolute right-3
     bottom-3 left-3 z-10
     md:top-5 md:right-auto md:bottom-auto md:left-5 md:w-72"
+	role="presentation"
 	ontouchstart={(e) => e.stopPropagation()}
 	ontouchmove={(e) => e.stopPropagation()}
 	ontouchend={(e) => e.stopPropagation()}

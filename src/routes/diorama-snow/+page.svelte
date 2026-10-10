@@ -587,9 +587,6 @@
 		color: inherit;
 		text-decoration: underline;
 	}
-	.head p code {
-		font-size: inherit;
-	}
 	.location {
 		width: 100%;
 		max-width: 360px;
