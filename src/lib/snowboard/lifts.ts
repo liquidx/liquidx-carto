@@ -37,8 +37,8 @@ const SEAT = {
 };
 /**
  * The same on the models: a chair's seat top is 2.74 m down and the rider sits right of the
- * middle, unless it is a single; the floor of a gondola cabin is 3.97 m down and of a cable
- * car 5.88 m.
+ * middle, or in the middle of an odd number of seats; the floor of a gondola cabin is 3.97 m
+ * down and of a cable car 5.88 m.
  */
 const MODEL_SEAT = {
 	chair: { drop: 3.33, forward: 0.37, across: 0.28 },
@@ -284,7 +284,7 @@ export function buildLifts(
 					? undefined
 					: cabinModels[lift.kind];
 		let seat = model && lift.kind !== 'ropeTow' ? MODEL_SEAT[lift.kind] : SEAT[lift.kind];
-		if (model && lift.kind === 'chair' && lift.seats === 1) seat = { ...seat, across: 0 };
+		if (model && lift.kind === 'chair' && lift.seats % 2) seat = { ...seat, across: 0 };
 		const forward = new THREE.Vector3(Math.sin(bearing), 0, Math.cos(bearing));
 		const line: LiftLine = {
 			lift,

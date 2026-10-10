@@ -12,6 +12,7 @@
 	import { untrack } from 'svelte';
 	import chairlift1 from '@liquidx/diorama/models/chairlift-1.glb?url';
 	import chairlift2 from '@liquidx/diorama/models/chairlift-2.glb?url';
+	import chairlift3 from '@liquidx/diorama/models/chairlift-3.glb?url';
 	import chairlift4 from '@liquidx/diorama/models/chairlift-4.glb?url';
 	import gondola from '@liquidx/diorama/models/gondola.glb?url';
 	import liftStation from '@liquidx/diorama/models/lift-station.glb?url';
@@ -151,7 +152,12 @@
 	const isMagicCarpet = (f: Feature) => isLift(f) && isCarpet(f);
 	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
 	/** The chair models there are, by how many they seat. */
-	const chairlifts: Record<number, string> = { 1: chairlift1, 2: chairlift2, 4: chairlift4 };
+	const chairlifts: Record<number, string> = {
+		1: chairlift1,
+		2: chairlift2,
+		3: chairlift3,
+		4: chairlift4
+	};
 	/** Width of a carrier in metres: a seat's worth each for a chair, a cabin by how many it holds. */
 	function carrierWidth(f: Feature) {
 		const n = seats(f);

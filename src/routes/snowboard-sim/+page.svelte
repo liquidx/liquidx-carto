@@ -6,6 +6,7 @@
 	import { untrack } from 'svelte';
 	import chairlift1 from '@liquidx/diorama/models/chairlift-1.glb?url';
 	import chairlift2 from '@liquidx/diorama/models/chairlift-2.glb?url';
+	import chairlift3 from '@liquidx/diorama/models/chairlift-3.glb?url';
 	import chairlift4 from '@liquidx/diorama/models/chairlift-4.glb?url';
 	import gondola from '@liquidx/diorama/models/gondola.glb?url';
 	import liftStation from '@liquidx/diorama/models/lift-station.glb?url';
@@ -79,6 +80,7 @@
 				chairModels: {
 					1: chairlift1,
 					2: chairlift2,
+					3: chairlift3,
 					4: chairlift4
 				},
 				cabinModel: gondola,

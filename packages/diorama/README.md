@@ -238,7 +238,7 @@ leaves one out, and a number swings it open from 0 to 1 by the `openRotationX` i
 
 The package comes with the lift models used in liquidx-carto, under
 `@liquidx/diorama/models/`: `chairlift-1.glb` (a single chair on a bent pole),
-`chairlift-2.glb` and `chairlift-4.glb` (chairs with a `Hood`),
+`chairlift-2.glb`, `chairlift-3.glb` and `chairlift-4.glb` (chairs with a `Hood`),
 `gondola.glb`, `ropeway.glb` (a cable car cabin) and `lift-station.glb` (a `stationModel`).
 Import one as a URL, which a bundler such as Vite does with `?url`, and pass it on:
 
