@@ -289,11 +289,15 @@
 			</button>
 		{/if}
 		<div class="foot">
-			<span class="keys">
-				<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake · <kbd>space</kbd>
-				jump ·
-				<kbd>R</kbd> back to the top · <kbd>esc</kbd> menu
-			</span>
+			{#if coarse}
+				<span class="tips">swipe up to jump · swipe down and hold to tuck</span>
+			{:else}
+				<span class="keys">
+					<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake · <kbd>space</kbd>
+					jump ·
+					<kbd>R</kbd> back to the top · <kbd>esc</kbd> menu
+				</span>
+			{/if}
 			<span class="fps">{hud.fps} fps</span>
 		</div>
 		{#if coarse}
@@ -650,9 +654,6 @@
 		color: #fff;
 		background: rgba(8, 8, 10, 0.45);
 		border: 1px solid rgba(255, 255, 255, 0.3);
-	}
-	.coarse .foot .keys {
-		display: none;
 	}
 	.coarse .prompt {
 		bottom: 110px;
