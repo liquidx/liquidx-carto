@@ -1,7 +1,7 @@
 <!--
 	The game's map: the resort as a Snow Diorama (`@liquidx/diorama`), with the runs draped
-	by difficulty, the lifts standing on it, and an arrow for the rider. Drag to orbit, click
-	to teleport. Terrain comes from the same tile providers as the game.
+	by difficulty, the lifts standing on it, and an arrow for the rider. Seen from above, the way
+	the rider is going up the map. Drag to tilt, click to teleport. Terrain comes from the same tile providers as the game.
 -->
 <script lang="ts">
 	import type { Feature, FeatureCollection } from 'geojson';
@@ -65,9 +65,18 @@
 		return { lon: xToLon(mx), lat: yToLat(my), radius };
 	}
 
+	const circle = $derived(fit());
+	/**
+	 * How much bigger than life the trees and lifts stand, so they read on the map: more the
+	 * more ground the map covers, and life-sized on a resort small enough to show them as they are.
+	 */
+	const objectScale = $derived(Math.max(1, Math.min(4, circle.radius / 800)));
+	/** Trees a little under life-sized, and far enough apart to stay separate at that scale. */
+	const TREE_HEIGHT = 12;
+	const treeDensity = $derived((1000 / (TREE_HEIGHT * objectScale * (lite ? 1.1 : 0.7))) ** 2);
+
 	$effect(() => {
 		let cancelled = false;
-		const circle = fit();
 		const frame = frameAt(circle.lon, circle.lat, circle.radius * 2);
 		const box = frameBox({ ...frame, w: frame.w * 1.04 }, 1);
 		const rings = lite ? 90 : 140;
@@ -83,7 +92,7 @@
 	});
 </script>
 
-<div class="minimap" title="drag to look round · click to teleport">
+<div class="minimap" title="drag to tilt · click to teleport">
 	{#if message}
 		<span class="error">{message}</span>
 	{:else}
@@ -93,7 +102,7 @@
 			exaggeration={1.3}
 			baseDepth={0.12}
 			contourInterval={100}
-			objectScale={5}
+			{objectScale}
 			autoRotate={false}
 			minDistance={0.6}
 			drapeResolution={lite ? 1024 : 2048}
@@ -111,8 +120,8 @@
 					data={woods}
 					avoid={inTheWay}
 					clearance={30}
-					density={lite ? 1000 : 2500}
-					height={16}
+					density={treeDensity}
+					height={TREE_HEIGHT}
 					limit={lite ? 15_000 : 40_000}
 				/>
 			{/if}
@@ -125,8 +134,8 @@
 			{#if showLabels}
 				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />
 			{/if}
-			<MinimapView />
-			<MinimapRider {game} />
+			<MinimapView {game} />
+			<MinimapRider {game} clear={TREE_HEIGHT * objectScale * 1.5} />
 			<MinimapPick onpick={onteleport} />
 		</Diorama>
 	{/if}

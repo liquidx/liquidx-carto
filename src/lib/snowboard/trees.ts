@@ -1,6 +1,7 @@
 /**
- * Forest: low-poly firs scattered everywhere the ground mask allows, below the treeline,
- * as two instanced meshes (trunks and foliage), with a grid for collision lookups.
+ * Forest: low-poly firs scattered everywhere the ground mask allows, with a grid for collision
+ * lookups. Every tree of the resort is planted, but in square chunks of instanced meshes, so
+ * the ones out of view are culled and the far ones are drawn as a single cone without a trunk.
  */
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
@@ -8,8 +9,18 @@ import type { Ground } from './ground';
 import type { LocalFrame } from './frame';
 import type { Terrain } from './terrain';
 
-/** Trees thin out from here and stop at the top of the band. */
+/**
+ * Where there is no woods data to say, trees thin out from here and stop at the top of the
+ * band: a guess at the treeline, in metres.
+ */
 const TREELINE = [1180, 1300];
+/** The side of a chunk of forest, in metres. */
+const CHUNK = 256;
+/** Chunks nearer than this have trunks, and their trees all three tiers of branches. */
+const TRUNK_RANGE = 450;
+const DETAIL_RANGE = 900;
+/** Chunks past this are not drawn: the fog has taken them. */
+const RANGE = 5600;
 /** Collision grid cell in metres. */
 const GRID = 24;
 
@@ -18,6 +29,8 @@ export interface Forest {
 	count: number;
 	/** The nearest tree within `radius` of world x, z as [x, z, trunk radius], if any. */
 	nearest(x: number, z: number, radius: number): [number, number, number] | null;
+	/** Pick what is drawn of each chunk for a camera at `eye`. Call every frame. */
+	update(eye: THREE.Vector3): void;
 	setShadows(on: boolean): void;
 	dispose(): void;
 }
@@ -48,7 +61,10 @@ export function plantForest(
 			const z = -frame.height / 2 + (iz + hash(ix, iz, 2)) * spacing;
 			if (!ground.treeAllowed(x, z)) continue;
 			const y = terrain.height(x, z);
-			const keep = Math.min(1, Math.max(0, (TREELINE[1] - y) / (TREELINE[1] - TREELINE[0])));
+			// The woods file knows where the forest ends; elsewhere the treeline is a guess.
+			const keep = ground.woodsMapped(x, z)
+				? 1
+				: Math.min(1, Math.max(0, (TREELINE[1] - y) / (TREELINE[1] - TREELINE[0])));
 			if (hash(ix, iz, 3) > keep) continue;
 			// Sparser on steep ground.
 			const n = terrain.normal(x, z);
@@ -70,8 +86,22 @@ export function plantForest(
 		flatShading: true,
 		vertexColors: false
 	});
-	const trunks = new THREE.InstancedMesh(trunk, trunkMaterial, count);
-	const crowns = new THREE.InstancedMesh(foliage, foliageMaterial, count);
+	// The same tree from far off: one cone the shape of the three.
+	const distant = new THREE.ConeGeometry(1.9, 8.6, 5, 1, true).translate(0, 1.6 + 4.3, 0);
+
+	// Trees by chunk.
+	const chunkCols = Math.ceil(frame.width / CHUNK);
+	const members = new Map<number, number[]>();
+	for (let i = 0; i < count; i++) {
+		const k =
+			Math.floor((spots[i * 5 + 2] + frame.height / 2) / CHUNK) * chunkCols +
+			Math.floor((spots[i * 5] + frame.width / 2) / CHUNK);
+		const list = members.get(k);
+		if (list) list.push(i);
+		else members.set(k, [i]);
+	}
+
+	const group = new THREE.Group();
 	const matrix = new THREE.Matrix4();
 	const position = new THREE.Vector3();
 	const turn = new THREE.Quaternion();
@@ -80,18 +110,38 @@ export function plantForest(
 	const dark = new THREE.Color('#2f5a3a');
 	const snowy = new THREE.Color('#9fb7a6');
 	const tint = new THREE.Color();
-	for (let i = 0; i < count; i++) {
-		const [x, y, z, s, r] = spots.slice(i * 5, i * 5 + 5);
-		position.set(x, y - 0.5, z);
-		turn.setFromAxisAngle(up, r * Math.PI * 2);
-		scale.set(s * (0.85 + r * 0.3), s, s * (0.85 + r * 0.3));
-		matrix.compose(position, turn, scale);
-		trunks.setMatrixAt(i, matrix);
-		crowns.setMatrixAt(i, matrix);
-		crowns.setColorAt(i, tint.copy(dark).lerp(snowy, r * 0.55));
+	const chunks: {
+		centre: THREE.Vector3;
+		radius: number;
+		trunks: THREE.InstancedMesh;
+		crowns: THREE.InstancedMesh;
+		far: THREE.InstancedMesh;
+	}[] = [];
+	for (const list of members.values()) {
+		const trunks = new THREE.InstancedMesh(trunk, trunkMaterial, list.length);
+		const crowns = new THREE.InstancedMesh(foliage, foliageMaterial, list.length);
+		list.forEach((i, n) => {
+			const [x, y, z, s, r] = spots.slice(i * 5, i * 5 + 5);
+			position.set(x, y - 0.5, z);
+			turn.setFromAxisAngle(up, r * Math.PI * 2);
+			scale.set(s * (0.85 + r * 0.3), s, s * (0.85 + r * 0.3));
+			matrix.compose(position, turn, scale);
+			crowns.setMatrixAt(n, matrix);
+			crowns.setColorAt(n, tint.copy(dark).lerp(snowy, r * 0.55));
+		});
+		// One set of places and tints for all three meshes.
+		trunks.instanceMatrix = crowns.instanceMatrix;
+		const far = new THREE.InstancedMesh(distant, foliageMaterial, list.length);
+		far.instanceMatrix = crowns.instanceMatrix;
+		far.instanceColor = crowns.instanceColor;
+		// The sphere round the whole chunk is what lets the renderer skip it when out of view.
+		crowns.computeBoundingSphere();
+		const sphere = crowns.boundingSphere!;
+		trunks.boundingSphere = far.boundingSphere = sphere;
+		for (const mesh of [trunks, crowns, far]) mesh.matrixAutoUpdate = false;
+		group.add(trunks, crowns, far);
+		chunks.push({ centre: sphere.center, radius: sphere.radius, trunks, crowns, far });
 	}
-	trunks.frustumCulled = false;
-	crowns.frustumCulled = false;
 
 	// Collision grid.
 	const cells = new Map<number, number[]>();
@@ -105,8 +155,6 @@ export function plantForest(
 		else cells.set(k, [i]);
 	}
 
-	const group = new THREE.Group();
-	group.add(trunks, crowns);
 	return {
 		group,
 		count,
@@ -130,16 +178,29 @@ export function plantForest(
 				}
 			return best;
 		},
+		update(eye) {
+			for (const chunk of chunks) {
+				const d = chunk.centre.distanceTo(eye) - chunk.radius;
+				chunk.trunks.visible = d < TRUNK_RANGE;
+				chunk.crowns.visible = d < DETAIL_RANGE;
+				chunk.far.visible = d >= DETAIL_RANGE && d < RANGE;
+			}
+		},
 		setShadows(on) {
-			trunks.castShadow = crowns.castShadow = on;
+			// Only the detailed trees are ever near enough to throw a shadow that is seen.
+			for (const chunk of chunks) chunk.trunks.castShadow = chunk.crowns.castShadow = on;
 		},
 		dispose() {
 			trunk.dispose();
 			foliage.dispose();
+			distant.dispose();
 			trunkMaterial.dispose();
 			foliageMaterial.dispose();
-			trunks.dispose();
-			crowns.dispose();
+			for (const chunk of chunks) {
+				chunk.trunks.dispose();
+				chunk.crowns.dispose();
+				chunk.far.dispose();
+			}
 		}
 	};
 }

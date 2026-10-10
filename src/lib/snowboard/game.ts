@@ -459,6 +459,7 @@ export async function createGame(
 		sky.position.copy(camera.position);
 		sun.position.copy(rider.position).addScaledVector(SUN, 400);
 		sun.target.position.copy(rider.position);
+		forest.update(camera.position);
 		renderer.render(scene, camera);
 		placeLabels();
 
