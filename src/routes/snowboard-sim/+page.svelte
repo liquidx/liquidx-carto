@@ -4,8 +4,13 @@
 -->
 <script lang="ts">
 	import { untrack } from 'svelte';
+	import chairlift1 from '@liquidx/diorama/models/chairlift-1.glb?url';
+	import chairlift2 from '@liquidx/diorama/models/chairlift-2.glb?url';
+	import chairlift4 from '@liquidx/diorama/models/chairlift-4.glb?url';
+	import gondola from '@liquidx/diorama/models/gondola.glb?url';
+	import liftStation from '@liquidx/diorama/models/lift-station.glb?url';
+	import ropeway from '@liquidx/diorama/models/ropeway.glb?url';
 	import { goto } from '$app/navigation';
-	import { asset } from '$app/paths';
 	import { page } from '$app/state';
 	import Button from '$lib/components/Button.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -72,12 +77,13 @@
 				labels: labelHost,
 				woods,
 				chairModels: {
-					2: asset('/diorama/chairlift-2.glb'),
-					4: asset('/diorama/chairlift-4.glb')
+					1: chairlift1,
+					2: chairlift2,
+					4: chairlift4
 				},
-				cabinModel: asset('/diorama/gondola.glb'),
-				ropewayModel: asset('/diorama/ropeway.glb'),
-				stationModel: asset('/diorama/lift-station.glb'),
+				cabinModel: gondola,
+				ropewayModel: ropeway,
+				stationModel: liftStation,
 				treeSpacing: coarse ? 18 : 14,
 				maxPixelRatio: coarse ? 1.5 : 2
 			},

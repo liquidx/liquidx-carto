@@ -13,7 +13,7 @@ From a packed tarball:
 
 ```sh
 cd packages/diorama && pnpm pack        # builds dist/ and writes liquidx-diorama-<version>.tgz
-cd ~/my-app && pnpm add three /path/to/liquidx-diorama-0.4.0.tgz
+cd ~/my-app && pnpm add three /path/to/liquidx-diorama-0.6.0.tgz
 ```
 
 Publishing works as well (`pnpm publish` from this folder): `publishConfig` points the exports at
@@ -234,6 +234,21 @@ leaves one out, and a number swings it open from 0 to 1 by the `openRotationX` i
 
 ```svelte
 <Lift data={lifts} carrierModel="/models/chair.glb" carrierParts={{ Hood: 1, SafetyBar: false }} />
+```
+
+The package comes with the lift models used in liquidx-carto, under
+`@liquidx/diorama/models/`: `chairlift-1.glb` (a single chair on a bent pole),
+`chairlift-2.glb` and `chairlift-4.glb` (chairs with a `Hood`),
+`gondola.glb`, `ropeway.glb` (a cable car cabin) and `lift-station.glb` (a `stationModel`).
+Import one as a URL, which a bundler such as Vite does with `?url`, and pass it on:
+
+```svelte
+<script>
+	import chair from '@liquidx/diorama/models/chairlift-4.glb?url';
+	import station from '@liquidx/diorama/models/lift-station.glb?url';
+</script>
+
+<Lift data={lifts} carrierModel={chair} stationModel={station} carrierParts={{ Hood: false }} />
 ```
 
 `Riders` sends a snowboarder down each line every `every` metres, from its high end to its
