@@ -6,7 +6,9 @@ import { sveltekit } from '@sveltejs/kit/vite';
 
 export default defineConfig({
 	server: {
-		port: 12222
+		port: 12222,
+		// @liquidx/diorama is linked from packages/, so its models are served from there.
+		fs: { allow: ['packages'] }
 	},
 	// maplibre-gl 6 loads its worker as a separate module; the dep optimizer breaks it.
 	optimizeDeps: {
