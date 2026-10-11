@@ -1,6 +1,7 @@
 <script lang="ts">
 	import Button from '$lib/components/Button.svelte';
 	import Chip from '$lib/components/Chip.svelte';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import PromptField from '$lib/components/PromptField.svelte';
 	import SectionLabel from '$lib/components/SectionLabel.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
@@ -57,6 +58,19 @@
 	let interval = $state(20);
 	let smoothing = $state(0.4);
 	let format = $state<'png' | 'webp' | 'tiff'>('png');
+	const projections = [
+		'mercator',
+		'web mercator',
+		'transverse mercator',
+		'lambert conformal conic',
+		'albers equal area',
+		'equirectangular',
+		'robinson',
+		'winkel tripel',
+		'orthographic',
+		'stereographic'
+	];
+	let projection = $state('');
 	let query = $state('');
 	const activeChips = new SvelteSet(['srtm']);
 	const chips = ['srtm', 'copernicus', 'lidar', 'osm'];
@@ -192,6 +206,16 @@
 				label="output format"
 				options={[{ value: 'png' }, { value: 'webp' }, { value: 'tiff', label: 'geotiff' }]}
 				bind:value={format}
+			/>
+		</div>
+
+		<div class="card">
+			<div class="card-label">COMBOBOX</div>
+			<Combobox
+				label="projection"
+				placeholder="choose a projection"
+				options={projections.map((value) => ({ value }))}
+				bind:value={projection}
 			/>
 		</div>
 

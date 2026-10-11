@@ -14,12 +14,12 @@
 	import { goto } from '$app/navigation';
 	import { page } from '$app/state';
 	import Button from '$lib/components/Button.svelte';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import Select from '$lib/components/Select.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { PROVIDERS } from '$lib/contour/terrain-api';
 	import { CREDITS, type Credit } from '$lib/credits';
 	import { createGame, type Game, type Hud, type LoadProgress } from '$lib/snowboard/game';
-	import locations from '$lib/snowboard/locations.json';
 	import Minimap from '$lib/snowboard/Minimap.svelte';
 	import { DIFFICULTY_COLOR } from '$lib/snowboard/resort';
 
@@ -35,6 +35,8 @@
 	let menu = $state(true);
 	let started = $state(false);
 	let liftId = $state('');
+	/** The map opened up to fill the view; the ride waits while it is. */
+	let mapOpen = $state(false);
 	let locationId = $state('');
 	/** The picked resort's data is on its way. */
 	let loading = $state(false);
@@ -45,11 +47,19 @@
 	let shadows = $state(!coarse);
 
 	const lifts = $derived(game?.lifts ?? []);
-	/** Every resort there is data for, under a prompt until one is picked. */
-	const resorts = $derived([
-		...(data.locationId ? [] : [{ value: '', label: 'choose a resort' }]),
-		...locations.map((l) => ({ value: l.id, label: l.name }))
-	]);
+	/** Good places to start, a tap away on the first screen. */
+	const FEATURED = ['nozawa-onsen', 'niseko-united', 'appi-kogen'];
+	const featured = $derived(
+		FEATURED.flatMap((id) => data.locations.find((l) => l.id === id) ?? [])
+	);
+	/** Every resort there is data for, by both its names; the top three tiers get 3, 2 and 1 stars. */
+	const resorts = $derived(
+		data.locations.map((l) => ({
+			value: l.id,
+			label: `${l.nameEn} · ${l.nameJa}`,
+			mark: '★'.repeat(Math.max(0, 4 - (l.tier ?? 4)))
+		}))
+	);
 	const provider = PROVIDERS.find((p) => p.id === 'gsi-1m')!;
 
 	// A game for each resort, on a canvas of its own: the last one's WebGL context is given up.
@@ -139,9 +149,13 @@
 	}
 	function pause() {
 		if (!game || !started) return;
+		mapOpen = false;
 		menu = true;
 		game.setPaused(true);
 	}
+	$effect(() => {
+		if (!menu) game?.setPaused(mapOpen);
+	});
 	$effect(() => game?.setShadows(shadows));
 
 	// Keyboard.
@@ -161,11 +175,14 @@
 	function onKeyDown(e: KeyboardEvent) {
 		if (!game) return;
 		if (e.key === 'Escape') {
-			if (menu && started) resume();
+			if (mapOpen) mapOpen = false;
+			else if (menu && started) resume();
 			else pause();
 			return;
 		}
 		if (menu) return;
+		if (e.key === 'm' || e.key === 'M') mapOpen = !mapOpen;
+		if (mapOpen) return;
 		if (e.key === 'e' || e.key === 'E') game.board();
 		if (e.key === 'r' || e.key === 'R') game.startAt(liftId);
 		if ([' ', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key))
@@ -204,6 +221,8 @@
 		low: number;
 	};
 	let primary: Touch | null = null;
+	/** Where the mouse went down; a press that does not drag is a click on a lift. */
+	let click: [x: number, y: number] | null = null;
 	let fingers = 0;
 	let jumpTimer: ReturnType<typeof setTimeout> | undefined;
 	function pulseJump() {
@@ -213,6 +232,7 @@
 		jumpTimer = setTimeout(() => game && (game.input.jump = false), 150);
 	}
 	function onTouchDown(e: PointerEvent) {
+		if (e.pointerType === 'mouse') click = [e.clientX, e.clientY];
 		if (e.pointerType === 'mouse' || !game) return;
 		fingers++;
 		if (fingers > 1) {
@@ -247,7 +267,14 @@
 		primary.t = e.timeStamp;
 	}
 	function onTouchUp(e: PointerEvent) {
-		if (e.pointerType === 'mouse' || !game) return;
+		if (e.pointerType === 'mouse') {
+			// Dragging looks around; a click on a lift gets on it.
+			const still = click && Math.hypot(e.clientX - click[0], e.clientY - click[1]) < TAP_PX;
+			click = null;
+			if (still && e.type === 'pointerup') game?.boardAt(e.clientX, e.clientY);
+			return;
+		}
+		if (!game) return;
 		fingers = Math.max(0, fingers - 1);
 		if (fingers < 2) game.input.brake = false;
 		if (primary && e.pointerId === primary.id) {
@@ -329,7 +356,7 @@
 				<span class="keys">
 					<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake · <kbd>space</kbd>
 					jump ·
-					<kbd>R</kbd> back to the top · <kbd>esc</kbd> menu
+					<kbd>R</kbd> back to the top · <kbd>M</kbd> map · <kbd>esc</kbd> menu
 				</span>
 			{/if}
 			<span class="fps">{hud.fps} fps</span>
@@ -340,14 +367,16 @@
 	{/if}
 	<div class="labels" bind:this={labelHost}></div>
 	{#if game && data.features}
-		<div class="minimap" class:hidden={menu}>
+		<div class="minimap" class:hidden={menu} class:expanded={mapOpen}>
 			<Minimap
 				{game}
-				lite={coarse}
-				features={data.features}
 				woods={data.woods}
+				water={data.water}
+				bind:expanded={mapOpen}
 				onteleport={(lon, lat) => {
 					game?.teleport(lon, lat);
+					// Picked a place off the big map: back to the ride.
+					mapOpen = false;
 					canvas?.focus();
 				}}
 			/>
@@ -364,8 +393,25 @@
 					data at 1 m and 5 m resolution and wooded areas from OpenStreetMap.
 				</p>
 				<div class="form">
-					<Select
-						label="resort"
+					{#if !data.locationId}
+						<div class="featured">
+							{#each featured as f (f.id)}
+								<Button
+									variant={locationId === f.id ? 'primary' : 'neutral'}
+									onclick={() => {
+										locationId = f.id;
+										pickLocation(f.id);
+									}}
+								>
+									{f.nameEn}
+								</Button>
+							{/each}
+						</div>
+					{/if}
+					<Combobox
+						label={data.locationId ? 'resort' : undefined}
+						placeholder="other resorts"
+						searchPlaceholder="search resorts"
 						options={resorts}
 						bind:value={locationId}
 						onchange={pickLocation}
@@ -417,7 +463,9 @@
 							finger to brake · tap a lift to ride it · tap the map to teleport
 						{:else}
 							<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake ·
-							<kbd>space</kbd> jump · <kbd>E</kbd> ride a lift · <kbd>R</kbd> back to the top
+							<kbd>space</kbd> jump · <kbd>E</kbd> or click a lift to ride it · <kbd>R</kbd> back to
+							the top ·
+							<kbd>M</kbd> map
 						{/if}
 					</p>
 				{/if}
@@ -550,9 +598,8 @@
 		height: 240px;
 		max-width: 44vw;
 		max-height: 36vh;
-		border: 1px solid rgba(255, 255, 255, 0.25);
-		background: rgba(8, 8, 10, 0.35);
-		backdrop-filter: blur(4px);
+		/* Only the map itself takes the pointer; the room round it lets the view through. */
+		pointer-events: none;
 	}
 	.minimap.hidden {
 		visibility: hidden;
@@ -634,6 +681,11 @@
 		flex-direction: column;
 		gap: 20px;
 		max-width: 360px;
+	}
+	.featured {
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
 	}
 	.actions {
 		display: flex;
@@ -732,5 +784,22 @@
 			overflow-y: auto;
 			padding: 32px var(--spacing-gutter-mobile);
 		}
+	}
+	/* The map opened up: over the view, clear of the HUD. */
+	.game .minimap.expanded {
+		top: 72px;
+		left: var(--spacing-gutter);
+		right: var(--spacing-gutter);
+		bottom: 40px;
+		width: auto;
+		height: auto;
+		max-width: none;
+		max-height: none;
+	}
+	.game.coarse .minimap.expanded {
+		top: 64px;
+		left: var(--spacing-gutter-mobile);
+		right: var(--spacing-gutter-mobile);
+		bottom: calc(24px + env(safe-area-inset-bottom));
 	}
 </style>

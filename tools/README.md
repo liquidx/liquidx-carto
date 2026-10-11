@@ -4,15 +4,15 @@ Command-line tools that fetch, build and explore the data behind the prototypes.
 TypeScript run directly by Node's type stripping, so shared code in `src/lib` uses relative
 imports with `.ts` extensions. They're type-checked with the app by `pnpm check`.
 
-| Command                    | Prototype         | What it does                                                          |
-| -------------------------- | ----------------- | --------------------------------------------------------------------- |
-| `pnpm ev-jp`               | EV Charging Japan | builds charger, distance-grid and route data from the source          |
-| `pnpm japan-train-lines`   | Japan Train Lines | downloads railway data, builds region polygons and line index         |
-| `pnpm diorama-scene`       | Snow Diorama      | fetches woods, water, buildings, roads and car parks for a ski resort |
-| `pnpm diorama-glb`         | Mountain Diorama  | exports the diorama GLB for a features file, without a browser        |
-| `pnpm snowboard-locations` | Snowboard Sim     | lists the locations with a scene file, for the sim's location picker  |
-| `pnpm odpt`                | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                       |
-| `pnpm ekispert`            | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                                |
+| Command                    | Prototype         | What it does                                                           |
+| -------------------------- | ----------------- | ---------------------------------------------------------------------- |
+| `pnpm ev-jp`               | EV Charging Japan | builds charger, distance-grid and route data from the source           |
+| `pnpm japan-train-lines`   | Japan Train Lines | downloads railway data, builds region polygons and line index          |
+| `pnpm diorama-scene`       | Snow Diorama      | fetches woods, water, buildings, roads and car parks for a ski resort  |
+| `pnpm diorama-glb`         | Mountain Diorama  | exports the diorama GLB for a features file, without a browser         |
+| `pnpm snowboard-locations` | Snowboard Sim     | lists the ids of the locations with terrain data, for the sim's picker |
+| `pnpm odpt`                | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                        |
+| `pnpm ekispert`            | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                                 |
 
 Run any of them with `help` for their subcommands.
 
