@@ -37,6 +37,17 @@
 	let liftId = $state('');
 	/** The map opened up to fill the view; the ride waits while it is. */
 	let mapOpen = $state(false);
+	let showFps = $state(false);
+	/** The touch controls, as listed on the menu: what it does, and the gesture for it. */
+	const gestures = [
+		['carve', 'drag left or right'],
+		['tuck', 'hold without dragging'],
+		['jump', 'flick up'],
+		['spin', 'keep dragging in the air'],
+		['brake', 'drag down, or a second finger'],
+		['lift', 'tap one to ride it'],
+		['teleport', 'tap the map']
+	];
 	let locationId = $state('');
 	/** The picked resort's data is on its way. */
 	let loading = $state(false);
@@ -182,6 +193,7 @@
 		}
 		if (menu) return;
 		if (e.key === 'm' || e.key === 'M') mapOpen = !mapOpen;
+		if (e.key === 'f' || e.key === 'F') showFps = !showFps;
 		if (mapOpen) return;
 		if (e.key === 'e' || e.key === 'E') game.board();
 		if (e.key === 'r' || e.key === 'R') game.startAt(liftId);
@@ -200,11 +212,14 @@
 	}
 
 	// Touch: gestures on the view instead of on-screen buttons. The first finger steers by how
-	// far it has dragged sideways from where it landed, tucks while it is held dragged down, and
-	// jumps on a quick flick up. A second finger on the screen brakes, and a tap on a lift rides it.
-	/** Sideways drag for a full carve, and the drag down that tucks, in pixels. */
+	// far it has dragged sideways from where it landed, brakes while it is dragged down, tucks
+	// while it is held about where it landed, and jumps on a quick flick up. A second finger on
+	// the screen brakes too, and a tap on a lift rides it.
+	/** Sideways drag for a full carve, and the drag down that brakes, in pixels. */
 	const CARVE_PX = 60;
-	const TUCK_PX = 45;
+	const BRAKE_PX = 45;
+	/** A held finger tucks until it has dragged this far to a side, in pixels. */
+	const TUCK_PX = 20;
 	/** A flick: moving up faster than this, in pixels a millisecond, over at least `FLICK_PX`. */
 	const FLICK_SPEED = 0.9;
 	const FLICK_PX = 30;
@@ -216,6 +231,10 @@
 		x0: number;
 		y0: number;
 		t0: number;
+		dx: number;
+		dy: number;
+		/** Down for longer than a tap. */
+		held: boolean;
 		y: number;
 		t: number;
 		low: number;
@@ -225,6 +244,15 @@
 	let click: [x: number, y: number] | null = null;
 	let fingers = 0;
 	let jumpTimer: ReturnType<typeof setTimeout> | undefined;
+	let holdTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Steering, braking and tucking from where the fingers are now. */
+	function applyTouch() {
+		if (!game) return;
+		const i = game.input;
+		i.steer = primary ? Math.max(-1, Math.min(1, primary.dx / CARVE_PX)) : 0;
+		i.brake = fingers > 1 || (!!primary && primary.dy > BRAKE_PX);
+		i.tuck = !!primary?.held && !i.brake && Math.abs(primary.dx) < TUCK_PX;
+	}
 	function pulseJump() {
 		if (!game) return;
 		game.input.jump = true;
@@ -235,26 +263,32 @@
 		if (e.pointerType === 'mouse') click = [e.clientX, e.clientY];
 		if (e.pointerType === 'mouse' || !game) return;
 		fingers++;
-		if (fingers > 1) {
-			game.input.brake = true;
-			return;
-		}
-		primary = {
+		if (fingers > 1) return applyTouch();
+		const touch: Touch = {
 			id: e.pointerId,
 			x0: e.clientX,
 			y0: e.clientY,
 			t0: e.timeStamp,
+			dx: 0,
+			dy: 0,
+			held: false,
 			y: e.clientY,
 			t: e.timeStamp,
 			low: e.clientY
 		};
+		primary = touch;
+		// Not a tuck until it has outlasted a tap, so that tapping a lift is only that.
+		clearTimeout(holdTimer);
+		holdTimer = setTimeout(() => {
+			touch.held = true;
+			if (primary === touch) applyTouch();
+		}, TAP_MS);
 	}
 	function onTouchMove(e: PointerEvent) {
 		if (!primary || e.pointerId !== primary.id || !game) return;
-		const dx = e.clientX - primary.x0;
-		const dy = e.clientY - primary.y0;
-		game.input.steer = Math.max(-1, Math.min(1, dx / CARVE_PX));
-		game.input.tuck = dy > TUCK_PX;
+		primary.dx = e.clientX - primary.x0;
+		primary.dy = e.clientY - primary.y0;
+		applyTouch();
 		// A flick up: fast, and risen enough from the lowest point the finger reached.
 		const dt = e.timeStamp - primary.t;
 		const rise = primary.low - e.clientY;
@@ -276,7 +310,6 @@
 		}
 		if (!game) return;
 		fingers = Math.max(0, fingers - 1);
-		if (fingers < 2) game.input.brake = false;
 		if (primary && e.pointerId === primary.id) {
 			// A tap on a lift gets on it.
 			if (
@@ -288,10 +321,9 @@
 			// The steering finger is up: let go of everything, whatever else is still down.
 			primary = null;
 			fingers = 0;
-			game.input.steer = 0;
-			game.input.tuck = false;
-			game.input.brake = false;
+			clearTimeout(holdTimer);
 		}
+		applyTouch();
 	}
 
 	const credits: Credit[] = [
@@ -338,10 +370,13 @@
 					<span class="name faint">off piste</span>
 				{/if}
 			</div>
-			<div class="stats">
-				<span><b>{fmt(hud.speed)}</b> km/h</span>
-				<span><b>{fmt(hud.altitude)}</b> m</span>
-				{#if hud.mode === 'air'}<span class="air">air</span>{/if}
+			<div class="side">
+				<div class="stats">
+					<span><b>{fmt(hud.speed)}</b> km/h</span>
+					<span><b>{fmt(hud.altitude)}</b> m</span>
+					{#if hud.mode === 'air'}<span class="air">air</span>{/if}
+				</div>
+				{#if showFps}<span class="fps">{hud.fps} fps</span>{/if}
 			</div>
 		</div>
 		{#if hud.nearLift}
@@ -351,15 +386,16 @@
 		{/if}
 		<div class="foot">
 			{#if coarse}
-				<span class="tips">swipe up to jump · swipe down and hold to tuck</span>
+				<span>swipe up to jump</span>
+				<span>swipe down to brake</span>
+				<span>hold still to tuck</span>
 			{:else}
 				<span class="keys">
 					<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake · <kbd>space</kbd>
-					jump ·
+					jump, <kbd>←</kbd><kbd>→</kbd> in the air to spin ·
 					<kbd>R</kbd> back to the top · <kbd>M</kbd> map · <kbd>esc</kbd> menu
 				</span>
 			{/if}
-			<span class="fps">{hud.fps} fps</span>
 		</div>
 		{#if coarse}
 			<button class="menu-button" aria-label="menu" onclick={pause}>≡</button>
@@ -457,17 +493,21 @@
 							<span class="count">{game.resort.lifts.length}</span> lifts
 						</li>
 					</ul>
-					<p class="keys">
-						{#if coarse}
-							drag left or right to carve · drag down and hold to tuck · flick up to jump · a second
-							finger to brake · tap a lift to ride it · tap the map to teleport
-						{:else}
+					{#if coarse}
+						<dl class="gestures">
+							{#each gestures as [what, how] (what)}
+								<dt>{what}</dt>
+								<dd>{how}</dd>
+							{/each}
+						</dl>
+					{:else}
+						<p class="keys">
 							<kbd>←</kbd><kbd>→</kbd> carve · <kbd>↑</kbd> tuck · <kbd>↓</kbd> brake ·
-							<kbd>space</kbd> jump · <kbd>E</kbd> or click a lift to ride it · <kbd>R</kbd> back to
-							the top ·
-							<kbd>M</kbd> map
-						{/if}
-					</p>
+							<kbd>space</kbd> jump, and <kbd>←</kbd><kbd>→</kbd> in the air to spin round and land
+							switch · <kbd>E</kbd> or click a lift to ride it · <kbd>R</kbd> back to the top ·
+							<kbd>M</kbd> map · <kbd>F</kbd> fps
+						</p>
+					{/if}
 				{/if}
 				<ul class="credits">
 					{#each credits as c (c.name)}
@@ -543,6 +583,15 @@
 		flex: none;
 		align-self: center;
 	}
+	.side {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-end;
+		gap: 4px;
+	}
+	.fps {
+		font-size: var(--text-meta);
+	}
 	.stats {
 		display: flex;
 		gap: 20px;
@@ -578,22 +627,32 @@
 		right: var(--spacing-gutter);
 		bottom: 16px;
 		display: flex;
-		justify-content: space-between;
+		flex-direction: column;
+		align-items: flex-start;
+		gap: 4px;
 		font-size: var(--text-meta);
-		color: rgba(255, 255, 255, 0.7);
+		color: #fff;
 		pointer-events: none;
+	}
+	/* On a dark plate like the lift prompt, so the tips read over the snow. */
+	.foot span {
+		padding: 6px 10px;
+		line-height: 1.7;
+		background: rgba(8, 8, 10, 0.6);
+		backdrop-filter: blur(6px);
 	}
 	kbd {
 		font: inherit;
 		font-size: var(--text-meta);
 		padding: 1px 5px;
-		border: 1px solid rgba(255, 255, 255, 0.3);
+		border: 1px solid rgba(255, 255, 255, 0.45);
 		margin: 0 1px;
 	}
 	.minimap {
 		position: absolute;
 		right: var(--spacing-gutter);
-		bottom: 40px;
+		/* Clear of the keys along the bottom, on two lines in a narrow window. */
+		bottom: 80px;
 		width: 320px;
 		height: 240px;
 		max-width: 44vw;
@@ -713,6 +772,20 @@
 		font-size: var(--text-small);
 		color: var(--color-text-faint);
 	}
+	.gestures {
+		display: grid;
+		grid-template-columns: max-content 1fr;
+		gap: 6px 20px;
+		margin: 0;
+		font-size: var(--text-small);
+		color: var(--color-text-faint);
+	}
+	.gestures dt {
+		color: var(--color-text);
+	}
+	.gestures dd {
+		margin: 0;
+	}
 	.panel kbd {
 		border-color: var(--color-line-control);
 	}
@@ -752,7 +825,7 @@
 		width: 170px;
 		height: 130px;
 	}
-	.coarse .stats {
+	.coarse .side {
 		margin-right: 52px;
 	}
 	@media (max-width: 640px) {
@@ -790,7 +863,7 @@
 		top: 72px;
 		left: var(--spacing-gutter);
 		right: var(--spacing-gutter);
-		bottom: 40px;
+		bottom: 80px;
 		width: auto;
 		height: auto;
 		max-width: none;

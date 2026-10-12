@@ -636,13 +636,16 @@ function buildFigure() {
 		mesh.castShadow = true;
 		return mesh;
 	};
+	// The board and the rider on it roll onto an edge together in a turn.
+	const deck = new THREE.Group();
+	group.add(deck);
 	const board = box(1.55, 0.05, 0.28, '#1864ab');
 	board.position.y = 0.04;
-	group.add(board);
+	deck.add(board);
 
 	// Everything above the board pivots at the feet, so a fall rotates the whole rider.
 	const rig = new THREE.Group();
-	group.add(rig);
+	deck.add(rig);
 	const hips = new THREE.Group();
 	rig.add(hips);
 	const LEG = 0.44;
@@ -729,8 +732,10 @@ function buildFigure() {
 			group.position.copy(rider.position);
 			// Yaw to the heading: the board's long axis is x, the heading is a bearing in x–z.
 			// On a lift the rider faces the way the carrier is going, board hanging across it.
+			// Riding switch the nose points back along the heading, so the rider faces the other side.
 			const onLift = rider.mode === 'lift';
-			q.setFromAxisAngle(up, onLift ? Math.PI / 2 - rider.heading : -rider.heading);
+			const nose = rider.heading + (rider.switch ? Math.PI : 0);
+			q.setFromAxisAngle(up, onLift ? Math.PI / 2 - rider.heading : -nose);
 			// Then settle onto the slope.
 			if (rider.mode === 'ride' || rider.mode === 'crash') {
 				tilt.setFromUnitVectors(up, rider.normal);
@@ -757,8 +762,14 @@ function buildFigure() {
 			pose(crouch, sit);
 
 			// Lean into the turn centre, which is across the board, and turn the shoulders with it.
-			lean += (rider.lean - lean) * ease(dt, 7);
-			torso.rotation.x = lean * 0.55 + (input.tuck ? 0.35 : 0.12) * (1 - sit);
+			// The rider faces +z, so that is onto the toes one way and the heels the other, and
+			// the other way about riding switch.
+			const wantLean = rider.mode === 'crash' ? 0 : rider.switch ? -rider.lean : rider.lean;
+			lean += (wantLean - lean) * ease(dt, 7);
+			// Up on the edge on the inside of the turn, lifted so that it stays on the snow.
+			deck.rotation.x = lean * 0.5;
+			deck.position.y = Math.abs(Math.sin(deck.rotation.x)) * 0.14;
+			torso.rotation.x = lean * 0.3 + (input.tuck ? 0.35 : 0.12) * (1 - sit);
 			torso.rotation.y = -lean * 0.4;
 			torso.rotation.z = 0;
 

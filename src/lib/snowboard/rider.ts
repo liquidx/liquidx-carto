@@ -22,12 +22,24 @@ export type Mode = 'ride' | 'air' | 'lift' | 'crash';
 
 const G = 9.81;
 const MAX_SPEED = 42;
+/** Radians a second the board spins in the air with the steering held over. */
+const AIR_SPIN = 7;
+/** How close the rider gets to a trunk, in metres from its bark. */
+const TREE_REACH = 0.9;
+/** Metres a second into a trunk that knocks the rider over; slower, they bounce off it. */
+const TREE_CRASH = 5;
+/** Radians to either side of a tree that the rider is turned out of when getting up from it. */
+const TREE_CLEAR = 1.2;
+/** Seconds after getting up from a tree in which another one only bumps. */
+const TREE_GRACE = 3;
 
 export class Rider {
 	readonly position = new THREE.Vector3();
 	readonly velocity = new THREE.Vector3();
 	/** Direction the board points, as a bearing in radians: 0 is +x (east), π/2 is +z (south). */
 	heading = 0;
+	/** Riding with the other foot forward: the nose of the board points back along `heading`. */
+	switch = false;
 	mode: Mode = 'ride';
 	/** Where the body is leaning, -1 to 1, for the figure. */
 	lean = 0;
@@ -44,6 +56,11 @@ export class Rider {
 	airtime = 0;
 	private airStart = 0;
 	private jumpHeld = false;
+	/** Radians a second the board is turning in the air. */
+	private spin = 0;
+	/** The tree that knocked the rider over, as [x, z], until they are up again. */
+	private felledBy: [number, number] | null = null;
+	private grace = 0;
 
 	constructor(
 		private readonly terrain: Terrain,
@@ -56,9 +73,11 @@ export class Rider {
 		this.position.set(x, this.terrain.height(x, z), z);
 		this.velocity.set(0, 0, 0);
 		this.heading = heading;
+		this.switch = false;
 		this.mode = 'ride';
 		this.lift = null;
 		this.crashTimer = 0;
+		this.felledBy = null;
 	}
 
 	board(line: LiftLine) {
@@ -79,6 +98,7 @@ export class Rider {
 
 	update(dt: number, input: Input) {
 		dt = Math.min(dt, 1 / 30);
+		this.grace = Math.max(0, this.grace - dt);
 		switch (this.mode) {
 			case 'lift':
 				return this.ride(dt);
@@ -87,7 +107,7 @@ export class Rider {
 				this.velocity.multiplyScalar(Math.exp(-6 * dt));
 				this.position.addScaledVector(this.velocity, dt);
 				this.position.y = this.terrain.height(this.position.x, this.position.z);
-				if (this.crashTimer <= 0) this.mode = 'ride';
+				if (this.crashTimer <= 0) this.getUp();
 				return;
 			case 'air':
 				return this.fly(dt, input);
@@ -133,15 +153,21 @@ export class Rider {
 		// Split the velocity into along the board and across it; the edge kills the sideways part.
 		// The vertical component is scaled with the horizontal so the velocity stays in the slope.
 		const before = Math.hypot(v.x, v.z);
-		const fx = Math.cos(this.heading);
-		const fz = Math.sin(this.heading);
+		let fx = Math.cos(this.heading);
+		let fz = Math.sin(this.heading);
 		let along = v.x * fx + v.z * fz;
 		let across = -v.x * fz + v.z * fx;
 		// Little edge at walking pace, so a board left across the slope still slips down it.
 		const grip = input.brake ? 9 : 1.2 + 4.5 * Math.min(1, speed / 3);
 		across *= Math.exp(-grip * dt);
-		// Riding backwards is allowed but ungainly: the board tends to swing round.
-		if (along < -0.5 && Math.abs(across) < 0.5) this.heading += Math.PI;
+		// Sliding backwards is riding the other way round: the tail leads, and the stance is switch.
+		if (along < -0.5 && Math.abs(across) < 0.5) {
+			this.reverse();
+			fx = -fx;
+			fz = -fz;
+			along = -along;
+			across = -across;
+		}
 		// Friction and drag.
 		const mu = (this.groomed ? 0.035 : 0.1) + (input.brake ? 0.42 : 0);
 		const drag = input.tuck ? 0.0042 : 0.0078;
@@ -160,8 +186,7 @@ export class Rider {
 			v.x += fx * hop;
 			v.z += fz * hop;
 			v.y = 2.3 + Math.min(1.4, speed * 0.055);
-			this.mode = 'air';
-			this.airStart = performance.now();
+			this.takeOff(input.steer * turnRate);
 			p.addScaledVector(v, dt);
 			return;
 		}
@@ -173,8 +198,7 @@ export class Rider {
 		const h = terrain.height(x, z);
 		const flown = p.y + v.y * dt;
 		if (flown > h + 0.25 && v.y > -4) {
-			this.mode = 'air';
-			this.airStart = performance.now();
+			this.takeOff(input.steer * turnRate);
 			p.set(x, flown, z);
 		} else {
 			// Keep the velocity in the surface at the new spot.
@@ -190,7 +214,9 @@ export class Rider {
 	private fly(dt: number, input: Input) {
 		const { position: p, velocity: v, terrain } = this;
 		v.y -= G * dt;
-		this.heading += input.steer * 2.2 * dt;
+		// The spin winds up while the steering is held over and stops when it is let go.
+		this.spin += (input.steer * AIR_SPIN - this.spin) * Math.min(1, dt * (input.steer ? 6 : 20));
+		this.heading += this.spin * dt;
 		this.lean += (0 - this.lean) * Math.min(1, dt * 4);
 		p.addScaledVector(v, dt);
 		const h = terrain.height(p.x, p.z);
@@ -203,6 +229,8 @@ export class Rider {
 			this.airtime = Math.max(this.airtime, (performance.now() - this.airStart) / 1000);
 			if (impact > 13) this.crash();
 			else {
+				// Spun more than half way round, the tail comes down in front: ride it out switch.
+				if (v.x * Math.cos(this.heading) + v.z * Math.sin(this.heading) < 0) this.reverse();
 				// Landing sideways scrubs speed.
 				const fx = Math.cos(this.heading);
 				const fz = Math.sin(this.heading);
@@ -216,29 +244,73 @@ export class Rider {
 		this.fence();
 	}
 
+	/** Leave the snow, the board turning at `spin` radians a second. */
+	private takeOff(spin: number) {
+		this.mode = 'air';
+		this.spin = spin;
+		this.airStart = performance.now();
+	}
+
+	/** Swap the nose and the tail: the same way over the snow, in the other stance. */
+	private reverse() {
+		this.heading += Math.PI;
+		this.switch = !this.switch;
+	}
+
 	private collide() {
-		const hit = this.forest.nearest(this.position.x, this.position.z, 0.9);
+		const hit = this.forest.nearest(this.position.x, this.position.z, TREE_REACH);
 		if (!hit) return;
-		const [tx, tz] = hit;
-		const dx = this.position.x - tx;
-		const dz = this.position.z - tz;
+		const [tx, tz, r] = hit;
+		let dx = this.position.x - tx;
+		let dz = this.position.z - tz;
 		const d = Math.hypot(dx, dz) || 1;
-		this.position.x = tx + (dx / d) * 1.2;
-		this.position.z = tz + (dz / d) * 1.2;
-		if (this.speed > 6) this.crash();
-		const dot = this.velocity.x * dx + this.velocity.z * dz;
-		if (dot < 0) {
-			this.velocity.x -= (1.4 * dot * dx) / (d * d);
-			this.velocity.z -= (1.4 * dot * dz) / (d * d);
-		}
+		dx /= d;
+		dz /= d;
+		// Out to just clear of the trunk, so that riding away from it is not another hit.
+		this.position.x = tx + dx * (r + TREE_REACH + 0.01);
+		this.position.z = tz + dz * (r + TREE_REACH + 0.01);
+		// Only running into the tree counts: bounce off it, and fall over if that was fast.
+		const into = -(this.velocity.x * dx + this.velocity.z * dz);
+		if (into <= 0) return;
+		this.velocity.x += 1.4 * into * dx;
+		this.velocity.z += 1.4 * into * dz;
 		this.velocity.multiplyScalar(0.4);
+		if (into > TREE_CRASH && !this.grace) {
+			this.crash();
+			this.felledBy = [tx, tz];
+		}
 	}
 
 	private crash() {
 		this.mode = 'crash';
 		this.crashTimer = 1.6;
+		this.felledBy = null;
 		this.velocity.y = 0;
 		this.velocity.multiplyScalar(0.5);
+	}
+
+	/**
+	 * Back on the board after a crash. After hitting a tree the rider gets up pointing clear of
+	 * it, down the slope where the tree is not in the way, with a push to get going and a few
+	 * seconds in which the next tree only bumps.
+	 */
+	private getUp() {
+		this.mode = 'ride';
+		const tree = this.felledBy;
+		if (!tree) return;
+		this.felledBy = null;
+		this.grace = TREE_GRACE;
+		const p = this.position;
+		const toTree = Math.atan2(tree[1] - p.z, tree[0] - p.x);
+		// Down the fall line, or straight away from the tree on the flat; turned aside if the
+		// tree stands in that way.
+		const n = this.terrain.normal(p.x, p.z, this.normal);
+		let heading = Math.hypot(n.x, n.z) > 0.02 ? Math.atan2(n.z, n.x) : toTree + Math.PI;
+		const off = Math.atan2(Math.sin(heading - toTree), Math.cos(heading - toTree));
+		if (Math.abs(off) < TREE_CLEAR) heading = toTree + (off < 0 ? -TREE_CLEAR : TREE_CLEAR);
+		this.heading = heading;
+		this.switch = false;
+		this.velocity.set(Math.cos(heading) * 3, 0, Math.sin(heading) * 3);
 	}
 
 	/** Keep inside the loaded terrain. */
