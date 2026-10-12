@@ -21,7 +21,8 @@
 		"diorama-glb": "node --import ./tools/node-env.ts tools/diorama-glb.ts",
 		"diorama-scene": "node tools/diorama-scene.ts",
 		"snowboard-locations": "node tools/snowboard-locations.ts",
-		"japan-train-lines": "node tools/japan-train-lines.ts"
+		"japan-train-lines": "node tools/japan-train-lines.ts",
+		"tokyo-outline": "node --import ./tools/node-env.ts tools/tokyo-outline.ts"
 	},
 	"devDependencies": {
 		"@duckdb/node-api": "1.5.6-r.1",

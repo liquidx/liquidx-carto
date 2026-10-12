@@ -9,6 +9,13 @@ export type Tool = {
 /** Every tool/experiment listed on the index, in display order. */
 export const tools: Tool[] = [
 	{
+		slug: 'tokyo-outline',
+		title: 'Tokyo Outline',
+		date: '2026-10-12',
+		summary:
+			'the outline of tokyo and every ku and shi inside it, coloured, jittered and exported as a png.'
+	},
+	{
 		slug: 'snowboard-sim',
 		title: 'Snowboard Sim',
 		date: '2026-10-08',

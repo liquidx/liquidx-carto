@@ -8,6 +8,7 @@ imports with `.ts` extensions. They're type-checked with the app by `pnpm check`
 | -------------------------- | ----------------- | ---------------------------------------------------------------------- |
 | `pnpm ev-jp`               | EV Charging Japan | builds charger, distance-grid and route data from the source           |
 | `pnpm japan-train-lines`   | Japan Train Lines | downloads railway data, builds region polygons and line index          |
+| `pnpm tokyo-outline`       | Tokyo Outline     | builds tokyo's coastline, borders and municipal shapes from the source |
 | `pnpm diorama-scene`       | Snow Diorama      | fetches woods, water, buildings, roads and car parks for a ski resort  |
 | `pnpm diorama-glb`         | Mountain Diorama  | exports the diorama GLB for a features file, without a browser         |
 | `pnpm snowboard-locations` | Snowboard Sim     | lists the ids of the locations with terrain data, for the sim's picker |
@@ -114,3 +115,28 @@ Sources:
 - Prefecture boundaries: the `open-data-jp-prefectures-geojson` package (MIT), derived from
   国土数値情報 行政区域データ.
 - `japan-outline.geojson` has no script; it's carried over as-is from liquidx-japan-train-lines.
+
+## tokyo-outline
+
+```sh
+pnpm tokyo-outline build   # 国土数値情報 → src/lib/tokyo-outline/outline.json (bundled)
+pnpm tokyo-outline dem     # 標高タイル → static/tokyo-outline/dem.bin and its dem.json
+```
+
+Downloads the 東京都 file of 国土数値情報 行政区域データ (N03, 2025), 国土交通省,
+<https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html>, into `data/tokyo-outline/`
+(gitignored), then simplifies it to 20 m with [mapshaper](https://github.com/mbloch/mapshaper),
+run through `pnpm dlx` so it isn't a dependency. mapshaper simplifies the shared topology, so
+neighbouring municipalities keep one border between them.
+
+The output has the mainland's coastline and internal borders, the coastline of the Izu
+islands, and each municipality's own shape for filling and moving it separately. 小笠原村 and the uninhabited islets south of 青ヶ島 are left out.
+
+`dem` bakes the elevation grid behind the page's contours and relief. It reads the 国土地理院
+tiles through the `gsi-1m` provider of the shared terrain client, at z16 where the 1 m lidar
+layer (dem1a) starts, falling back to 5 m and 10 m where that is unsurveyed, and averages them
+into a 2048 × 1040 grid of 43 m cells over the mainland. Only the tiles with Tokyo under them
+are fetched, about 7,900, which takes a few minutes; rerun it after `build` if the coastline
+changes. `--zoom=15` or lower reads the coarser layers instead and is much quicker. The grid
+is stored as 16-bit decimetres, row-delta encoded and deflated (see
+`src/lib/tokyo-outline/dem.ts`).
