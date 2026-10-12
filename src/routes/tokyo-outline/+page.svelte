@@ -4,6 +4,7 @@
 	import Button from '$lib/components/Button.svelte';
 	import ColorField from '$lib/components/ColorField.svelte';
 	import DataCredits from '$lib/components/DataCredits.svelte';
+	import NumberField from '$lib/components/NumberField.svelte';
 	import PromptField from '$lib/components/PromptField.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
 	import Select from '$lib/components/Select.svelte';
@@ -18,24 +19,56 @@
 
 	let { data } = $props();
 
-	/** The canvas is square, in these units; stroke widths are in the same units. */
-	const SIZE = 1000;
+	/** The canvas is this wide in its own units, whatever its shape; stroke widths share them. */
+	const WIDTH = 1000;
 
-	let outlineWidth = $state(3);
-	let borderWidth = $state(1);
-	let margin = $state(8);
-	let jitter = $state(0);
-	let islands = $state(false);
+	// ── settings ────────────────────────────────────────
+
+	const STORAGE_KEY = 'carto:tokyo-outline';
+
+	/** Every control's value as last left in this browser; empty on a first visit. */
+	const stored: Record<string, unknown> = (() => {
+		try {
+			return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '{}') ?? {};
+		} catch {
+			// Unreadable, or storage is blocked: start from the defaults.
+			return {};
+		}
+	})();
+
+	/** A stored setting, if it is still the kind of value its control expects. */
+	function saved<T>(key: string, fallback: T): T {
+		const value = stored[key];
+		if (Array.isArray(fallback))
+			return Array.isArray(value) && value.length && value.every((v) => typeof v === 'string')
+				? (value as T)
+				: fallback;
+		return typeof value === typeof fallback ? (value as T) : fallback;
+	}
+
+	function resetSettings() {
+		localStorage.removeItem(STORAGE_KEY);
+		location.reload();
+	}
+
+	let aspect = $state<'1:1' | '16:9'>(saved('aspect', '1:1'));
+	const HEIGHT = $derived(aspect === '16:9' ? (WIDTH * 9) / 16 : WIDTH);
+
+	let outlineWidth = $state(saved('outlineWidth', 3));
+	let borderWidth = $state(saved('borderWidth', 1));
+	let margin = $state(saved('margin', 8));
+	let jitter = $state(saved('jitter', 0));
+	let islands = $state(saved('islands', false));
 	/** Reseeds the palette assignment, the jitter and the stacking order together. */
-	let seed = $state(1);
+	let seed = $state(saved('seed', 1));
 
-	let fill = $state<'single' | 'palette'>('single');
+	let fill = $state<'single' | 'palette'>(saved('fill', 'single'));
 	/** A preset's id, or `custom` once its colours have been edited. */
-	let palette = $state(PALETTES[0].id);
+	let palette = $state(saved('palette', PALETTES[0].id));
 	/** The palette in use, any number of colours. */
-	let colors = $state([...PALETTES[0].colors]);
+	let colors = $state(saved('colors', [...PALETTES[0].colors]));
 	/** The same palette as typed: hex codes, kept as written while it's being edited. */
-	let hexes = $state(PALETTES[0].colors.join(' '));
+	let hexes = $state(saved('hexes', PALETTES[0].colors.join(' ')));
 
 	function usePreset(id: string) {
 		const preset = PALETTES.find((p) => p.id === id);
@@ -63,26 +96,83 @@
 		palette = 'custom';
 	}
 
-	let background = $state('#08080a');
-	let land = $state('#14141a');
-	let outline = $state('#e6e6ea');
-	let borders = $state('#2b85aa');
-	let transparent = $state(false);
+	let background = $state(saved('background', '#08080a'));
+	let land = $state(saved('land', '#14141a'));
+	let outline = $state(saved('outline', '#e6e6ea'));
+	let borders = $state(saved('borders', '#2b85aa'));
+	let transparent = $state(saved('transparent', false));
 
 	/** Set in capitals in a top corner, a line of the canvas for each line typed. */
-	let title = $state('Tokyo');
-	let titleColor = $state('#e6e6ea');
-	let titleSize = $state(64);
-	let titleWeight = $state(600);
-	let titleCorner = $state<'left' | 'right'>('left');
+	let title = $state(saved('title', 'Tokyo'));
+	let titleColor = $state(saved('titleColor', '#e6e6ea'));
+	let titleSize = $state(saved('titleSize', 64));
+	let titleWeight = $state(saved('titleWeight', 600));
+	/** `left` and `right` are the top corners, as they were saved before the bottom ones existed. */
+	let titleCorner = $state<'left' | 'right' | 'bottom-left' | 'bottom-right'>(
+		saved('titleCorner', 'left')
+	);
 
-	let terrain = $state<'off' | 'contours' | 'relief'>('off');
+	/** A map pin, its tip on a latitude and longitude. Starts on 都庁, the seat of the prefecture. */
+	let pin = $state(saved('pin', true));
+	let pinLat = $state(saved('pinLat', 35.6896));
+	let pinLng = $state(saved('pinLng', 139.6917));
+	let pinSize = $state(saved('pinSize', 40));
+	let pinFill = $state(saved('pinFill', '#d9412b'));
+	let pinBorder = $state(saved('pinBorder', '#e6e6ea'));
+	let pinBorderWidth = $state(saved('pinBorderWidth', 2));
+
+	let terrain = $state<'off' | 'contours' | 'relief'>(saved('terrain', 'off'));
 	/** Metres between contour lines. */
-	let interval = $state<'10' | '20' | '50' | '100'>('50');
-	let contourWidth = $state(0.4);
-	let contours = $state('#7a7a84');
-	let reliefStrength = $state(0.6);
-	let exaggeration = $state(3);
+	let interval = $state<'10' | '20' | '50' | '100'>(saved('interval', '50'));
+	let contourWidth = $state(saved('contourWidth', 0.4));
+	let contours = $state(saved('contours', '#7a7a84'));
+	let reliefStrength = $state(saved('reliefStrength', 0.6));
+	let exaggeration = $state(saved('exaggeration', 3));
+
+	$effect(() => {
+		const settings = {
+			outlineWidth,
+			borderWidth,
+			margin,
+			jitter,
+			islands,
+			seed,
+			fill,
+			palette,
+			colors,
+			hexes,
+			background,
+			land,
+			outline,
+			borders,
+			transparent,
+			title,
+			titleColor,
+			titleSize,
+			titleWeight,
+			titleCorner,
+			terrain,
+			interval,
+			contourWidth,
+			contours,
+			reliefStrength,
+			exaggeration,
+			exportSize,
+			aspect,
+			pin,
+			pinLat,
+			pinLng,
+			pinSize,
+			pinFill,
+			pinBorder,
+			pinBorderWidth
+		};
+		try {
+			localStorage.setItem(STORAGE_KEY, JSON.stringify(settings));
+		} catch {
+			// Storage full or blocked: the page still works, it just won't remember.
+		}
+	});
 
 	// ── geometry ────────────────────────────────────────
 
@@ -101,14 +191,16 @@
 		const squash = Math.cos((((south + north) / 2) * Math.PI) / 180);
 		const width = (east - west) * squash;
 		const height = north - south;
-		const scale = (SIZE * (1 - (2 * margin) / 100)) / Math.max(width, height);
+		// The margin is a share of the canvas's shorter side, the same on all four.
+		const inset = (Math.min(WIDTH, HEIGHT) * margin) / 100;
+		const scale = Math.min((WIDTH - 2 * inset) / width, (HEIGHT - 2 * inset) / height);
 		// x = x0 + lon * kx, y = y0 - lat * ky
 		const kx = squash * scale;
 		return {
 			kx,
 			ky: scale,
-			x0: (SIZE - width * scale) / 2 - west * kx,
-			y0: (SIZE - height * scale) / 2 + north * scale
+			x0: (WIDTH - width * scale) / 2 - west * kx,
+			y0: (HEIGHT - height * scale) / 2 + north * scale
 		};
 	});
 
@@ -282,6 +374,25 @@
 		terrain === 'relief' ? relief !== '' : terrain === 'contours' && lines.minor !== ''
 	);
 
+	// ── pin ─────────────────────────────────────────────
+
+	/** Head radius over the pin's whole height: a wide head on a short point. */
+	const PIN_HEAD = 0.42;
+
+	/** The pin with its tip at the origin: a round head, and two tangents down to the point. */
+	const pinShape = $derived.by(() => {
+		const r = pinSize * PIN_HEAD;
+		const drop = pinSize - r; // tip to the head's centre
+		const lean = Math.acos(r / drop);
+		const x = r * Math.sin(lean);
+		const y = r * Math.cos(lean) - drop;
+		const n = (v: number) => v.toFixed(2);
+		return { d: `M0 0L${n(x)} ${n(y)}A${n(r)} ${n(r)} 0 1 0 ${n(-x)} ${n(y)}Z`, r, drop };
+	});
+	const pinAt = $derived(
+		`translate(${(frame.x0 + pinLng * frame.kx).toFixed(2)} ${(frame.y0 - pinLat * frame.ky).toFixed(2)})`
+	);
+
 	// ── title ───────────────────────────────────────────
 
 	const FONT = 'https://fonts.googleapis.com/css2?family=Oswald:wght@200..700';
@@ -293,6 +404,13 @@
 
 	const titleLines = $derived(title.toUpperCase().split('\n'));
 	const titleShown = $derived(title.trim() !== '');
+	const titleOnLeft = $derived(titleCorner.endsWith('left'));
+	/** The first line's baseline: capitals against the top inset, or the last line on the bottom one. */
+	const titleTop = $derived(
+		titleCorner.startsWith('bottom')
+			? HEIGHT - TITLE_INSET - (titleLines.length - 1) * titleSize * LEADING
+			: TITLE_INSET + titleSize * CAP_HEIGHT
+	);
 
 	/**
 	 * Oswald as a stylesheet with the font inside it. An SVG drawn as an image can't fetch a
@@ -313,7 +431,7 @@
 	// ── export ──────────────────────────────────────────
 
 	let svg: SVGSVGElement | undefined = $state();
-	let exportSize = $state<'1024' | '2048' | '4096'>('2048');
+	let exportSize = $state<'1024' | '2048' | '4096'>(saved('exportSize', '2048'));
 	let exporting = $state(false);
 	let exportError = $state('');
 
@@ -324,9 +442,10 @@
 		// Drop Svelte's scoped class names so the file is plain SVG, and give it a pixel size.
 		const clone = svg.cloneNode(true) as SVGSVGElement;
 		for (const el of [clone, ...clone.querySelectorAll('*')]) el.removeAttribute('class');
-		const px = Number(exportSize);
-		clone.setAttribute('width', String(px));
-		clone.setAttribute('height', String(px));
+		const w = Number(exportSize);
+		const h = Math.round((w * HEIGHT) / WIDTH);
+		clone.setAttribute('width', String(w));
+		clone.setAttribute('height', String(h));
 		let url = '';
 		try {
 			if (titleShown) {
@@ -341,13 +460,14 @@
 			img.src = url;
 			await img.decode();
 			const canvas = document.createElement('canvas');
-			canvas.width = canvas.height = px;
-			canvas.getContext('2d')!.drawImage(img, 0, 0, px, px);
+			canvas.width = w;
+			canvas.height = h;
+			canvas.getContext('2d')!.drawImage(img, 0, 0, w, h);
 			const blob = await new Promise<Blob | null>((r) => canvas.toBlob(r, 'image/png'));
 			if (!blob) return;
 			const a = document.createElement('a');
 			a.href = URL.createObjectURL(blob);
-			a.download = `tokyo-outline-${px}.png`;
+			a.download = `tokyo-outline-${w}x${h}.png`;
 			a.click();
 			setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 		} catch (e) {
@@ -376,7 +496,8 @@
 	<svg
 		bind:this={svg}
 		class="canvas"
-		viewBox="0 0 {SIZE} {SIZE}"
+		viewBox="0 0 {WIDTH} {HEIGHT}"
+		style:aspect-ratio="{WIDTH} / {HEIGHT}"
 		xmlns="http://www.w3.org/2000/svg"
 	>
 		<defs>
@@ -410,7 +531,7 @@
 				{/if}
 			{/if}
 		</defs>
-		{#if !transparent}<rect width={SIZE} height={SIZE} fill={background} />{/if}
+		{#if !transparent}<rect width={WIDTH} height={HEIGHT} fill={background} />{/if}
 		{#if jitter > 0}
 			<!-- Each piece is swollen by the jitter, a stroke of its own colour, so that however
 			     two neighbours are nudged they still overlap rather than part. Nothing is shared
@@ -478,25 +599,43 @@
 		{/if}
 		{#if titleShown}
 			<text
-				y={TITLE_INSET + titleSize * CAP_HEIGHT}
+				y={titleTop}
 				fill={titleColor}
 				font-family="Oswald, sans-serif"
 				font-size={titleSize}
 				font-weight={titleWeight}
-				text-anchor={titleCorner === 'left' ? 'start' : 'end'}
+				text-anchor={titleOnLeft ? 'start' : 'end'}
 			>
 				{#each titleLines as line, i (i)}
 					<!-- An empty line still takes its step down, so blank lines space the title. -->
 					<tspan
-						x={titleCorner === 'left' ? TITLE_INSET : SIZE - TITLE_INSET}
+						x={titleOnLeft ? TITLE_INSET : WIDTH - TITLE_INSET}
 						dy={i ? titleSize * LEADING : 0}>{line || ' '}</tspan
 					>
 				{/each}
 			</text>
 		{/if}
+		{#if pin}
+			<!-- Last, so nothing covers it. It marks the true spot even when jitter moves the land. -->
+			<g transform={pinAt}>
+				<path
+					d={pinShape.d}
+					fill={pinFill}
+					stroke={pinBorderWidth > 0 ? pinBorder : 'none'}
+					stroke-width={pinBorderWidth}
+					stroke-linejoin="round"
+				/>
+				<circle cy={-pinShape.drop} r={pinShape.r * 0.38} fill={pinBorder} />
+			</g>
+		{/if}
 	</svg>
 
 	<div class="panel">
+		<Segmented
+			label="aspect ratio"
+			options={[{ value: '1:1' }, { value: '16:9' }]}
+			bind:value={aspect}
+		/>
 		<Slider
 			label="outline thickness"
 			min={0}
@@ -624,8 +763,10 @@
 			<Segmented
 				label="title corner"
 				options={[
-					{ value: 'left', label: 'top left' },
-					{ value: 'right', label: 'top right' }
+					{ value: 'left', label: '↖ top' },
+					{ value: 'right', label: 'top ↗' },
+					{ value: 'bottom-left', label: '↙ bottom' },
+					{ value: 'bottom-right', label: 'bottom ↘' }
 				]}
 				bind:value={titleCorner}
 			/>
@@ -635,8 +776,43 @@
 		</div>
 
 		<div class="group">
+			<Toggle label="pin" bind:checked={pin} />
+			{#if pin}
+				<div class="pair">
+					<NumberField
+						label="latitude"
+						unit="° n"
+						min={-90}
+						max={90}
+						step={0.0001}
+						bind:value={pinLat}
+					/>
+					<NumberField
+						label="longitude"
+						unit="° e"
+						min={-180}
+						max={180}
+						step={0.0001}
+						bind:value={pinLng}
+					/>
+				</div>
+				<Slider label="pin size" min={8} max={160} bind:value={pinSize} />
+				<ColorField label="pin fill" bind:value={pinFill} />
+				<ColorField label="pin border" bind:value={pinBorder} />
+				<Slider
+					label="pin border width"
+					min={0}
+					max={12}
+					step={0.25}
+					bind:value={pinBorderWidth}
+					format={(v) => v.toFixed(2)}
+				/>
+			{/if}
+		</div>
+
+		<div class="group">
 			<Segmented
-				label="export size in pixels"
+				label="export width in pixels"
 				options={[{ value: '1024' }, { value: '2048' }, { value: '4096' }]}
 				bind:value={exportSize}
 			/>
@@ -645,6 +821,8 @@
 			</Button>
 			{#if exportError}<p class="note error">{exportError}</p>{/if}
 		</div>
+
+		<Button onclick={resetSettings}>reset settings</Button>
 	</div>
 </section>
 
@@ -682,7 +860,6 @@
 	.canvas {
 		display: block;
 		width: 100%;
-		aspect-ratio: 1;
 		/* Shows where the canvas ends when its background matches the page or is transparent. */
 		outline: 1px solid var(--color-line);
 	}
@@ -725,6 +902,11 @@
 		outline: none;
 		border-color: var(--color-accent);
 	}
+	.pair {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 12px;
+	}
 	.note {
 		font-size: var(--text-small);
 		color: var(--color-text-tertiary);
@@ -758,6 +940,14 @@
 	.swatches input:focus-visible {
 		outline: 1px solid var(--color-accent);
 		outline-offset: 4px;
+	}
+	@media (min-width: 960px) {
+		/* The panel is taller than the screen: keep the map in view beside it. */
+		.canvas {
+			position: sticky;
+			top: 24px;
+			max-height: calc(100dvh - 48px);
+		}
 	}
 	@media (max-width: 959px) {
 		.explorer {
