@@ -25,15 +25,16 @@ const CARRIER_EVERY = { gondola: 70, chair: 26, ropeTow: 12 };
 export const LIFT_SPEED = { gondola: 6, chair: 3.2, cableCar: 8, ropeTow: 2.2 };
 /**
  * Where a rider's feet go on each carrier, below the cable, ahead of its hanger and across
- * from its middle: on a chair the seat top is 2.5 m down and the seated figure's feet hang
- * 0.6 m below its hips and a little in front; in a cabin they stand on the floor. On a rope
- * tow they stand beside the rope, on the snow whatever the drop.
+ * from its middle, to the right as it travels: on a chair the seat top is 2.5 m down and the
+ * seated figure's feet hang 0.6 m below its hips and a little in front; in a cabin they stand
+ * on the floor. On a rope tow they stand beside the rope, outside it, on the snow whatever
+ * the drop.
  */
 const SEAT = {
 	chair: { drop: 3.09, forward: 0.34, across: 0 },
 	gondola: { drop: 3.3, forward: 0, across: 0 },
 	cableCar: { drop: 3.3, forward: 0, across: 0 },
-	ropeTow: { drop: 1.1, forward: 0, across: 0.35 }
+	ropeTow: { drop: 1.1, forward: 0, across: -0.35 }
 };
 /**
  * The same on the models: a chair's seat top is 2.74 m down and the rider sits right of the
@@ -236,8 +237,8 @@ export function buildLifts(
 				station.traverse((o) => (o.castShadow = true));
 				group.add(station);
 				const wheel = station.getObjectByName('Bullwheel');
-				// The rim keeps pace with the cable, half the gauge out from the hub.
-				if (wheel) wheels.push({ wheel, turn: LIFT_SPEED.chair / (GAUGE / 2) });
+				// The rim keeps pace with the cable, half the gauge out from the hub, clockwise.
+				if (wheel) wheels.push({ wheel, turn: -LIFT_SPEED.chair / (GAUGE / 2) });
 			} else if (end && !tow) {
 				// A shed over the end of the line: a roof on legs, open at the sides.
 				const roof = new THREE.Vector3(GAUGE + 5, 0.6, 12);
@@ -302,10 +303,11 @@ export function buildLifts(
 			seat: (d, target) => {
 				line
 					.at(d, seat.drop, target)
-					// The cabin of a shuttle that is going up is on the right, then on the left.
+					// Up on the left as seen from the bottom, as lifts turn clockwise. The cabin of a
+					// shuttle that is going up is on the left, then on the right.
 					.addScaledVector(
 						side,
-						(fleet.shuttle && fleet.travelled >= total ? -1 : 1) * (GAUGE / 2 + seat.across)
+						((fleet.shuttle && fleet.travelled >= total ? 1 : -1) * GAUGE) / 2 + seat.across
 					)
 					.addScaledVector(forward, seat.forward);
 				if (lift.kind === 'ropeTow') target.y = terrain.height(target.x, target.z);
@@ -387,10 +389,11 @@ export function buildLifts(
 			const d = (fleet.travelled + i * gap) % loop;
 			const goingUp = d < line.total;
 			line.at(goingUp ? d : loop - d, 0, position);
-			// The first of a shuttle stays on the right and the second on the left.
-			const right = fleet.shuttle ? i === 0 : goingUp;
+			// Clockwise from above: up the left as seen from the bottom, and down the right. The
+			// first of a shuttle stays on the left and the second on the right.
+			const right = fleet.shuttle ? i !== 0 : !goingUp;
 			position.addScaledVector(side, right ? GAUGE / 2 : -GAUGE / 2);
-			matrix.compose(position, turns[right ? 0 : 1], one);
+			matrix.compose(position, turns[right ? 1 : 0], one);
 			for (const mesh of meshes) mesh.setMatrixAt(i, matrix);
 		}
 		for (const mesh of meshes) mesh.instanceMatrix.needsUpdate = true;

@@ -63,7 +63,8 @@ export interface Hud {
 	/** The lift being ridden. */
 	onLift: LiftLine | null;
 	airtime: number;
-	distance: number;
+	/** Seconds since starting, teleporting or getting on a lift. */
+	elapsed: number;
 	fps: number;
 }
 
@@ -214,6 +215,7 @@ export async function createGame(
 		if (!terrain.contains(x, z)) return;
 		const n = terrain.normal(x, z);
 		rider.place(x, z, Math.atan2(n.z, n.x));
+		rider.elapsed = 0;
 		placeCamera(0, true);
 	};
 	const riderLonLat = (): [number, number] => {
@@ -222,6 +224,7 @@ export async function createGame(
 	};
 
 	const startAt = (liftId: string) => {
+		rider.elapsed = 0;
 		const line = lifts.lines.find((l) => l.lift.id === liftId) ?? lifts.lines[0];
 		if (!line) {
 			const [x, z] = resort.peak ?? [0, 0];
@@ -316,7 +319,7 @@ export async function createGame(
 		nearLift: null,
 		onLift: null,
 		airtime: 0,
-		distance: 0,
+		elapsed: 0,
 		fps: 0
 	};
 	// Lift names over their stations: DOM labels placed every frame, shrunk and faded with
@@ -480,7 +483,7 @@ export async function createGame(
 			hud.nearLift = nearLift;
 			hud.onLift = rider.mode === 'lift' ? rider.lift : null;
 			hud.airtime = rider.airtime;
-			hud.distance = rider.distance;
+			hud.elapsed = rider.elapsed;
 			hud.fps = fps;
 			onHud({ ...hud });
 		}

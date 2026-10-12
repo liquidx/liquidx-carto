@@ -54,6 +54,8 @@ export class Rider {
 	/** Distance travelled on snow, and the biggest air. */
 	distance = 0;
 	airtime = 0;
+	/** Seconds since the rider was set down on the mountain or got on a lift. */
+	elapsed = 0;
 	private airStart = 0;
 	private jumpHeld = false;
 	/** Radians a second the board is turning in the air. */
@@ -84,6 +86,7 @@ export class Rider {
 		this.lift = line;
 		// Onto the carrier just leaving the bottom station.
 		this.liftDistance = line.nextCarrier();
+		this.elapsed = 0;
 		this.mode = 'lift';
 		this.velocity.set(0, 0, 0);
 	}
@@ -99,6 +102,7 @@ export class Rider {
 	update(dt: number, input: Input) {
 		dt = Math.min(dt, 1 / 30);
 		this.grace = Math.max(0, this.grace - dt);
+		this.elapsed += dt;
 		switch (this.mode) {
 			case 'lift':
 				return this.ride(dt);

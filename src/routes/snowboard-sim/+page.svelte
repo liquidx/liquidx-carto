@@ -336,6 +336,9 @@
 		}
 	];
 	const fmt = (n: number) => Math.round(n).toLocaleString();
+	/** Seconds as minutes and seconds, 1:05. */
+	const clock = (s: number) =>
+		`${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
 </script>
 
 <svelte:head><title>{data.tool.title} · Carto</title></svelte:head>
@@ -373,7 +376,7 @@
 			<div class="side">
 				<div class="stats">
 					<span><b>{fmt(hud.speed)}</b> km/h</span>
-					<span><b>{fmt(hud.altitude)}</b> m</span>
+					<span><b>{clock(hud.elapsed)}</b></span>
 					{#if hud.mode === 'air'}<span class="air">air</span>{/if}
 				</div>
 				{#if showFps}<span class="fps">{hud.fps} fps</span>{/if}
@@ -600,6 +603,7 @@
 		letter-spacing: var(--tracking-label);
 	}
 	.stats b {
+		font-variant-numeric: tabular-nums;
 		font-size: var(--text-screen);
 		font-weight: 600;
 		letter-spacing: 0;
