@@ -444,8 +444,9 @@ export async function createGame(
 			frames = 0;
 			fpsAt = now;
 		}
-		lifts.update(dt);
 		if (!paused) {
+			// The lifts stop with the rider, so a carrier does not leave without them.
+			lifts.update(dt);
 			const steps = Math.max(1, Math.ceil(dt / (1 / 60)));
 			for (let i = 0; i < steps; i++) rider.update(dt / steps, input);
 			terrain.update(rider.position.x, rider.position.z);
