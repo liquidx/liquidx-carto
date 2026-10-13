@@ -442,7 +442,7 @@
 					clearance={treeClearance}
 					density={6000}
 					height={16}
-					limit={120_000}
+					limit={400_000}
 				/>
 			{/if}
 			<Carpet

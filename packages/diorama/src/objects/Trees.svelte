@@ -2,6 +2,10 @@
 	Placeholder tree cover: low-poly conifers scattered over the polygons in `data`, standing on
 	the terrain. The scatter is the same every time for a given `seed`. Give `avoid` the lines
 	or areas to keep clear, such as ski runs.
+
+	From afar, where a tree would be a speck, each clump of trees is one low mound with a few
+	tree tops standing out of it, as tall as they are, and the clumps are larger the further away they are, until the woods are a cover
+	over the ground: see `minSize`.
 -->
 <script lang="ts">
 	import type { Feature } from 'geojson';
@@ -32,6 +36,14 @@
 		seed?: number;
 		/** Upper bound on the number of trees. Past it the cover is thinned evenly. */
 		limit?: number;
+		/**
+		 * The least height of a tree on screen, in pixels, where the view looks, for the trees to
+		 * be drawn one by one. When the view is too far for that, they are all drawn in clumps: a
+		 * low mound with a few tree tops standing out of it for every four, then every sixteen,
+		 * then every sixty-four, which close up into a cover over the woods. 0 always draws every
+		 * tree.
+		 */
+		minSize?: number;
 	};
 
 	let {
@@ -44,7 +56,8 @@
 		avoid,
 		clearance = 20,
 		seed = 1,
-		limit = 20_000
+		limit = 20_000,
+		minSize = 6
 	}: Props = $props();
 
 	const diorama = getDiorama();
@@ -79,8 +92,27 @@
 		return hit;
 	}
 
-	/** Side of the squares the trees are grouped into for drawing, in model units. */
+	/** About the side of the squares the trees are grouped into for drawing, in model units. */
 	const CHUNK = 0.25;
+	/**
+	 * The clumps the woods are drawn as when the trees are half of `minSize` or more, a quarter
+	 * or more, and smaller still. A clump is as many cells of the scatter across as the first number
+	 * wherever the trees fill them, and down to the second along the edges of the woods. The
+	 * third is how much of the width of its cells it covers.
+	 */
+	const CLUMPS = [
+		[2, 1, 0.92],
+		[4, 1, 0.92],
+		[8, 2, 0.92]
+	];
+	/** How much wider a clump among others is than its share of the ground. */
+	const OVERLAP = 1.5;
+	/** How many sides a clump has. */
+	const SIDES = 7;
+	/** How high a clump is in the middle, under the tree tops, as a fraction of their height. */
+	const UNDER = 0.5;
+	/** How far past a level's range the view goes before the level changes, in levels. */
+	const STICK = 0.15;
 
 	// Room for the tree's own width, past the clearance.
 	const margin = $derived(diorama.size(height) * 0.17);
@@ -92,20 +124,34 @@
 	// As far as the scatter needs to measure to `avoid`. It moves in steps, so that the trees
 	// growing or shrinking with the object scale does not scatter them again.
 	const reach = $derived(2 ** Math.ceil(Math.log2(clearances.most + margin)));
+	/** Side of a cell of the scatter, which has one tree at most, in model units. */
+	const cell = $derived(diorama.metres(1000 / Math.sqrt(density)));
 
 	/**
-	 * Where a tree may stand: x, the ground's height, z, two random numbers, and the slack: how
-	 * far past its clearance the nearest of `avoid` is.
+	 * Where a tree may stand: x, the ground's height, z, two random numbers, the slack: how far
+	 * past its clearance the nearest of `avoid` is, and its cell of the scatter.
 	 */
-	type Spot = [x: number, y: number, z: number, a: number, b: number, slack: number];
+	type Spot = [
+		x: number,
+		y: number,
+		z: number,
+		a: number,
+		b: number,
+		slack: number,
+		ix: number,
+		iz: number
+	];
+	/** The cells of the scatter that a tree may stand in, with the slack of each. */
+	type Cover = { ix: Int32Array; iz: Int32Array; slack: Float32Array };
 
 	// Every spot in the polygons that clears `avoid` by its clearance, whatever the size of the
 	// trees. When there are more than `limit`, that many are kept from all over the polygons.
-	const spots = $derived.by((): Spot[] => {
+	// `cover` is all of them all the same, for the clumps.
+	const scatter = $derived.by((): { spots: Spot[]; cover: Cover | null } => {
 		const polygons = areas.current
 			.filter((s) => s.kind === 'polygon')
 			.map((s) => s.coords.map((ring) => ring.map(diorama.toModel)));
-		if (!polygons.length || density <= 0) return [];
+		if (!polygons.length || density <= 0) return { spots: [], cover: null };
 
 		// Segments to stay clear of, as [x0, z0, x1, z1, clearance] in model space.
 		const segments: [number, number, number, number, number][] = [];
@@ -150,7 +196,6 @@
 		};
 
 		// One candidate per cell of a grid shared by all polygons, jittered within its cell.
-		const cell = diorama.metres(1000 / Math.sqrt(density));
 		const found: [x: number, z: number, ix: number, iz: number, slack: number][] = [];
 		// Local to this run, never read reactively.
 		// eslint-disable-next-line svelte/prefer-svelte-reactivity
@@ -210,33 +255,72 @@
 			const most = order.slice().sort()[Math.max(0, limit)];
 			kept = found.filter((_, i) => order[i] < most);
 		}
-		return kept.map(([x, z, ix, iz, slack]) => [
-			x,
-			diorama.heightAt(x, z),
-			z,
-			hash(ix, iz, 3),
-			hash(ix, iz, 4),
-			slack
-		]);
+		return {
+			spots: kept.map(([x, z, ix, iz, slack]) => [
+				x,
+				diorama.heightAt(x, z),
+				z,
+				hash(ix, iz, 3),
+				hash(ix, iz, 4),
+				slack,
+				ix,
+				iz
+			]),
+			cover: {
+				ix: Int32Array.from(found, (f) => f[2]),
+				iz: Int32Array.from(found, (f) => f[3]),
+				slack: Float32Array.from(found, (f) => f[4])
+			}
+		};
 	});
 
 	$effect(() => {
 		const treeHeight = diorama.size(height);
-		// Trees in squares of the ground, each drawn only while it is in view.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const chunks = new Map<string, Spot[]>();
-		for (const spot of spots) {
-			if (spot[5] < margin) continue;
-			const key = `${Math.floor(spot[0] / CHUNK)},${Math.floor(spot[2] / CHUNK)}`;
-			const chunk = chunks.get(key);
-			if (chunk) chunk.push(spot);
-			else chunks.set(key, [spot]);
-		}
-		if (!chunks.size) return;
+		const { stage } = diorama;
+		const { spots, cover } = scatter;
+		if (!cover) return;
 
+		// The cells with room for a tree as it is now, on a grid over the whole diorama, and how
+		// many there are above and to the left of each, to count those in any block at once.
+		const half = Math.ceil(1 / cell / 8) * 8;
+		const across = half * 2;
+		const sums = new Uint32Array((across + 1) * (across + 1));
+		for (let n = 0; n < cover.ix.length; n++) {
+			const i = cover.ix[n] + half;
+			const j = cover.iz[n] + half;
+			if (cover.slack[n] < margin || i < 0 || j < 0 || i >= across || j >= across) continue;
+			sums[(j + 1) * (across + 1) + i + 1] = 1;
+		}
+		for (let j = 1; j <= across; j++) {
+			let row = 0;
+			for (let i = 1; i <= across; i++) {
+				row += sums[j * (across + 1) + i];
+				sums[j * (across + 1) + i] = row + sums[(j - 1) * (across + 1) + i];
+			}
+		}
+		const edge = (v: number) => Math.min(across, Math.max(0, v));
+		/** How many trees a block `w` cells by `d` has room for, from cell (i, j). */
+		const room = (i: number, j: number, w: number, d: number) => {
+			const i0 = edge(i),
+				i1 = edge(i + w),
+				j0 = edge(j),
+				j1 = edge(j + d);
+			return (
+				sums[j1 * (across + 1) + i1] -
+				sums[j0 * (across + 1) + i1] -
+				sums[j1 * (across + 1) + i0] +
+				sums[j0 * (across + 1) + i0]
+			);
+		};
+		if (!room(0, 0, across, across)) return;
 		// A cone standing on its base, one unit tall. The base is in the ground, so it has none.
 		const geometry = new THREE.ConeGeometry(0.5, 1, 6, 1, true).translate(0, 0.5, 0);
 		const material = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+		const clumpMaterial = new THREE.MeshStandardMaterial({
+			roughness: 0.95,
+			flatShading: true,
+			vertexColors: true
+		});
 		const matrix = new THREE.Matrix4();
 		const position = new THREE.Vector3();
 		const turn = new THREE.Quaternion();
@@ -244,11 +328,12 @@
 		const up = new THREE.Vector3(0, 1, 0);
 		const base = new THREE.Color(color);
 		const tint = new THREE.Color();
-		const meshes = [...chunks.values()].map((chunk) => {
-			const trees = new THREE.InstancedMesh(geometry, material, chunk.length);
-			trees.castShadow = true;
-			trees.receiveShadow = true;
-			chunk.forEach(([x, y, z, a, b], i) => {
+
+		/** A square's trees, one by one. */
+		const stand = (members: Spot[]) => {
+			if (!members.length) return null;
+			const trees = new THREE.InstancedMesh(geometry, material, members.length);
+			members.forEach(([x, y, z, a, b], i) => {
 				const h = treeHeight * (1 + (a * 2 - 1) * variation);
 				// Sit slightly into the ground so no gap shows on a slope.
 				position.set(x, y - h * 0.04, z);
@@ -258,13 +343,204 @@
 				trees.setColorAt(i, tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08));
 			});
 			return trees;
+		};
+
+		/**
+		 * The clumps of the `side` cells square from cell (i0, j0): a mound over every block `most`
+		 * cells across that is full of trees, and over smaller ones down to `least` where it is
+		 * not, each covering `spread` of the width of its block.
+		 */
+		const clumps = (i0: number, j0: number, side: number, [most, least, spread]: number[]) => {
+			const points: number[] = [];
+			const colours: number[] = [];
+			const mound = (i: number, j: number, k: number) => {
+				const a = hash(i, j, 7 + k);
+				const b = hash(i, j, 8 + k);
+				tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08);
+				const h = treeHeight * (1 + (a * 2 - 1) * variation);
+				// Whether it is in the middle of the woods, with trees all round its block.
+				const within = room(i - k / 2, j - k / 2, k * 2, k * 2) === k * k * 4;
+				// As much ground as `spread` of the block each way, in a ring. In the woods it is
+				// `OVERLAP` times as wide, to run into the clumps round it; beside open ground it
+				// stays about within its block, to leave that clear.
+				const fair = (k * cell * spread) / Math.sqrt(Math.PI);
+				const reach = within
+					? fair * OVERLAP
+					: Math.max(fair, Math.min(fair * OVERLAP, (k / 2 + 0.5) * cell));
+				// Off the middle of the block, so that the clumps do not show the grid they are on:
+				// a long way in the woods, and no further than the block's edge beside open ground.
+				const wander = within ? k * 0.3 : (k * (1 - spread)) / 2 + 0.25;
+				const x = (i - half + k / 2 + (a * 2 - 1) * wander) * cell;
+				const z = (j - half + k / 2 + (b * 2 - 1) * wander) * cell;
+				const face = (...corners: number[][]) => {
+					for (const corner of corners) {
+						points.push(...corner);
+						colours.push(tint.r, tint.g, tint.b);
+					}
+				};
+				/** A point `out` from (cx, cz) at a turn of `at`, `y` above the ground there. */
+				const around = (cx: number, cz: number, at: number, out: number, y: number) => {
+					const px = cx - Math.sin(at * Math.PI * 2) * out;
+					const pz = cz - Math.cos(at * Math.PI * 2) * out;
+					return [px, diorama.heightAt(px, pz) + y, pz];
+				};
+				// The tops of the trees standing out of it: more of them the more trees it is. The
+				// smallest clump is the one tree, so it comes to a point itself.
+				const tips = k > 1 ? 1 + 2 * Math.log2(k) : 0;
+				// The ground it covers, low in the middle: anticlockwise from above, a little into
+				// the ground and uneven.
+				const middle = around(x, z, 0, 0, h * (tips ? UNDER : 1));
+				const rim = Array.from({ length: SIDES }, (_, n) =>
+					around(x, z, a + n / SIDES, reach * (0.85 + hash(i + n, j, 9 + k) * 0.35), -h * 0.04)
+				);
+				rim.forEach((corner, n) => face(corner, rim[(n + 1) % SIDES], middle));
+				for (let n = 0; n < tips; n++) {
+					const c = hash(i + n, j - n, 11 + k);
+					const d = hash(i - n, j + n, 12 + k);
+					// How far out it stands, as a fraction of the way to the rim.
+					const out = 0.15 + c * 0.5;
+					const [tx, , tz] = around(x, z, b + (n + d * 0.6) / tips, reach * out, 0);
+					const tip = around(tx, tz, 0, 0, h * (0.8 + d * 0.35));
+					// Its foot is inside the cover, which is lower further out.
+					const foot = h * (UNDER * (1 - out) - 0.2);
+					const width = Math.max(reach * (0.2 + c * 0.12), cell * 0.25);
+					const base = [0, 1, 2].map((m) => around(tx, tz, c + m / 3, width, foot));
+					tint.offsetHSL(0, 0, (d - 0.5) * 0.04);
+					base.forEach((corner, m) => face(corner, base[(m + 1) % 3], tip));
+					tint.offsetHSL(0, 0, (0.5 - d) * 0.04);
+				}
+			};
+			const fill = (i: number, j: number, k: number) => {
+				const trees = room(i, j, k, k);
+				if (!trees) return;
+				if (trees === k * k || (k === least && trees * 2 >= k * k)) return mound(i, j, k);
+				if (k === least) return;
+				for (const [di, dj] of [
+					[0, 0],
+					[k / 2, 0],
+					[0, k / 2],
+					[k / 2, k / 2]
+				])
+					fill(i + di, j + dj, k / 2);
+			};
+			for (let j = j0; j < j0 + side; j += most)
+				for (let i = i0; i < i0 + side; i += most) fill(i, j, most);
+			if (!points.length) return null;
+			const shape = new THREE.BufferGeometry();
+			shape.setAttribute('position', new THREE.Float32BufferAttribute(points, 3));
+			shape.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+			return new THREE.Mesh(shape, clumpMaterial);
+		};
+
+		// The ground in squares, each drawn only while it is in view. All of them are drawn alike,
+		// as trees or as the clumps that suit how far away the view is, and each is made when it
+		// first comes into view that way.
+		const side = Math.max(1, Math.round(CHUNK / cell / 8)) * 8;
+		type Square = {
+			i: number;
+			j: number;
+			spots: Spot[];
+			bounds: THREE.Sphere;
+			/** Trees first, then each of `CLUMPS`; null where there is nothing to draw. */
+			levels: (THREE.Mesh | null | undefined)[];
+			level: number;
+		};
+		const squares: Square[] = [];
+		const columns = Math.ceil(across / side);
+		const byPlace: (Square | undefined)[] = [];
+		for (let j = 0; j < across; j += side) {
+			for (let i = 0; i < across; i += side) {
+				if (!room(i, j, side, side)) continue;
+				const corners = [
+					[i, j],
+					[i + side, j],
+					[i, j + side],
+					[i + side, j + side]
+				].map(([ci, cj]) => {
+					const [x, z] = [(edge(ci) - half) * cell, (edge(cj) - half) * cell];
+					return new THREE.Vector3(x, diorama.heightAt(x, z), z);
+				});
+				const square: Square = {
+					i,
+					j,
+					spots: [],
+					// With room for the ground rising or falling between its corners.
+					bounds: new THREE.Sphere().setFromPoints(corners),
+					levels: [],
+					level: -1
+				};
+				square.bounds.radius *= 1.25;
+				squares.push(square);
+				byPlace[(j / side) * columns + i / side] = square;
+			}
+		}
+		for (const spot of spots) {
+			if (spot[5] < margin) continue;
+			const i = Math.floor((spot[6] + half) / side);
+			const j = Math.floor((spot[7] + half) / side);
+			byPlace[j * columns + i]?.spots.push(spot);
+		}
+		const made: THREE.Mesh[] = [];
+		const make = (square: Square, level: number) => {
+			const mesh = level
+				? clumps(square.i, square.j, side, CLUMPS[level - 1])
+				: stand(square.spots);
+			if (!mesh) return null;
+			mesh.castShadow = mesh.receiveShadow = true;
+			mesh.visible = false;
+			made.push(mesh);
+			diorama.group.add(mesh);
+			return mesh;
+		};
+
+		let level = -1;
+		const frustum = new THREE.Frustum();
+		const view = new THREE.Matrix4();
+		const stopFrames = stage.onFrame(() => {
+			const { camera, controls, renderer } = stage;
+			const perUnit =
+				renderer.domElement.clientHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+			// One level for the whole scene, by how large a tree is where the view looks. As a
+			// fraction, level n suits anything from n - 1 up to n: how many times too small it is.
+			const distance = Math.max(camera.near, camera.position.distanceTo(controls.target));
+			const wanted =
+				minSize > 0 ? Math.log2((minSize * distance) / (treeHeight * perUnit)) : -Infinity;
+			let next = Math.max(0, level);
+			if (wanted > next + STICK) next = Math.ceil(wanted - STICK);
+			else if (wanted < next - 1 - STICK) next = Math.ceil(wanted + STICK);
+			level = Math.min(CLUMPS.length, Math.max(0, next));
+
+			camera.updateMatrixWorld();
+			frustum.setFromProjectionMatrix(
+				view.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse)
+			);
+			const started = performance.now();
+			let changed = false;
+			for (const square of squares) {
+				if (square.level === level) continue;
+				if (square.levels[level] === undefined) {
+					// Out of view it keeps what it has, and no more are made in one frame than there
+					// is time for: the rest follow in the next.
+					if (!frustum.intersectsSphere(square.bounds)) continue;
+					if (changed && performance.now() - started > 8) continue;
+					square.levels[level] = make(square, level);
+				}
+				square.level = level;
+				square.levels.forEach((mesh, n) => mesh && (mesh.visible = n === level));
+				changed = true;
+			}
+			if (changed) stage.invalidateShadows();
 		});
-		diorama.group.add(...meshes);
 		return () => {
-			diorama.group.remove(...meshes);
-			for (const trees of meshes) trees.dispose();
+			stopFrames();
+			diorama.group.remove(...made);
+			for (const mesh of made) {
+				if (mesh instanceof THREE.InstancedMesh) mesh.dispose();
+				else mesh.geometry.dispose();
+			}
 			geometry.dispose();
 			material.dispose();
+			clumpMaterial.dispose();
 		};
 	});
 </script>

@@ -199,15 +199,15 @@ own.
 </Diorama>
 ```
 
-| Component  | Reads               | Draws                                                  | Main props                                                                |
-| ---------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------- |
-| `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `avoid`, `clearance` |
-| `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`       |
-| `Carpet`   | lines               | a magic carpet: a moving belt on the ground, railed    | `width`, `color`, `railColor`, `speed`                                    |
-| `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                             |
-| `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor` |
-| `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                       |
-| `Marker`   | points              | a pin                                                  | `height`, `head` (width of the ball), `color`                             |
+| Component  | Reads               | Draws                                                  | Main props                                                                           |
+| ---------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
+| `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `avoid`, `clearance`, `minSize` |
+| `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`                  |
+| `Carpet`   | lines               | a magic carpet: a moving belt on the ground, railed    | `width`, `color`, `railColor`, `speed`                                               |
+| `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                                        |
+| `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor`            |
+| `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                                  |
+| `Marker`   | points              | a pin                                                  | `height`, `head` (width of the ball), `color`                                        |
 
 They all take `data` and `filter` like `Drape`, so several can read the same file. `Building`,
 `Model` and `Marker` also take `at={[lon, lat]}` for a single position. Sizes are in metres.
@@ -262,6 +262,15 @@ several kilometres across that makes each one a speck, which shows how big the m
 lower `minDistance` on `<Diorama>` so the view can zoom in to them. To have them read from
 afar instead, set `objectScale` to enlarge every object. Positions and spacing stay true; only
 the objects grow.
+
+What is too small to make out is drawn more simply, and in full again once the view is close
+enough. Nothing is enlarged for it. While a tree where the view looks is under `minSize` pixels
+tall (6 unless you say otherwise), `Trees` draws a low round mound with a few tree tops
+standing out of it for every clump of four, then of sixteen, then of sixty-four, which close up into a cover over the
+woods. All the woods in the scene are drawn the same way at once. Along the edges of the woods
+the clumps are smaller, so that a run stays clear. Set `minSize` to 0 to draw every tree from
+any distance. `Lift` draws a plain block for each carrier of a lift whose carriers are only a
+few pixels tall.
 
 ## North and light
 

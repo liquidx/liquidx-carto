@@ -105,7 +105,6 @@
 				// Extrusions come in two groups: the caps (roof and floor), then the sides.
 				const building = new THREE.Mesh(solid, [roofPaint, wallPaint]);
 				building.position.set(cx, high, cz);
-				building.castShadow = building.receiveShadow = true;
 				return [building];
 			}
 
@@ -119,7 +118,6 @@
 			top.scale.set(w * 1.06, d * 0.45, d * 1.12);
 			top.position.y = h;
 			const building = new THREE.Group().add(body, top);
-			building.traverse((o) => (o.castShadow = o.receiveShadow = true));
 			diorama.project(coords[0][0], 0, building.position);
 			// Sink the footing so a slope does not show under the downhill wall.
 			building.position.y -= h * 0.25;
@@ -127,9 +125,46 @@
 			building.rotation.y = THREE.MathUtils.degToRad(90 - perFeature(heading, feature));
 			return [building];
 		});
-		diorama.group.add(...buildings);
+		// All the buildings as one mesh for each colour: several hundred drawn one by one cost far
+		// more than their few triangles do.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity -- local to this run
+		const faces = new Map<THREE.Material, { position: number[]; normal: number[] }>();
+		for (const building of buildings) {
+			building.traverse((o) => {
+				const mesh = o as THREE.Mesh;
+				if (!mesh.isMesh) return;
+				mesh.updateWorldMatrix(true, false);
+				const placed = (
+					mesh.geometry.index ? mesh.geometry.toNonIndexed() : mesh.geometry.clone()
+				).applyMatrix4(mesh.matrixWorld);
+				const { position, normal } = placed.attributes;
+				// A mesh with one material is all of that, whatever groups its geometry has.
+				const groups = Array.isArray(mesh.material)
+					? placed.groups
+					: [{ start: 0, count: position.count, materialIndex: 0 }];
+				for (const { start, count, materialIndex = 0 } of groups) {
+					const material = [mesh.material].flat()[materialIndex];
+					let part = faces.get(material);
+					if (!part) faces.set(material, (part = { position: [], normal: [] }));
+					for (let i = start * 3; i < (start + count) * 3; i++) {
+						part.position.push(position.array[i]);
+						part.normal.push(normal.array[i]);
+					}
+				}
+				placed.dispose();
+			});
+		}
+		const merged = [...faces].map(([material, { position, normal }]) => {
+			const geometry = keep(new THREE.BufferGeometry());
+			geometry.setAttribute('position', new THREE.Float32BufferAttribute(position, 3));
+			geometry.setAttribute('normal', new THREE.Float32BufferAttribute(normal, 3));
+			const mesh = new THREE.Mesh(geometry, material);
+			mesh.castShadow = mesh.receiveShadow = true;
+			return mesh;
+		});
+		diorama.group.add(...merged);
 		return () => {
-			diorama.group.remove(...buildings);
+			diorama.group.remove(...merged);
 			for (const item of owned) item.dispose();
 		};
 	});

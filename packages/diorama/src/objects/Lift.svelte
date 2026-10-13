@@ -2,7 +2,8 @@
 	Placeholder ski lifts: for each line in `data`, towers standing on the terrain, a cable up
 	one side and back down the other, a station at each end and chairs or cabins hanging from
 	the cable. With a `speed` the carriers travel round the loop. A `carrierModel` hangs your
-	own glTF in place of the built-in chair or cabin, in its own colours.
+	own glTF in place of the built-in chair or cabin, in its own colours. A lift whose carriers
+	are only a few pixels tall from where the view is has a plain block drawn for each.
 -->
 <script lang="ts">
 	import type { Feature } from 'geojson';
@@ -95,6 +96,11 @@
 
 	/** Metres between the cable going up and the cable coming down. */
 	const GAUGE = 5;
+	/**
+	 * The height of a carrier on screen, in pixels, from which it is drawn in full, and the
+	 * lower one under which it goes back to a block.
+	 */
+	const DETAIL = [10, 8];
 
 	const diorama = getDiorama();
 	const lines = featureShapes(
@@ -255,6 +261,8 @@
 
 		// A model as one shape for each of its materials, with its `parts` posed.
 		const posed: THREE.BufferGeometry[] = [];
+		// The blocks that stand for the carriers from afar.
+		const blocks: THREE.BufferGeometry[] = [];
 		const modelShapes = (model: THREE.Object3D, parts: Record<string, number | boolean>) => {
 			// The copy shares the model's geometry and materials.
 			const copy = model.clone();
@@ -299,6 +307,11 @@
 		type Fleet = {
 			/** One mesh for the built-in carrier, or one for each material of a model. */
 			meshes: THREE.InstancedMesh[];
+			/** A block the size of the carrier for each, drawn instead of `meshes` from afar. */
+			block: THREE.InstancedMesh;
+			/** Height of a carrier in model units, and a sphere around the whole line. */
+			tall: number;
+			bounds: THREE.Sphere;
 			/** The line midway between the two cables, with the distance along it to each point. */
 			path: THREE.Vector3[];
 			lengths: number[];
@@ -413,22 +426,47 @@
 			// Until a model has loaded, the built-in carrier stands in for it.
 			const model = typeof source === 'string' ? models[source] : source;
 			let meshes: THREE.InstancedMesh[];
+			// The colour of the block: the carrier's own, or that of most of the model.
+			let c = new THREE.Color(perFeature(carrierColor, feature));
 			if (model) {
-				meshes = modelShapes(model, perFeature(carrierParts, feature)).map(
+				const shapes = modelShapes(model, perFeature(carrierParts, feature));
+				meshes = shapes.map(
 					(shape) => new THREE.InstancedMesh(shape.geometry, shape.material, count)
 				);
+				const most = shapes.reduce((a, b) =>
+					b.geometry.attributes.position.count > a.geometry.attributes.position.count ? b : a
+				);
+				c = (most.material as THREE.MeshStandardMaterial).color ?? c;
 			} else {
 				const mesh = new THREE.InstancedMesh(
 					carrierGeometry(perFeature(carrier, feature), perFeature(carrierSize, feature)),
 					material,
 					count
 				);
-				const c = new THREE.Color(perFeature(carrierColor, feature));
 				for (let i = 0; i < count; i++) mesh.setColorAt(i, c);
 				meshes = [mesh];
 			}
+			const extent = new THREE.Box3();
+			for (const mesh of meshes) {
+				mesh.geometry.computeBoundingBox();
+				extent.union(mesh.geometry.boundingBox!);
+			}
+			const size = extent.getSize(new THREE.Vector3());
+			const centre = extent.getCenter(new THREE.Vector3());
+			const blockShape = new THREE.BoxGeometry(size.x, size.y, size.z).translate(
+				centre.x,
+				centre.y,
+				centre.z
+			);
+			blocks.push(blockShape);
+			const standIn = new THREE.InstancedMesh(blockShape, material, count);
+			for (let i = 0; i < count; i++) standIn.setColorAt(i, c);
+			for (const mesh of meshes) mesh.visible = false;
 			return {
 				meshes,
+				block: standIn,
+				tall: size.y * unit,
+				bounds: new THREE.Sphere().setFromPoints(tops),
 				path: tops,
 				lengths,
 				gap: loop / count,
@@ -446,8 +484,9 @@
 		const place = (seconds: number) => {
 			fleets.forEach((fleet, n) => {
 				if (!fleet) return;
-				const { meshes, path, lengths, side, turns, scale } = fleet;
-				const count = meshes[0]?.count ?? 0;
+				const { path, lengths, side, turns, scale } = fleet;
+				const meshes = [...fleet.meshes, fleet.block];
+				const count = fleet.block.count;
 				const length = lengths[lengths.length - 1];
 				const moved = ((travelled[n] ?? 0) + fleet.pace * seconds) % (length * 2);
 				travelled[n] = moved;
@@ -483,6 +522,25 @@
 				last = now;
 			});
 		}
+		// Each lift's carriers in full where they are large enough on screen to tell from a block.
+		const stopDetail = diorama.stage.onFrame(() => {
+			const { camera, renderer } = diorama.stage;
+			const perUnit =
+				renderer.domElement.clientHeight / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2));
+			for (const fleet of fleets) {
+				if (!fleet) continue;
+				const distance = Math.max(
+					camera.near,
+					camera.position.distanceTo(fleet.bounds.center) - fleet.bounds.radius
+				);
+				const full = !fleet.block.visible;
+				const show = (fleet.tall * perUnit) / distance > DETAIL[full ? 1 : 0];
+				if (show === full) continue;
+				fleet.block.visible = !show;
+				for (const mesh of fleet.meshes) mesh.visible = show;
+				diorama.stage.invalidate();
+			}
+		});
 
 		const meshes: THREE.InstancedMesh[] = Object.values(parts).map(({ geometry, at, colors }) => {
 			const mesh = new THREE.InstancedMesh(geometry, material, at.length);
@@ -495,8 +553,8 @@
 		// every frame for what moves through it.
 		for (const fleet of fleets) {
 			if (!fleet) continue;
-			for (const mesh of fleet.meshes) mesh.receiveShadow = true;
-			meshes.push(...fleet.meshes);
+			for (const mesh of [...fleet.meshes, fleet.block]) mesh.receiveShadow = true;
+			meshes.push(...fleet.meshes, fleet.block);
 		}
 		const wire = new THREE.BufferGeometry();
 		wire.setAttribute('position', new THREE.Float32BufferAttribute(cables, 3));
@@ -506,9 +564,11 @@
 		diorama.group.add(...meshes, wires, ...placed);
 		return () => {
 			stop?.();
+			stopDetail();
 			diorama.group.remove(...meshes, wires, ...placed);
 			for (const mesh of meshes) mesh.dispose();
-			for (const geometry of [post, box, ...carriers.values(), ...posed, wire]) geometry.dispose();
+			for (const geometry of [post, box, ...carriers.values(), ...posed, ...blocks, wire])
+				geometry.dispose();
 			material.dispose();
 			wireMaterial.dispose();
 		};
