@@ -1,7 +1,7 @@
 <!--
 	A ski resort on a diorama. The resort's runs and lifts, its scene (woods, water, buildings,
 	roads and car parks from OpenStreetMap) and its terrain GLB are fetched from snowline by
-	location id (`?locationId=`, or the field below the title) and swapped in place when it
+	location id (`?locationId=`, or the resort picked below the title) and swapped in place when it
 	changes; without an id, the default location comes from the app's own `static/diorama`
 	files. A location without a GLB has its terrain built from elevation tiles. Runs, roads
 	and water are draped on the snow, with lifts, trees, buildings and labels from
@@ -36,8 +36,8 @@
 		type TerrainPreset,
 		type TerrainStyle
 	} from '@liquidx/diorama';
+	import Combobox from '$lib/components/Combobox.svelte';
 	import DataCredits from '$lib/components/DataCredits.svelte';
-	import PromptField from '$lib/components/PromptField.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
 	import Slider from '$lib/components/Slider.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
@@ -50,26 +50,28 @@
 		type LocationData,
 		type LocationFeatures
 	} from '$lib/diorama/location';
+	import { locationOptions } from '$lib/diorama/locations';
 	import { circleSampler } from '$lib/diorama/sampler';
 
 	let { data } = $props();
 
-	/** The location on show, or on its way: the id follows the URL and the field. */
+	/** The location on show, or on its way: the id follows the URL and the selector. */
 	let locationId = $state(untrack(() => data.locationId));
-	let draft = $state(untrack(() => data.locationId));
+	/** Every resort there is data for; one named only in the URL is shown without being listed. */
+	const resorts = $derived(locationOptions(data.locations));
 	let location = $state.raw<LocationData | null>(null);
 	let loading = $state(false);
 	let message = $state('');
 
 	/**
-	 * Each request is a new object, so submitting the same id again after a failure retries it.
+	 * Each request is a new object, so asking for the same id again after a failure retries it.
 	 * `local` reads the app's own files instead of snowline: only for the default location,
 	 * when the URL names none.
 	 */
 	let request = $state.raw(untrack(() => ({ id: data.locationId, local: data.local })));
 	const local = $derived(location !== null && request.local);
 
-	/** Switch locations: from the field, or from the URL changing under us. */
+	/** Switch locations: from the selector, or from the URL changing under us. */
 	function go(id: string, local = false) {
 		id = id.trim();
 		if (!id || (id === locationId && local === request.local && (loading || location))) return;
@@ -83,10 +85,7 @@
 	// Back/forward, or a link to another location.
 	$effect(() => {
 		const { locationId: fromUrl, local } = data;
-		untrack(() => {
-			draft = fromUrl;
-			go(fromUrl, local);
-		});
+		untrack(() => go(fromUrl, local));
 	});
 
 	// Fetch the features, scene and GLB whenever the id changes, dropping a fetch that is overtaken.
@@ -408,12 +407,13 @@
 		has them. Zoom in to find them.
 	</p>
 	<div class="location">
-		<PromptField
-			bind:value={draft}
-			placeholder="location id"
-			hint="⏎ load"
-			aria-label="location id"
-			onsubmit={go}
+		<Combobox
+			label="resort"
+			placeholder={locationId}
+			searchPlaceholder="search resorts"
+			options={resorts}
+			value={locationId}
+			onchange={(id) => go(id)}
 		/>
 		{#if local || location?.missing.length}
 			<div class="note">

@@ -15,6 +15,7 @@
 	import { page } from '$app/state';
 	import Button from '$lib/components/Button.svelte';
 	import Combobox from '$lib/components/Combobox.svelte';
+	import { locationOptions } from '$lib/diorama/locations';
 	import Select from '$lib/components/Select.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import { PROVIDERS } from '$lib/contour/terrain-api';
@@ -63,14 +64,8 @@
 	const featured = $derived(
 		FEATURED.flatMap((id) => data.locations.find((l) => l.id === id) ?? [])
 	);
-	/** Every resort there is data for, by both its names; the top three tiers get 3, 2 and 1 stars. */
-	const resorts = $derived(
-		data.locations.map((l) => ({
-			value: l.id,
-			label: `${l.nameEn} · ${l.nameJa}`,
-			mark: '★'.repeat(Math.max(0, 4 - (l.tier ?? 4)))
-		}))
-	);
+	/** Every resort there is data for. */
+	const resorts = $derived(locationOptions(data.locations));
 	const provider = PROVIDERS.find((p) => p.id === 'gsi-1m')!;
 
 	// A game for each resort, on a canvas of its own: the last one's WebGL context is given up.
