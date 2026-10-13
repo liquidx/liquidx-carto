@@ -75,6 +75,11 @@
 		 * model. Lower it to look closely at objects left at their true size.
 		 */
 		minDistance?: number;
+		/**
+		 * How far the view is from what it looks at, in radii of the model, to two decimal places.
+		 * Bind it to follow the zoom; setting it does nothing.
+		 */
+		distance?: number;
 		/** Called when a GLB from `src` has loaded. */
 		onload?: (meta: DioramaMeta | null) => void;
 		onerror?: (error: unknown) => void;
@@ -101,6 +106,7 @@
 		rotateSpeed = 1.2,
 		rotateButton = false,
 		minDistance = 0.8,
+		distance = $bindable(),
 		onload,
 		onerror,
 		class: className,
@@ -314,6 +320,15 @@
 
 	$effect(() => {
 		if (stage) stage.controls.minDistance = minDistance;
+	});
+
+	$effect(() => {
+		const s = stage;
+		if (!s) return;
+		return s.onFrame(() => {
+			const now = Math.round(s.camera.position.distanceTo(s.controls.target) * 100) / 100;
+			if (now !== distance) distance = now;
+		});
 	});
 
 	/** The terrain on show as a binary glTF that `src` can load. Layers are not included. */

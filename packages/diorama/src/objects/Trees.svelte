@@ -111,6 +111,8 @@
 	const SIDES = 7;
 	/** How high a clump is in the middle, under the tree tops, as a fraction of their height. */
 	const UNDER = 0.5;
+	/** How far towards white the clumps are from the colour of the trees, as if under some snow. */
+	const SNOWED = 0.15;
 	/** How far past a level's range the view goes before the level changes, in levels. */
 	const STICK = 0.15;
 
@@ -327,6 +329,7 @@
 		const scale = new THREE.Vector3();
 		const up = new THREE.Vector3(0, 1, 0);
 		const base = new THREE.Color(color);
+		const pale = base.clone().lerp(new THREE.Color('#ffffff'), SNOWED);
 		const tint = new THREE.Color();
 
 		/** A square's trees, one by one. */
@@ -356,7 +359,7 @@
 			const mound = (i: number, j: number, k: number) => {
 				const a = hash(i, j, 7 + k);
 				const b = hash(i, j, 8 + k);
-				tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08);
+				tint.copy(pale).offsetHSL(0, 0, (b - 0.5) * 0.08);
 				const h = treeHeight * (1 + (a * 2 - 1) * variation);
 				// Whether it is in the middle of the woods, with trees all round its block.
 				const within = room(i - k / 2, j - k / 2, k * 2, k * 2) === k * k * 4;

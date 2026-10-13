@@ -57,6 +57,7 @@ in the browser. It renders nothing during SSR and needs no `ssr = false`.
 | `rotateSpeed`        | `number`                                | `1.2`           |
 | `rotateButton`       | play/pause overlay for `autoRotate`     | `false`         |
 | `minDistance`        | closest zoom, in radii of the model     | `0.8`           |
+| `distance`           | how far the view is, in radii; bindable |                 |
 | `onload`             | `(meta: DioramaMeta \| null) => void`   |                 |
 | `onerror`            | `(error: unknown) => void`              |                 |
 | `class`              | `string`                                |                 |

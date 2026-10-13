@@ -174,11 +174,42 @@
 		return isCableCar(f) ? 8 : isGondola(f) ? 5 : seats(f) >= 4 && !isRopeTow(f) ? 4 : 2;
 	}
 
-	const DIFFICULTY: Record<string, string> = {
+	/** The colour of a run by its difficulty, with `other` for one that has none of these. */
+	let runColors = $state({
 		easy: '#2f9e44',
 		intermediate: '#d6336c',
-		advanced: '#212529'
-	};
+		advanced: '#212529',
+		other: '#868e96'
+	});
+	// How far the view is from what it looks at, in radii of the diorama.
+	let distance = $state<number>();
+	/**
+	 * How far towards white the runs are drawn: their own colour from afar, and paler as the view
+	 * closes in, where a run is wide on screen and would weigh on the snow. It moves in steps,
+	 * so that the runs are not drawn again on every frame of a zoom.
+	 */
+	const runPaleness = $derived.by(() => {
+		const near = Math.min(1, Math.max(0, (1.5 - (distance ?? Infinity)) / 1.2));
+		return Math.round(near * 5) / 10;
+	});
+	/** `hex` mixed `amount` of the way to white. */
+	function paler(hex: string, amount: number) {
+		const mixed = [1, 3, 5].map((at) => {
+			const channel = parseInt(hex.slice(at, at + 2), 16);
+			return Math.round(channel + (255 - channel) * amount);
+		});
+		return `rgb(${mixed.join(' ')})`;
+	}
+	const runColor = (f: Feature) =>
+		paler(
+			runColors[f.properties?.difficulty as keyof typeof runColors] ?? runColors.other,
+			runPaleness
+		);
+	/**
+	 * Size of the texture the runs, roads and water are drawn into: twice as fine once the view
+	 * is close enough for its pixels to show.
+	 */
+	const drapeResolution = $derived((distance ?? Infinity) < 1.2 ? 4096 : 2048);
 	/** Average snowboarding speed by run, in metres a second: a cruise on the greens, faster on the blacks. */
 	const RIDING_SPEED: Record<string, number> = { easy: 8, intermediate: 11, advanced: 14 };
 	const ridingSpeed = (f: Feature) => RIDING_SPEED[f.properties?.difficulty] ?? 10;
@@ -411,6 +442,8 @@
 			{background}
 			{backgroundGradient}
 			bind:autoRotate
+			bind:distance
+			{drapeResolution}
 			rotateButton
 			minDistance={0.1}
 			onload={() => (glbLoaded = true)}
@@ -423,11 +456,7 @@
 			{#if showBuildings}
 				<Drape data={scene} filter={isCarpark} paint={CARPARK_PAINT} />
 			{/if}
-			<Drape
-				data={features}
-				filter={isRun}
-				paint={(f) => ({ stroke: DIFFICULTY[f.properties?.difficulty] ?? '#868e96', width: 3 })}
-			/>
+			<Drape data={features} filter={isRun} paint={(f) => ({ stroke: runColor(f), width: 3 })} />
 			{#if showWater}
 				<!-- Over the contour lines: a hazard should never be hidden by them. -->
 				<Drape data={scene} filter={(f) => isWater(f) || isWaterway(f)} paint={waterPaint} above />
@@ -559,6 +588,12 @@
 			bind:value={backgroundGradient}
 			format={(v) => v.toFixed(2)}
 		/>
+		{#each ['easy', 'intermediate', 'advanced', 'other'] as const as difficulty (difficulty)}
+			<label class="control">
+				<span class="label">{difficulty} runs</span>
+				<input class="swatch" type="color" bind:value={runColors[difficulty]} />
+			</label>
+		{/each}
 		<Toggle label="moving lifts" bind:checked={liftsMoving} />
 		<Toggle label="snowboarders" bind:checked={riders} />
 		<Toggle label="buildings" bind:checked={showBuildings} />
