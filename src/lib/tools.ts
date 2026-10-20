@@ -13,7 +13,7 @@ export const tools: Tool[] = [
 		title: 'Fuji Sun',
 		date: '2026-10-20',
 		summary:
-			"when and where the sun sets exactly on the summit of mount fuji, from the sun's path and the terrain."
+			'a simulator of where you can see the sun rise or set directly on the summit of mount fuji, and on which days.'
 	},
 	{
 		slug: 'tokyo-outline',

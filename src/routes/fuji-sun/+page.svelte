@@ -602,8 +602,10 @@
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
 	<p>
-		From the right spot, on two days a year, the sun sets exactly on the summit of Mount Fuji. Pick
-		where you would stand, then move through the year to watch the sunset slide across the mountain.
+		A simulator of where you can see the sun rise or set directly on the summit of Mount Fuji. Stand
+		east of the mountain and it sets there; stand west and it rises there, each on two days a year
+		from any one spot. Pick where you would stand, then move through the year to watch the sun slide
+		across the mountain.
 	</p>
 </section>
 
