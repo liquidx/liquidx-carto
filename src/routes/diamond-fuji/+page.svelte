@@ -48,6 +48,7 @@
 		fmtDate,
 		fmtTime,
 		jstDay,
+		jstMidnight,
 		jstParts,
 		sunPosition,
 		type Phase
@@ -56,9 +57,12 @@
 		elevationAt,
 		loadPatch,
 		loadTerrain,
+		REGION,
 		type Patch,
 		type Terrain
 	} from '$lib/diamond-fuji/terrain';
+	import type { ViewshedRequest, ViewshedResponse } from '$lib/diamond-fuji/viewshed.worker';
+	import { xToLon, yToLat } from '$lib/contour/mercator';
 	import YearStrip from '$lib/diamond-fuji/YearStrip.svelte';
 
 	let { data } = $props();
@@ -159,6 +163,67 @@
 			}
 			return t.ground(lon, lat);
 		};
+	});
+
+	// ── where the mountain shows ────────────────────────
+
+	let showViewshed = $state(true);
+	let viewshedPixels = $state.raw<{
+		pixels: Uint8ClampedArray;
+		width: number;
+		height: number;
+	} | null>(null);
+	let viewshedBusy = $state(false);
+	const VIEWSHED_BOUNDS = {
+		west: xToLon(REGION.x0),
+		east: xToLon(REGION.x1),
+		north: yToLat(REGION.y0),
+		south: yToLat(REGION.y1)
+	};
+	$effect(() => {
+		const t = terrain;
+		if (!t) return;
+		const worker = new Worker(new URL('$lib/diamond-fuji/viewshed.worker.ts', import.meta.url), {
+			type: 'module'
+		});
+		viewshedBusy = true;
+		worker.onmessage = (e: MessageEvent<ViewshedResponse>) => {
+			viewshedPixels = { pixels: e.data.pixels, width: 320, height: 320 };
+			viewshedBusy = false;
+		};
+		const request: ViewshedRequest = {
+			id: 1,
+			region: t.region,
+			mountain: t.mountain,
+			// A standing eye: the shading is about the ground, not any tower you might pick.
+			options: { width: 320, height: 320, eye: 1.6 }
+		};
+		worker.postMessage(request);
+		return () => worker.terminate();
+	});
+	const viewshedLayer = $derived(
+		showViewshed && viewshedPixels ? { ...viewshedPixels, bounds: VIEWSHED_BOUNDS } : null
+	);
+
+	/**
+	 * Between the solstice lines lies every day's line: the land from which the sun can sit on
+	 * the summit at sunset (east of the mountain) or sunrise (west), on some day of the year.
+	 */
+	const sectors = $derived.by(() => {
+		const ground = terrain ? terrain.ground : () => 0;
+		const june = jstMidnight(year, 6, 21);
+		const december = jstMidnight(year, 12, 21);
+		const opts = { min: 2_000, max: 250_000, steps: 40 };
+		return (['sunset', 'sunrise'] as Phase[]).map((ph) => {
+			const a = diamondLocus(june, ph, ground, 1.6, opts);
+			const b = diamondLocus(december, ph, ground, 1.6, opts);
+			return [
+				{ lon: FUJI.lon, lat: FUJI.lat },
+				...a,
+				...b.reverse(),
+				{ lon: FUJI.lon, lat: FUJI.lat }
+			];
+		});
 	});
 
 	const observer = $derived<Observer>({ ...point, elevation: (ground ?? 0) + eye });
@@ -446,10 +511,30 @@
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
 	<p>
-		Twice a year, from the right spot, the sun sets exactly on the summit of Mount Fuji. Pick a
-		place to stand and this works out which days and what time, from the sun's path and the terrain
-		between you and the mountain. Pick a day and it draws the line of places it happens from.
+		Twice a year, from the right spot, the sun sets exactly on the summit of Mount Fuji. This works
+		out where and when, from the sun's path, the terrain and the buildings between you and the
+		mountain.
 	</p>
+	<ol class="steps">
+		<li>
+			<span class="step-n">1</span>
+			<span>
+				the map shades the land the summit shows from. click where you would stand, or search a
+				place.
+			</span>
+		</li>
+		<li>
+			<span class="step-n">2</span>
+			<span>the dates and times the sun sits on the summit from there appear below. pick one.</span>
+		</li>
+		<li>
+			<span class="step-n">3</span>
+			<span>
+				find the exact streets and parks on that day's line, check the buildings in the way, and
+				preview the moment.
+			</span>
+		</li>
+	</ol>
 </section>
 
 <section>
@@ -466,6 +551,7 @@
 				/>
 			</div>
 			<div class="eye">
+				<Toggle label="shade where it shows" bind:checked={showViewshed} />
 				<Slider
 					label="eye above ground"
 					bind:value={eye}
@@ -482,6 +568,8 @@
 				observer={point}
 				{locus}
 				view={{ bearing: line.bearing, hfov }}
+				viewshed={viewshedLayer}
+				{sectors}
 				spots={(found?.spots ?? []).map((s) => ({
 					id: s.id,
 					lon: s.lon,
@@ -496,9 +584,16 @@
 			/>
 		</div>
 		<div class="legend">
+			<span>
+				<span class="swatch shade"></span>
+				land the summit shows from, standing on the ground: the deeper the shade, the more of the mountain
+				{#if viewshedBusy}<span class="faint">· computing…</span>{/if}
+			</span>
 			<span
-				><span class="swatch accent"></span>where the sun sets on the summit on {fmtDate(day)}</span
+				><span class="swatch sector"></span>between these, the sun sits on the summit on some day of
+				the year</span
 			>
+			<span><span class="swatch accent"></span>where it does on {fmtDate(day)}</span>
 			<span><span class="swatch dashed"></span>your line of sight to the summit</span>
 			<span><span class="swatch wedge"></span>what the lens in the preview takes in</span>
 			{#if found?.spots.length}
@@ -911,6 +1006,35 @@
 		font-size: var(--text-content);
 		color: var(--color-text-tertiary);
 	}
+	.steps {
+		list-style: none;
+		margin: 8px 0 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
+		gap: 16px 40px;
+		max-width: 900px;
+	}
+	.steps li {
+		display: flex;
+		gap: 12px;
+		font-size: var(--text-small);
+		line-height: 1.7;
+		color: var(--color-text-secondary);
+	}
+	.step-n {
+		color: var(--color-accent);
+		letter-spacing: var(--tracking-micro);
+	}
+	.swatch.shade {
+		height: 10px;
+		border: 0;
+		background: linear-gradient(90deg, rgba(54, 182, 233, 0.15), rgba(54, 182, 233, 0.6));
+	}
+	.swatch.sector {
+		border-top: 1px dashed var(--color-text);
+		opacity: 0.6;
+	}
 	section + section {
 		margin-top: 72px;
 	}
@@ -926,6 +1050,11 @@
 	.bar {
 		display: grid;
 		grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 260px);
+	}
+	.eye {
+		display: flex;
+		flex-direction: column;
+		gap: 18px;
 		gap: 16px 32px;
 		align-items: end;
 	}

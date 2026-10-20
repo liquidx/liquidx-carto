@@ -17,11 +17,29 @@
 		view?: { bearing: number; hfov: number } | null;
 		/** Places found along the line, drawn as points; `clear` ones have the summit in sight. */
 		spots?: { id: string; lon: number; lat: number; clear: boolean }[];
+		/** Where the mountain shows from, as pixels over the region box. */
+		viewshed?: {
+			pixels: Uint8ClampedArray;
+			width: number;
+			height: number;
+			bounds: { west: number; east: number; north: number; south: number };
+		} | null;
+		/** The land from which the sun can sit on the summit on some day of the year. */
+		sectors?: LngLat[][];
 		onpick: (p: LngLat) => void;
 		onspot?: (id: string) => void;
 	};
 
-	let { observer, locus, view = null, spots = [], onpick, onspot }: Props = $props();
+	let {
+		observer,
+		locus,
+		view = null,
+		spots = [],
+		viewshed = null,
+		sectors = [],
+		onpick,
+		onspot
+	}: Props = $props();
 
 	const ACCENT = '#36b6e9';
 	const SIGHT = '#c9c9d0';
@@ -51,6 +69,33 @@
 		properties: {},
 		geometry: { type: 'Polygon', coordinates: coords.length ? [coords] : [] }
 	});
+	const sectorShapes = (): GeoJSON.FeatureCollection => ({
+		type: 'FeatureCollection',
+		features: sectors.map((ring) => ({
+			type: 'Feature',
+			properties: {},
+			geometry: { type: 'Polygon', coordinates: [ring.map((p) => [p.lon, p.lat])] }
+		}))
+	});
+	/** The viewshed pixels as an image the map can drape over the region. */
+	function viewshedUrl() {
+		if (!viewshed) return null;
+		const c = document.createElement('canvas');
+		c.width = viewshed.width;
+		c.height = viewshed.height;
+		c.getContext('2d')!.putImageData(
+			new ImageData(
+				new Uint8ClampedArray(viewshed.pixels) as Uint8ClampedArray<ArrayBuffer>,
+				viewshed.width,
+				viewshed.height
+			),
+			0,
+			0
+		);
+		return c.toDataURL();
+	}
+	const BLANK =
+		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
 	const points = (): GeoJSON.FeatureCollection => ({
 		type: 'FeatureCollection',
 		features: spots.map((s) => ({
@@ -77,6 +122,40 @@
 		m.on('load', () => {
 			basemaps = installBasemaps(m);
 			showBasemap(m, basemaps, 'terrain', true);
+			m.addSource('viewshed', {
+				type: 'image',
+				url: BLANK,
+				coordinates: [
+					[138, 36],
+					[139, 36],
+					[139, 35],
+					[138, 35]
+				]
+			});
+			m.addLayer(
+				{
+					id: 'viewshed',
+					type: 'raster',
+					source: 'viewshed',
+					paint: { 'raster-opacity': 1, 'raster-resampling': 'linear', 'raster-fade-duration': 0 }
+				},
+				basemaps.firstSymbol
+			);
+			m.addSource('sectors', { type: 'geojson', data: sectorShapes() });
+			m.addLayer(
+				{
+					id: 'sectors',
+					type: 'line',
+					source: 'sectors',
+					paint: {
+						'line-color': '#e6e6ea',
+						'line-width': 1,
+						'line-opacity': 0.45,
+						'line-dasharray': [4, 3]
+					}
+				},
+				basemaps.firstSymbol
+			);
 			m.addSource('locus', { type: 'geojson', data: line([]) });
 			m.addSource('sight', { type: 'geojson', data: line([]) });
 			m.addSource('wedge', { type: 'geojson', data: polygon([]) });
@@ -168,6 +247,31 @@
 	$effect(() => {
 		if (!map || !ready) return;
 		(map.getSource('spots') as maplibregl.GeoJSONSource).setData(points());
+	});
+
+	$effect(() => {
+		if (!map || !ready) return;
+		(map.getSource('sectors') as maplibregl.GeoJSONSource).setData(sectorShapes());
+	});
+
+	$effect(() => {
+		if (!map || !ready) return;
+		const src = map.getSource('viewshed') as maplibregl.ImageSource;
+		const url = viewshedUrl();
+		if (!url || !viewshed) {
+			src.updateImage({ url: BLANK });
+			return;
+		}
+		const b = viewshed.bounds;
+		src.updateImage({
+			url,
+			coordinates: [
+				[b.west, b.north],
+				[b.east, b.north],
+				[b.east, b.south],
+				[b.west, b.south]
+			]
+		});
 	});
 
 	$effect(() => {
