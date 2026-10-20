@@ -3,7 +3,14 @@
  * one of the mountain itself, and spot heights for wherever the observer stands.
  */
 import { bilinear, loadTile, sampleApiGrid, type TerrainProvider } from '$lib/contour/terrain-api';
-import { latToY, lonToX, xToLon, yToLat, type MercatorBox } from '$lib/contour/mercator';
+import {
+	latToY,
+	lonToX,
+	metresPerUnit,
+	xToLon,
+	yToLat,
+	type MercatorBox
+} from '$lib/contour/mercator';
 import { gridSampler } from '$lib/diorama/sampler';
 import { FUJI, type Elevation, type TerrainGrid } from './alignment';
 
@@ -70,6 +77,32 @@ export async function loadTerrain(
 		ground,
 		resolution: { region: region.resolution, mountain: mountain.resolution }
 	};
+}
+
+/** A finer grid of the ground around the observer, so the foreground of the view holds up. */
+export interface Patch {
+	grid: TerrainGrid;
+	sample: Elevation;
+	resolution: number;
+}
+
+export async function loadPatch(
+	provider: TerrainProvider,
+	lon: number,
+	lat: number,
+	widthMetres = 24_000,
+	n = 384,
+	signal?: AbortSignal
+): Promise<Patch> {
+	const half = widthMetres / 2 / metresPerUnit(lat);
+	const box: MercatorBox = {
+		x0: lonToX(lon) - half,
+		x1: lonToX(lon) + half,
+		y0: latToY(lat) - half,
+		y1: latToY(lat) + half
+	};
+	const { grid, resolution } = await sampleApiGrid(provider, box, n, n, signal);
+	return { grid: asGrid(box, n, n, grid.data), sample: gridSampler(grid, box), resolution };
 }
 
 /** The ground elevation at one spot from a single detailed tile, in metres; NaN with no data. */

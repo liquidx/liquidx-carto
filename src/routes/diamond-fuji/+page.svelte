@@ -16,9 +16,13 @@
 		lineOfSight,
 		sightline,
 		skyline,
+		type Elevation,
 		type Observer
 	} from '$lib/diamond-fuji/alignment';
 	import FujiMap from '$lib/diamond-fuji/FujiMap.svelte';
+	import FujiScene from '$lib/diamond-fuji/FujiScene.svelte';
+	import { SNOW_LINE_BY_MONTH, type Conditions } from '$lib/diamond-fuji/scene';
+	import Toggle from '$lib/components/Toggle.svelte';
 	import type { LngLat } from '$lib/diamond-fuji/geo';
 	import Skyline from '$lib/diamond-fuji/Skyline.svelte';
 	import { SPOTS } from '$lib/diamond-fuji/spots';
@@ -32,7 +36,13 @@
 		sunPosition,
 		type Phase
 	} from '$lib/diamond-fuji/sun';
-	import { elevationAt, loadTerrain, type Terrain } from '$lib/diamond-fuji/terrain';
+	import {
+		elevationAt,
+		loadPatch,
+		loadTerrain,
+		type Patch,
+		type Terrain
+	} from '$lib/diamond-fuji/terrain';
 	import YearStrip from '$lib/diamond-fuji/YearStrip.svelte';
 
 	let { data } = $props();
@@ -103,12 +113,44 @@
 		};
 	});
 
+	/** Finer ground around the observer, for the foreground of the view and the nearest ridges. */
+	let patch = $state.raw<Patch | null>(null);
+	$effect(() => {
+		const { lon, lat } = point;
+		const p = provider;
+		const ctrl = new AbortController();
+		patch = null;
+		loadPatch(p, lon, lat, 24_000, 384, ctrl.signal)
+			.then((t) => {
+				if (!ctrl.signal.aborted) patch = t;
+			})
+			.catch(() => {});
+		return () => ctrl.abort();
+	});
+
+	/** Every grid, finest first. */
+	const grids = $derived(
+		terrain ? [...(patch ? [patch.grid] : []), terrain.mountain, terrain.region] : null
+	);
+	const groundAt = $derived.by((): Elevation | null => {
+		if (!terrain) return null;
+		const t = terrain;
+		const p = patch;
+		return (lon, lat) => {
+			if (p) {
+				const z = p.sample(lon, lat);
+				if (!Number.isNaN(z)) return z;
+			}
+			return t.ground(lon, lat);
+		};
+	});
+
 	const observer = $derived<Observer>({ ...point, elevation: (ground ?? 0) + eye });
 	const line = $derived(sightline(observer));
 	/** You can only watch the sun set behind the mountain from its sunrise side, and so on. */
 	const phase = $derived<Phase>(line.bearing > 180 ? 'sunset' : 'sunrise');
 
-	const visibility = $derived(terrain ? lineOfSight(observer, terrain.ground) : null);
+	const visibility = $derived(groundAt ? lineOfSight(observer, groundAt) : null);
 
 	// ── when ────────────────────────────────────────────
 
@@ -140,9 +182,58 @@
 	// ── where ───────────────────────────────────────────
 
 	const locus = $derived(diamondLocus(day, phase, terrain ? terrain.ground : () => 0, eye));
-	const sky = $derived(
-		terrain ? skyline(observer, [terrain.mountain, terrain.region], line.bearing, 4) : null
+	const sky = $derived(grids ? skyline(observer, grids, line.bearing, 4) : null);
+
+	// ── the preview ─────────────────────────────────────
+
+	/** Minutes before or after the crossing. */
+	let minutes = $state(0);
+	let playing = $state(false);
+	$effect(() => {
+		if (!playing) return;
+		const start = performance.now();
+		const from = minutes;
+		let frame = 0;
+		const tick = () => {
+			// A minute of sun a second, looping back round.
+			minutes = Math.round(((from + (performance.now() - start) / 1000 + 40) % 80) - 40);
+			frame = requestAnimationFrame(tick);
+		};
+		frame = requestAnimationFrame(tick);
+		return () => cancelAnimationFrame(frame);
+	});
+	const previewTime = $derived((alignment?.time ?? day + 17 * 3_600_000) + minutes * 60_000);
+	const previewSun = $derived.by(() => {
+		const s = sunPosition(previewTime, observer.lat, observer.lon);
+		return { azimuth: s.azimuth, altitude: s.apparent };
+	});
+
+	let haze = $state(0.25);
+	let cloud = $state(0);
+	let cloudBase = $state(1800);
+	let focalLength = $state(135);
+	let exposure = $state(0.35);
+	/** Snow follows the season until the slider is touched. */
+	let snowTouched = $state(false);
+	let snowLine = $state(SNOW_LINE_BY_MONTH[today.month - 1]);
+	$effect(() => {
+		const m = jstParts(day).month;
+		if (!snowTouched) snowLine = SNOW_LINE_BY_MONTH[m - 1];
+	});
+	const conditions = $derived<Conditions>({
+		haze,
+		cloud,
+		cloudBase,
+		snowLine,
+		focalLength,
+		exposure
+	});
+	const hfov = $derived((2 * Math.atan(18 / focalLength) * 180) / Math.PI);
+	const vfov = $derived(
+		(2 * Math.atan(Math.tan((hfov * Math.PI) / 360) / (16 / 9)) * 180) / Math.PI
 	);
+	/** Look at the summit, a little above the middle of the frame. */
+	const pitch = $derived(line.summitAngle - vfov * 0.12);
 
 	const km = (m: number) => (m / 1000).toFixed(m < 20_000 ? 1 : 0);
 	const deg = (d: number, n = 1) => d.toFixed(n) + '°';
@@ -189,13 +280,19 @@
 			</div>
 		</div>
 		<div class="map">
-			<FujiMap observer={point} {locus} onpick={(p) => goTo(p, 'picked on the map')} />
+			<FujiMap
+				observer={point}
+				{locus}
+				view={{ bearing: line.bearing, hfov }}
+				onpick={(p) => goTo(p, 'picked on the map')}
+			/>
 		</div>
 		<div class="legend">
 			<span
 				><span class="swatch accent"></span>where the sun sets on the summit on {fmtDate(day)}</span
 			>
 			<span><span class="swatch dashed"></span>your line of sight to the summit</span>
+			<span><span class="swatch wedge"></span>what the lens in the preview takes in</span>
 		</div>
 		<StatRow
 			stats={[
@@ -310,7 +407,104 @@
 </section>
 
 <section>
-	<SectionLabel index="04" label="Terrain" />
+	<SectionLabel
+		index="04"
+		label="Preview"
+		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
+	/>
+	<div class="body">
+		<p class="note">
+			how it should look through the lens from where you stand: the real terrain, lit by the sun
+			where it is at this moment, under a physical sky. the air, the cloud and the snow are yours to
+			set.
+			{#if previewSun.altitude < -0.3}
+				<span class="faint">the sun is below the horizon now.</span>
+			{/if}
+		</p>
+		<div class="preview">
+			<FujiScene
+				{grids}
+				{observer}
+				sun={previewSun}
+				bearing={line.bearing}
+				{pitch}
+				{conditions}
+				animate={playing || cloud > 0}
+			/>
+		</div>
+		<div class="time-row">
+			<div class="time-slider">
+				<Slider
+					label="time"
+					bind:value={minutes}
+					min={-40}
+					max={40}
+					step={1}
+					format={(v) =>
+						`${fmtTime(previewTime)} · ${v === 0 ? 'on the bearing' : `${Math.abs(v)} min ${v < 0 ? 'before' : 'after'}`}`}
+				/>
+			</div>
+			<Toggle label="play" bind:checked={playing} />
+		</div>
+		<div class="controls">
+			<Slider
+				label="haze"
+				bind:value={haze}
+				min={0}
+				max={1}
+				step={0.01}
+				format={(v) => (v < 0.2 ? 'crisp' : v < 0.5 ? 'clear' : v < 0.8 ? 'hazy' : 'murky')}
+			/>
+			<Slider
+				label="cloud"
+				bind:value={cloud}
+				min={0}
+				max={1}
+				step={0.01}
+				format={(v) =>
+					v < 0.02 ? 'none' : v < 0.4 ? 'scattered' : v < 0.75 ? 'broken' : 'overcast'}
+			/>
+			<Slider
+				label="cloud base"
+				bind:value={cloudBase}
+				min={500}
+				max={4500}
+				step={100}
+				unit=" m"
+				format={(v) => v.toFixed(0)}
+			/>
+			<Slider
+				label="snow line"
+				bind:value={snowLine}
+				min={1500}
+				max={4000}
+				step={50}
+				oninput={() => (snowTouched = true)}
+				format={(v) => (v >= 3900 ? 'none' : `${v} m${snowTouched ? '' : ' · by season'}`)}
+			/>
+			<Slider
+				label="lens"
+				bind:value={focalLength}
+				min={24}
+				max={600}
+				step={1}
+				unit=" mm"
+				format={(v) => v.toFixed(0)}
+			/>
+			<Slider
+				label="exposure"
+				bind:value={exposure}
+				min={0.2}
+				max={1.5}
+				step={0.05}
+				format={(v) => v.toFixed(2)}
+			/>
+		</div>
+	</div>
+</section>
+
+<section>
+	<SectionLabel index="05" label="Terrain" />
 	<div class="body">
 		<div class="provider">
 			<Select
@@ -409,6 +603,30 @@
 	}
 	.swatch.dashed {
 		border-top: 1px dashed var(--color-text-ui);
+	}
+	.swatch.wedge {
+		height: 8px;
+		border: 0;
+		background: var(--color-accent-tint);
+		outline: 1px solid var(--color-accent-muted);
+	}
+	.preview {
+		max-width: 1000px;
+	}
+	.time-row {
+		max-width: 1000px;
+		display: flex;
+		align-items: flex-end;
+		gap: 32px;
+	}
+	.time-slider {
+		flex: 1;
+	}
+	.controls {
+		max-width: 1000px;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+		gap: 36px 48px;
 	}
 	.note {
 		max-width: 720px;

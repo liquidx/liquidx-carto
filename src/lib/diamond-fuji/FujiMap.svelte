@@ -8,15 +8,17 @@
 	import { installBasemaps, showBasemap, type Basemaps } from '$lib/map/basemaps';
 	import { createMap } from '$lib/map/create';
 	import { FUJI } from './alignment';
-	import type { LngLat } from './geo';
+	import { destination, type LngLat } from './geo';
 
 	type Props = {
 		observer: LngLat;
 		locus: LngLat[];
+		/** The lens in the preview: its bearing and horizontal angle of view, drawn as a wedge. */
+		view?: { bearing: number; hfov: number } | null;
 		onpick: (p: LngLat) => void;
 	};
 
-	let { observer, locus, onpick }: Props = $props();
+	let { observer, locus, view = null, onpick }: Props = $props();
 
 	const ACCENT = '#36b6e9';
 	const SIGHT = '#c9c9d0';
@@ -40,6 +42,23 @@
 		properties: {},
 		geometry: { type: 'LineString', coordinates: coords }
 	});
+	const polygon = (coords: [number, number][]): GeoJSON.Feature => ({
+		type: 'Feature',
+		properties: {},
+		geometry: { type: 'Polygon', coordinates: coords.length ? [coords] : [] }
+	});
+	/** The wedge the lens sees, out to 150 km. */
+	function wedge(): [number, number][] {
+		if (!view) return [];
+		const pts: [number, number][] = [[observer.lon, observer.lat]];
+		for (let i = 0; i <= 12; i++) {
+			const b = view.bearing - view.hfov / 2 + (view.hfov * i) / 12;
+			const p = destination(observer, b, 150_000);
+			pts.push([p.lon, p.lat]);
+		}
+		pts.push([observer.lon, observer.lat]);
+		return pts;
+	}
 
 	onMount(() => {
 		const m = createMap(container, { center: [139.3, 35.5], zoom: 7.4, minZoom: 5 });
@@ -48,6 +67,25 @@
 			showBasemap(m, basemaps, 'terrain', true);
 			m.addSource('locus', { type: 'geojson', data: line([]) });
 			m.addSource('sight', { type: 'geojson', data: line([]) });
+			m.addSource('wedge', { type: 'geojson', data: polygon([]) });
+			m.addLayer(
+				{
+					id: 'wedge',
+					type: 'fill',
+					source: 'wedge',
+					paint: { 'fill-color': ACCENT, 'fill-opacity': 0.08 }
+				},
+				basemaps.firstSymbol
+			);
+			m.addLayer(
+				{
+					id: 'wedge-edge',
+					type: 'line',
+					source: 'wedge',
+					paint: { 'line-color': ACCENT, 'line-width': 1, 'line-opacity': 0.35 }
+				},
+				basemaps.firstSymbol
+			);
 			m.addLayer(
 				{
 					id: 'locus',
@@ -93,6 +131,12 @@
 				[FUJI.lon, FUJI.lat]
 			])
 		);
+	});
+
+	$effect(() => {
+		if (!map || !ready) return;
+		void view;
+		(map.getSource('wedge') as maplibregl.GeoJSONSource).setData(polygon(wedge()));
 	});
 
 	$effect(() => {
