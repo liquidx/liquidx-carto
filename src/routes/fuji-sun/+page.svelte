@@ -553,6 +553,8 @@
 		{ value: '400', label: '400 mm' }
 	];
 	let showConditions = $state(false);
+	/** Where to stand: places on the day's line, found on request. */
+	let showPlaces = $state(false);
 	/** Snow follows the season until the slider is touched. */
 	let snowTouched = $state(false);
 	let snowLine = $state(SNOW_LINE_BY_MONTH[today.month - 1]);
@@ -702,36 +704,6 @@
 		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
 	/>
 	<div class="body">
-		<div class="the-day">
-			<div class="the-day-label">THE DAY</div>
-			<p class="the-day-note">
-				{#if windows.length}
-					the {['day', 'two days', 'three days'][windows.length - 1] ?? `${windows.length} days`} in {year}
-					when, from {here}, the sun {phase === 'sunset' ? 'sets' : 'rises'} directly on the peak of mount
-					fuji. pick one to see it.
-				{:else}
-					from {here} the {phase} never lands on the peak: the line to it is outside where the sun
-					{phase === 'sunset' ? 'sets' : 'rises'} over the year.
-				{/if}
-			</p>
-			{#if windows.length}
-				<div class="windows">
-					{#each windows as w (w.best.day)}
-						<button
-							class="window"
-							class:current={w.days.some((d) => d.day === day)}
-							onclick={() => {
-								doy = Math.round((w.best.day - jstDay(year, 1)) / 86_400_000) + 1;
-								minutes = 0;
-							}}
-						>
-							<span class="when-date">{fmtDate(w.best.day)}</span>
-							<span class="when-time">{fmtTime(w.best.time)}</span>
-						</button>
-					{/each}
-				</div>
-			{/if}
-		</div>
 		<div class="view">
 			<FujiScene
 				{grids}
@@ -781,6 +753,14 @@
 				/>
 			</div>
 			<Toggle label="play" bind:checked={playing} />
+			<div class="year">
+				<Select
+					label="year"
+					options={yearOptions}
+					value={String(year)}
+					onchange={(v) => (year = Number(v))}
+				/>
+			</div>
 		</div>
 		<div class="lens-row">
 			<Segmented
@@ -792,14 +772,7 @@
 			<Button size="sm" onclick={aim}>look at the summit</Button>
 			<Toggle label="buildings" bind:checked={showBuildings} />
 			<Toggle label="weather" bind:checked={showConditions} />
-			<div class="year">
-				<Select
-					label="year"
-					options={yearOptions}
-					value={String(year)}
-					onchange={(v) => (year = Number(v))}
-				/>
-			</div>
+			<Toggle label="places on the line" bind:checked={showPlaces} />
 		</div>
 		{#if showBuildings}
 			<p class="note">
@@ -863,123 +836,152 @@
 				/>
 			</div>
 		{/if}
-	</div>
-</section>
-
-<section>
-	<SectionLabel
-		index="03"
-		label="Where to stand"
-		descriptor={found ? `${fmtDate(foundFor!.day)} · ${found.spots.length} places` : fmtDate(day)}
-	/>
-	<div class="body">
-		<p class="note">
-			streets, parks, bridges, beaches and viewpoints from openstreetmap that the line for
-			{fmtDate(day)} runs through, near where you stand. pick one to stand there.
-		</p>
-		<div class="find-row">
-			<div class="radius">
-				<Slider
-					label="search around you"
-					bind:value={searchRadius}
-					min={1}
-					max={25}
-					step={1}
-					unit=" km"
-					format={(v) => v.toFixed(0)}
-				/>
-			</div>
-			<Button variant="primary" onclick={find} disabled={finding || !terrain}>
-				{finding ? 'asking openstreetmap…' : found ? 'search again' : 'find places on the line'}
-			</Button>
-			{#if findError}
-				<span class="error">{findError}</span>
-			{/if}
-		</div>
-		{#if found}
-			{#if stale}
-				<p class="note warn">
-					these places are for {fmtDate(foundFor!.day)}; the line has moved since. search again for {fmtDate(
-						day
-					)}.
-				</p>
-			{/if}
-			{#if found.spots.length}
-				<div class="kinds">
-					<Chip active={kindFilter === 'all'} onclick={() => (kindFilter = 'all')}>
-						all · {found.spots.length}
-					</Chip>
-					{#each kindCounts as k (k.kind)}
-						<Chip active={kindFilter === k.kind} onclick={() => (kindFilter = k.kind)}>
-							{KIND_LABELS[k.kind]} · {k.count}
-						</Chip>
-					{/each}
+		{#if showPlaces}
+			<div class="places">
+				<div class="places-label">
+					WHERE TO STAND
+					{#if found}<span class="faint">
+							· {fmtDate(foundFor!.day)} · {found.spots.length} places</span
+						>{/if}
 				</div>
-				<ul class="spots">
-					{#each showAll ? shownSpots : shownSpots.slice(0, LIST_LIMIT) as s (s.id)}
-						<li>
-							<button
-								class="spot"
-								class:blocked={!s.visibility.visible}
-								onclick={() => goToSpot(s)}
-							>
-								<span class="spot-name">{s.name}</span>
-								<span class="spot-kind">{KIND_LABELS[s.kind].replace(/s$/, '')}</span>
-								<span class="spot-meta">
-									{km(s.fromCentre)} km from you · {fmtTime(s.time)}
-								</span>
-								<span class="spot-sight" class:warn={!s.visibility.visible}>
-									{#if s.visibility.visible}
-										summit in sight
-									{:else}
-										a ridge {km(s.visibility.blockedAt!.distance)} km away is in the way
-									{/if}
-								</span>
-								{#if obstructions.has(s.id)}
-									{@const o = obstructions.get(s.id)}
-									<span class="spot-sight" class:warn={!!o}>
-										{#if o}
-											a building {Math.round(o.distance)} m away is in the way
-										{:else}
-											no building in the way
-										{/if}
-									</span>
-								{/if}
-							</button>
-						</li>
-					{/each}
-				</ul>
+				<p class="note">
+					streets, parks, bridges, beaches and viewpoints from openstreetmap that the line for
+					{fmtDate(day)} runs through, near where you stand. pick one to stand there.
+				</p>
 				<div class="find-row">
-					<Button onclick={checkBuildings} disabled={checking !== null}>
-						{#if checking}
-							checking {checking.done} of {checking.total}…
-						{:else if obstructions.size}
-							check buildings again
-						{:else}
-							check buildings along each sightline
-						{/if}
+					<div class="radius">
+						<Slider
+							label="search around you"
+							bind:value={searchRadius}
+							min={1}
+							max={25}
+							step={1}
+							unit=" km"
+							format={(v) => v.toFixed(0)}
+						/>
+					</div>
+					<Button variant="primary" onclick={find} disabled={finding || !terrain}>
+						{finding ? 'asking openstreetmap…' : found ? 'search again' : 'find places on the line'}
 					</Button>
-					{#if checkError}
-						<span class="error">{checkError}</span>
+					{#if findError}
+						<span class="error">{findError}</span>
 					{/if}
 				</div>
-				{#if shownSpots.length > LIST_LIMIT && !showAll}
-					<Button size="sm" onclick={() => (showAll = true)}>
-						show all {shownSpots.length}
-					</Button>
+				{#if found}
+					{#if stale}
+						<p class="note warn">
+							these places are for {fmtDate(foundFor!.day)}; the line has moved since. search again
+							for {fmtDate(day)}.
+						</p>
+					{/if}
+					{#if found.spots.length}
+						<div class="kinds">
+							<Chip active={kindFilter === 'all'} onclick={() => (kindFilter = 'all')}>
+								all · {found.spots.length}
+							</Chip>
+							{#each kindCounts as k (k.kind)}
+								<Chip active={kindFilter === k.kind} onclick={() => (kindFilter = k.kind)}>
+									{KIND_LABELS[k.kind]} · {k.count}
+								</Chip>
+							{/each}
+						</div>
+						<ul class="spots">
+							{#each showAll ? shownSpots : shownSpots.slice(0, LIST_LIMIT) as s (s.id)}
+								<li>
+									<button
+										class="spot"
+										class:blocked={!s.visibility.visible}
+										onclick={() => goToSpot(s)}
+									>
+										<span class="spot-name">{s.name}</span>
+										<span class="spot-kind">{KIND_LABELS[s.kind].replace(/s$/, '')}</span>
+										<span class="spot-meta">
+											{km(s.fromCentre)} km from you · {fmtTime(s.time)}
+										</span>
+										<span class="spot-sight" class:warn={!s.visibility.visible}>
+											{#if s.visibility.visible}
+												summit in sight
+											{:else}
+												a ridge {km(s.visibility.blockedAt!.distance)} km away is in the way
+											{/if}
+										</span>
+										{#if obstructions.has(s.id)}
+											{@const o = obstructions.get(s.id)}
+											<span class="spot-sight" class:warn={!!o}>
+												{#if o}
+													a building {Math.round(o.distance)} m away is in the way
+												{:else}
+													no building in the way
+												{/if}
+											</span>
+										{/if}
+									</button>
+								</li>
+							{/each}
+						</ul>
+						<div class="find-row">
+							<Button onclick={checkBuildings} disabled={checking !== null}>
+								{#if checking}
+									checking {checking.done} of {checking.total}…
+								{:else if obstructions.size}
+									check buildings again
+								{:else}
+									check buildings along each sightline
+								{/if}
+							</Button>
+							{#if checkError}
+								<span class="error">{checkError}</span>
+							{/if}
+						</div>
+						{#if shownSpots.length > LIST_LIMIT && !showAll}
+							<Button size="sm" onclick={() => (showAll = true)}>
+								show all {shownSpots.length}
+							</Button>
+						{/if}
+					{:else}
+						<p class="note">
+							nothing mapped lies on the line within {searchRadius} km of you. widen the search, or move:
+							the line for {fmtDate(day)} is drawn on the maps.
+						</p>
+					{/if}
 				{/if}
-			{:else}
-				<p class="note">
-					nothing mapped lies on the line within {searchRadius} km of you. widen the search, or move:
-					the line for {fmtDate(day)} is drawn on the maps.
-				</p>
-			{/if}
+			</div>
 		{/if}
+		<div class="the-day">
+			<div class="the-day-label">THE DAY</div>
+			<p class="the-day-note">
+				{#if windows.length}
+					the {['day', 'two days', 'three days'][windows.length - 1] ?? `${windows.length} days`} in {year}
+					when, from {here}, the sun {phase === 'sunset' ? 'sets' : 'rises'} directly on the peak of mount
+					fuji. pick one to see it.
+				{:else}
+					from {here} the {phase} never lands on the peak: the line to it is outside where the sun
+					{phase === 'sunset' ? 'sets' : 'rises'} over the year.
+				{/if}
+			</p>
+			{#if windows.length}
+				<div class="windows">
+					{#each windows as w (w.best.day)}
+						<button
+							class="window"
+							class:current={w.days.some((d) => d.day === day)}
+							onclick={() => {
+								doy = Math.round((w.best.day - jstDay(year, 1)) / 86_400_000) + 1;
+								minutes = 0;
+							}}
+						>
+							<span class="when-date">{fmtDate(w.best.day)}</span>
+							<span class="when-time">{fmtTime(w.best.time)}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
+		</div>
 	</div>
 </section>
 
 <section>
-	<SectionLabel index="04" label="The numbers" />
+	<SectionLabel index="03" label="The numbers" />
 	<div class="body">
 		<StatRow
 			stats={[
@@ -1144,6 +1146,16 @@
 		height: 10px;
 		border: 1px solid rgba(208, 162, 76, 0.5);
 		background: rgba(208, 162, 76, 0.1);
+	}
+	.places {
+		display: flex;
+		flex-direction: column;
+		gap: 24px;
+	}
+	.places-label {
+		font-size: var(--text-meta);
+		letter-spacing: 0.14em;
+		color: var(--color-text-label);
 	}
 	.the-day {
 		border: 1px solid var(--color-line);
