@@ -93,6 +93,12 @@
 		spotId = id;
 	}
 
+	/** The place you stand, as words. */
+	const here = $derived(
+		SPOTS.find((s) => s.id === spotId)?.label ??
+			(placeName && placeName !== 'picked on the map' ? placeName : 'the spot on the map')
+	);
+
 	const spotOptions = $derived([
 		...(spotId ? [] : [{ value: '', label: placeName || 'picked on the map' }]),
 		...SPOTS.map((s) => ({ value: s.id, label: s.label }))
@@ -694,30 +700,35 @@
 		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
 	/>
 	<div class="body">
-		<div class="windows">
-			{#each windows as w (w.best.day)}
-				<button
-					class="window"
-					class:current={w.days.some((d) => d.day === day)}
-					onclick={() => {
-						doy = Math.round((w.best.day - jstDay(year, 1)) / 86_400_000) + 1;
-						minutes = 0;
-					}}
-				>
-					<span class="when-date">{fmtDate(w.best.day)}</span>
-					<span class="when-time">{fmtTime(w.best.time)}</span>
-				</button>
-			{:else}
-				<p class="note">
-					from here the {phase} never lands on the summit: the line to it is outside the sun's
-					{phase === 'sunset' ? 'setting' : 'rising'} points over the year.
-				</p>
-			{/each}
-			<span class="windows-note">
+		<div class="the-day">
+			<div class="the-day-label">THE DAY</div>
+			<p class="the-day-note">
 				{#if windows.length}
-					{phase === 'sunset' ? 'sunset' : 'sunrise'} on the summit from here, {year}
+					the {['day', 'two days', 'three days'][windows.length - 1] ?? `${windows.length} days`} in {year}
+					when, from {here}, the sun {phase === 'sunset' ? 'sets' : 'rises'} directly on the peak of mount
+					fuji. pick one to see it.
+				{:else}
+					from {here} the {phase} never lands on the peak: the line to it is outside where the sun
+					{phase === 'sunset' ? 'sets' : 'rises'} over the year.
 				{/if}
-			</span>
+			</p>
+			{#if windows.length}
+				<div class="windows">
+					{#each windows as w (w.best.day)}
+						<button
+							class="window"
+							class:current={w.days.some((d) => d.day === day)}
+							onclick={() => {
+								doy = Math.round((w.best.day - jstDay(year, 1)) / 86_400_000) + 1;
+								minutes = 0;
+							}}
+						>
+							<span class="when-date">{fmtDate(w.best.day)}</span>
+							<span class="when-time">{fmtTime(w.best.time)}</span>
+						</button>
+					{/each}
+				</div>
+			{/if}
 		</div>
 		<div class="view">
 			<FujiScene
@@ -1132,6 +1143,24 @@
 		border: 1px solid rgba(208, 162, 76, 0.5);
 		background: rgba(208, 162, 76, 0.1);
 	}
+	.the-day {
+		border: 1px solid var(--color-line);
+		padding: 16px 16px 20px;
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+	}
+	.the-day-label {
+		font-size: var(--text-meta);
+		letter-spacing: 0.14em;
+		color: var(--color-text-label);
+	}
+	.the-day-note {
+		max-width: 640px;
+		font-size: var(--text-small);
+		color: var(--color-text-tertiary);
+		line-height: 1.7;
+	}
 	.windows {
 		display: flex;
 		flex-wrap: wrap;
@@ -1170,11 +1199,6 @@
 	.when-time {
 		font-size: var(--text-title);
 		color: var(--color-text-secondary);
-	}
-	.windows-note {
-		font-size: var(--text-small);
-		color: var(--color-text-faint);
-		padding-bottom: 4px;
 	}
 	.time-row,
 	.lens-row {
