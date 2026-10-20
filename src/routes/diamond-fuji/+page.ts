@@ -1,12 +1,4 @@
-import { error } from '@sveltejs/kit';
-import { findTool } from '$lib/tools';
-import type { PageLoad } from './$types';
+import { redirect } from '@sveltejs/kit';
 
-// Everything happens in the browser: MapLibre and terrain tiles.
-export const ssr = false;
-
-export const load: PageLoad = () => {
-	const tool = findTool('diamond-fuji');
-	if (!tool) error(404, 'not found');
-	return { tool };
-};
+// The tool was first published here, as Diamond Fuji.
+export const load = () => redirect(308, '/fuji-sun');

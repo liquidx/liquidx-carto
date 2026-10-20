@@ -9,8 +9,8 @@ export type Tool = {
 /** Every tool/experiment listed on the index, in display order. */
 export const tools: Tool[] = [
 	{
-		slug: 'diamond-fuji',
-		title: 'Diamond Fuji',
+		slug: 'fuji-sun',
+		title: 'Fuji Sun',
 		date: '2026-10-20',
 		summary:
 			"when and where the sun sets exactly on the summit of mount fuji, from the sun's path and the terrain."

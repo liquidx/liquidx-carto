@@ -17,7 +17,7 @@
 		sightline,
 		type Elevation,
 		type Observer
-	} from '$lib/diamond-fuji/alignment';
+	} from '$lib/fuji-sun/alignment';
 	import Button from '$lib/components/Button.svelte';
 	import type * as THREE from 'three';
 	import {
@@ -30,17 +30,17 @@
 		type BuildingTile,
 		type Obstruction,
 		type TileId
-	} from '$lib/diamond-fuji/buildings';
-	import { angleDiff, bearing as bearingTo } from '$lib/diamond-fuji/geo';
+	} from '$lib/fuji-sun/buildings';
+	import { angleDiff, bearing as bearingTo } from '$lib/fuji-sun/geo';
 	import Chip from '$lib/components/Chip.svelte';
-	import { findSpots, type FindResult, type Spot, type SpotKind } from '$lib/diamond-fuji/finder';
-	import FujiMap, { type SunRay } from '$lib/diamond-fuji/FujiMap.svelte';
-	import FujiScene, { type SunPath } from '$lib/diamond-fuji/FujiScene.svelte';
+	import { findSpots, type FindResult, type Spot, type SpotKind } from '$lib/fuji-sun/finder';
+	import FujiMap, { type SunRay } from '$lib/fuji-sun/FujiMap.svelte';
+	import FujiScene, { type SunPath } from '$lib/fuji-sun/FujiScene.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
-	import { SNOW_LINE_BY_MONTH, type Conditions } from '$lib/diamond-fuji/scene';
+	import { SNOW_LINE_BY_MONTH, type Conditions } from '$lib/fuji-sun/scene';
 	import Toggle from '$lib/components/Toggle.svelte';
-	import type { LngLat } from '$lib/diamond-fuji/geo';
-	import { SPOTS } from '$lib/diamond-fuji/spots';
+	import type { LngLat } from '$lib/fuji-sun/geo';
+	import { SPOTS } from '$lib/fuji-sun/spots';
 	import {
 		SUN_RADIUS,
 		daysInYear,
@@ -52,7 +52,7 @@
 		sunPosition,
 		timeAtAltitude,
 		type Phase
-	} from '$lib/diamond-fuji/sun';
+	} from '$lib/fuji-sun/sun';
 	import {
 		elevationAt,
 		loadPatch,
@@ -60,10 +60,10 @@
 		REGION,
 		type Patch,
 		type Terrain
-	} from '$lib/diamond-fuji/terrain';
-	import type { ViewshedRequest, ViewshedResponse } from '$lib/diamond-fuji/viewshed.worker';
+	} from '$lib/fuji-sun/terrain';
+	import type { ViewshedRequest, ViewshedResponse } from '$lib/fuji-sun/viewshed.worker';
 	import { xToLon, yToLat } from '$lib/contour/mercator';
-	import YearStrip from '$lib/diamond-fuji/YearStrip.svelte';
+	import YearStrip from '$lib/fuji-sun/YearStrip.svelte';
 
 	let { data } = $props();
 
@@ -185,7 +185,7 @@
 	$effect(() => {
 		const t = terrain;
 		if (!t) return;
-		const worker = new Worker(new URL('$lib/diamond-fuji/viewshed.worker.ts', import.meta.url), {
+		const worker = new Worker(new URL('$lib/fuji-sun/viewshed.worker.ts', import.meta.url), {
 			type: 'module'
 		});
 		viewshedBusy = true;
@@ -588,10 +588,10 @@
 	const sunsOff = (o: number) => Math.abs(o / SUN_RADIUS).toFixed(1);
 </script>
 
-<svelte:head><title>Diamond Fuji · Carto</title></svelte:head>
+<svelte:head><title>Fuji Sun · Carto</title></svelte:head>
 
 <section class="head">
-	<h1>Diamond Fuji</h1>
+	<h1>Fuji Sun</h1>
 	<div class="meta">
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
