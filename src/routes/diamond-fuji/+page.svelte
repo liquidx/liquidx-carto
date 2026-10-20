@@ -597,8 +597,8 @@
 		<p class="note">
 			streets, parks, bridges, beaches and viewpoints from openstreetmap that the line for
 			{fmtDate(day)} runs through, within reach of where you stand now. each is pinned to the point where
-			it meets the line, to within the width of the sun. the terrain is checked from there; buildings
-			and trees are not.
+			it meets the line, to within the width of the sun. the terrain is checked from there, and buildings
+			can be checked too, below; trees cannot.
 		</p>
 		<div class="find-row">
 			<div class="radius">
