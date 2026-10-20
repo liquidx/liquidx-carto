@@ -640,6 +640,27 @@
 				/>
 			</div>
 		</div>
+		<div class="legend">
+			<span><span class="swatch sight"></span>your line of sight to the summit</span>
+			<span><span class="swatch ray"></span>where the sun is when it is the summit's height</span>
+			<span>
+				<span class="swatch sector"></span>the sun sits on the summit from here on some day of the
+				year
+			</span>
+			<span><span class="swatch accent"></span>where it does on {fmtDate(day)}</span>
+			<span>
+				<Toggle label="shade where the mountain shows" bind:checked={showViewshed} />
+				{#if viewshedBusy}<span class="faint">computing…</span>{/if}
+			</span>
+		</div>
+		{#if terrainError}
+			<p class="note error">terrain failed to load: {terrainError}</p>
+		{:else if visibility && !visibility.visible}
+			<p class="note warn">
+				a ridge {km(visibility.blockedAt!.distance)} km away hides the summit from here: you would see
+				the sun set on that ridge instead.
+			</p>
+		{/if}
 		<div class="maps">
 			<div class="map">
 				<FujiMap
@@ -673,37 +694,6 @@
 				/>
 			</div>
 		</div>
-		<div class="legend">
-			<span><span class="swatch sight"></span>your line of sight to the summit</span>
-			<span><span class="swatch ray"></span>where the sun is when it is the summit's height</span>
-			<span>
-				<span class="swatch sector"></span>the sun sits on the summit from here on some day of the
-				year
-			</span>
-			<span><span class="swatch accent"></span>where it does on {fmtDate(day)}</span>
-			<span>
-				<Toggle label="shade where the mountain shows" bind:checked={showViewshed} />
-				{#if viewshedBusy}<span class="faint">computing…</span>{/if}
-			</span>
-		</div>
-		{#if terrainError}
-			<p class="note error">terrain failed to load: {terrainError}</p>
-		{:else if visibility && !visibility.visible}
-			<p class="note warn">
-				a ridge {km(visibility.blockedAt!.distance)} km away hides the summit from here: you would see
-				the sun set on that ridge instead.
-			</p>
-		{/if}
-	</div>
-</section>
-
-<section>
-	<SectionLabel
-		index="02"
-		label="The view"
-		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
-	/>
-	<div class="body">
 		<div class="view">
 			<FujiScene
 				{grids}
@@ -981,7 +971,7 @@
 </section>
 
 <section>
-	<SectionLabel index="03" label="The numbers" />
+	<SectionLabel index="02" label="The numbers" />
 	<div class="body">
 		<StatRow
 			stats={[
@@ -1108,6 +1098,10 @@
 		grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 260px);
 		gap: 16px 32px;
 		align-items: end;
+	}
+	/* The view sits right under the maps, as close as they are to each other. */
+	.maps + .view {
+		margin-top: -8px;
 	}
 	.maps {
 		display: grid;
