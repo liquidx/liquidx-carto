@@ -20,6 +20,19 @@
 		type Observer
 	} from '$lib/diamond-fuji/alignment';
 	import Button from '$lib/components/Button.svelte';
+	import type * as THREE from 'three';
+	import {
+		buildingGeometry,
+		loadBuildingTile,
+		obstruction,
+		sightlineTiles,
+		tileBounds,
+		tilesAround,
+		type BuildingTile,
+		type Obstruction,
+		type TileId
+	} from '$lib/diamond-fuji/buildings';
+	import { angleDiff, bearing as bearingTo } from '$lib/diamond-fuji/geo';
 	import Chip from '$lib/components/Chip.svelte';
 	import { findSpots, type FindResult, type Spot, type SpotKind } from '$lib/diamond-fuji/finder';
 	import FujiMap from '$lib/diamond-fuji/FujiMap.svelte';
@@ -253,6 +266,47 @@
 		goTo(s, `${s.name} · ${KIND_LABELS[s.kind].replace(/s$/, '')}`, 1.6);
 	}
 
+	// ── buildings in the way ────────────────────────────
+
+	/** Per spot id, what the sightline runs into; null when it is clear of buildings. */
+	let obstructions = $state.raw<Map<string, Obstruction | null>>(new Map());
+	let checking = $state<{ done: number; total: number } | null>(null);
+	let checkError = $state('');
+
+	async function checkBuildings() {
+		const spots = shownSpots.slice(0, showAll ? undefined : LIST_LIMIT);
+		const g = groundAt;
+		if (!g) return;
+		checking = { done: 0, total: spots.length };
+		checkError = '';
+		// A working copy, published whole after each spot, so it never needs to be reactive itself.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const results = new Map(obstructions);
+		try {
+			for (const s of spots) {
+				const line = sightline({ ...s, elevation: (g(s.lon, s.lat) || 0) + 1.6 });
+				const eye = { lon: s.lon, lat: s.lat, elevation: (g(s.lon, s.lat) || 0) + 1.6 };
+				const tiles = (
+					await Promise.all(sightlineTiles(s, line.bearing).map((t) => loadBuildingTile(t)))
+				).filter((t): t is BuildingTile => t !== null);
+				results.set(s.id, obstruction(tiles, eye, line.bearing, line.summitAngle, g));
+				obstructions = new Map(results);
+				checking = { done: checking!.done + 1, total: spots.length };
+			}
+		} catch (e) {
+			checkError = (e as Error).message;
+		} finally {
+			checking = null;
+		}
+	}
+	// A new search is a new set of places.
+	$effect(() => {
+		void found;
+		obstructions = new Map();
+	});
+
+	const clearOf = (s: Spot) => s.visibility.visible && !obstructions.get(s.id);
+
 	// ── the preview ─────────────────────────────────────
 
 	/** Minutes before or after the crossing. */
@@ -275,6 +329,81 @@
 	const previewSun = $derived.by(() => {
 		const s = sunPosition(previewTime, observer.lat, observer.lon);
 		return { azimuth: s.azimuth, altitude: s.apparent };
+	});
+
+	/** Buildings from re:earth in the preview: loaded on demand, for the view from here. */
+	let showBuildings = $state(false);
+	let buildingGeometries = $state.raw<THREE.BufferGeometry[]>([]);
+	let buildingsStatus = $state('');
+	$effect(() => {
+		if (!showBuildings || !groundAt) {
+			buildingGeometries = [];
+			buildingsStatus = '';
+			return;
+		}
+		const g = groundAt;
+		const origin = { lon: point.lon, lat: point.lat };
+		const brg = line.bearing;
+		const half = hfov / 2 + 6;
+		// Small buildings only matter close by; the big ones at zoom 12 can show from far off.
+		const inView = (t: TileId) => {
+			const b = tileBounds(t);
+			const corners = [
+				[b.west, b.north],
+				[b.east, b.north],
+				[b.west, b.south],
+				[b.east, b.south]
+			];
+			const inside =
+				origin.lon >= b.west &&
+				origin.lon <= b.east &&
+				origin.lat >= b.south &&
+				origin.lat <= b.north;
+			return (
+				inside ||
+				corners.some(
+					([lon, lat]) => Math.abs(angleDiff(brg, bearingTo(origin, { lon, lat }))) < half
+				)
+			);
+		};
+		const wanted = [
+			...tilesAround(origin, 14, 3_500),
+			...tilesAround(origin, 13, 12_000).filter(inView),
+			...tilesAround(origin, 12, 40_000).filter(inView)
+		];
+		let live = true;
+		const built: THREE.BufferGeometry[] = [];
+		let done = 0;
+		let count = 0;
+		buildingsStatus = `loading ${wanted.length} tiles…`;
+		Promise.all(
+			wanted.map((t) =>
+				loadBuildingTile(t)
+					.then((tile) => {
+						if (!live) return;
+						if (tile) {
+							built.push(buildingGeometry(tile, g, { origin }));
+							count += tile.features.length;
+							buildingGeometries = [...built];
+						}
+					})
+					.catch((e: Error) => {
+						if (live) buildingsStatus = e.message;
+					})
+					.finally(() => {
+						if (!live) return;
+						done++;
+						if (done === wanted.length)
+							buildingsStatus = `${count.toLocaleString('en')} buildings from ${wanted.length} tiles`;
+						else if (!buildingsStatus.includes('http'))
+							buildingsStatus = `loading ${done} of ${wanted.length} tiles…`;
+					})
+			)
+		);
+		return () => {
+			live = false;
+			for (const b of built) b.dispose();
+		};
 	});
 
 	let haze = $state(0.25);
@@ -357,7 +486,7 @@
 					id: s.id,
 					lon: s.lon,
 					lat: s.lat,
-					clear: s.visibility.visible
+					clear: clearOf(s)
 				}))}
 				onpick={(p) => goTo(p, 'picked on the map')}
 				onspot={(id) => {
@@ -375,7 +504,7 @@
 			{#if found?.spots.length}
 				<span
 					><span class="swatch dot"></span>places on the line ·
-					<span class="swatch dot blocked"></span>a ridge in the way</span
+					<span class="swatch dot blocked"></span>something in the way</span
 				>
 			{/if}
 		</div>
@@ -531,10 +660,41 @@
 										a ridge {km(s.visibility.blockedAt!.distance)} km away stands in the way
 									{/if}
 								</span>
+								{#if obstructions.has(s.id)}
+									{@const o = obstructions.get(s.id)}
+									<span class="spot-sight" class:warn={!!o}>
+										{#if o}
+											a building {Math.round(o.distance)} m away, {Math.round(
+												o.top - o.sightHeight
+											)}
+											m taller than the line of sight
+										{:else}
+											no building in the way
+										{/if}
+									</span>
+								{/if}
 							</button>
 						</li>
 					{/each}
 				</ul>
+				<div class="find-row">
+					<Button onclick={checkBuildings} disabled={checking !== null}>
+						{#if checking}
+							checking {checking.done} of {checking.total}…
+						{:else if obstructions.size}
+							check buildings again
+						{:else}
+							check buildings along each sightline
+						{/if}
+					</Button>
+					<span class="note">
+						re:earth buildings, from overture maps footprints: the first kilometre and a half of
+						every sightline for small buildings, fifteen for towers.
+					</span>
+					{#if checkError}
+						<span class="error">{checkError}</span>
+					{/if}
+				</div>
 				{#if shownSpots.length > LIST_LIMIT && !showAll}
 					<Button size="sm" onclick={() => (showAll = true)}>
 						show all {shownSpots.length}
@@ -606,6 +766,7 @@
 				bearing={line.bearing}
 				{pitch}
 				{conditions}
+				buildings={buildingGeometries}
 				animate={playing || cloud > 0}
 			/>
 		</div>
@@ -622,7 +783,16 @@
 				/>
 			</div>
 			<Toggle label="play" bind:checked={playing} />
+			<Toggle label="buildings" bind:checked={showBuildings} />
 		</div>
+		{#if showBuildings}
+			<p class="note">
+				{buildingsStatus || 'loading buildings…'}
+				<span class="faint"
+					>· re:earth buildings, overture maps footprints with their heights, stood on this terrain</span
+				>
+			</p>
+		{/if}
 		<div class="controls">
 			<Slider
 				label="haze"
@@ -710,6 +880,7 @@
 		CREDITS.gsiDem,
 		CREDITS.openFreeMap,
 		CREDITS.overpass,
+		CREDITS.reearthBuildings,
 		CREDITS.nominatim
 	]}
 />

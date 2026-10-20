@@ -1,6 +1,7 @@
 <!-- The photographic preview: a WebGL canvas drawn by `FujiScene`, redrawn whenever its inputs change. -->
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import type * as THREE from 'three';
 	import type { Observer, TerrainGrid } from './alignment';
 	import { FujiScene, type Conditions, type SunState } from './scene';
 
@@ -11,11 +12,22 @@
 		bearing: number;
 		pitch: number;
 		conditions: Conditions;
+		/** Building meshes in the scene's frame, about the observer. */
+		buildings?: THREE.BufferGeometry[];
 		/** Keep redrawing so the clouds drift. */
 		animate?: boolean;
 	};
 
-	let { grids, observer, sun, bearing, pitch, conditions, animate = false }: Props = $props();
+	let {
+		grids,
+		observer,
+		sun,
+		bearing,
+		pitch,
+		conditions,
+		buildings = [],
+		animate = false
+	}: Props = $props();
 
 	let canvas: HTMLCanvasElement;
 	let scene: FujiScene | null = $state.raw(null);
@@ -48,6 +60,12 @@
 	$effect(() => {
 		if (!scene || !grids) return;
 		scene.setTerrain(grids, observer);
+		draw();
+	});
+
+	$effect(() => {
+		if (!scene) return;
+		scene.setBuildings(buildings);
 		draw();
 	});
 

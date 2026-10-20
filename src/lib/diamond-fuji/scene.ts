@@ -171,6 +171,12 @@ export class FujiScene {
 		metalness: 0
 	});
 	private meshes: { mesh: THREE.Mesh; grid: TerrainGrid }[] = [];
+	private buildings = new THREE.Group();
+	private buildingMaterial = new THREE.MeshStandardMaterial({
+		color: '#9a9ca3',
+		roughness: 0.85,
+		metalness: 0
+	});
 	private clouds: THREE.Mesh<THREE.PlaneGeometry, THREE.ShaderMaterial>;
 	private sunDir = new THREE.Vector3(0, 1, 0);
 	private snowLine = NaN;
@@ -188,7 +194,7 @@ export class FujiScene {
 		this.camera = new THREE.PerspectiveCamera(20, 16 / 9, 5, 600_000);
 		this.scene.fog = this.fog;
 		this.sky.scale.setScalar(500_000);
-		this.scene.add(this.sky, this.sun, this.sun.target, this.hemi);
+		this.scene.add(this.sky, this.sun, this.sun.target, this.hemi, this.buildings);
 		this.clouds = new THREE.Mesh(
 			new THREE.PlaneGeometry(500_000, 500_000),
 			new THREE.ShaderMaterial({
@@ -237,6 +243,15 @@ export class FujiScene {
 		}
 		this.snowLine = NaN;
 		this.camera.position.set(0, observer.elevation, 0);
+	}
+
+	/** Replace the buildings with meshes already in this scene's frame (about the observer). */
+	setBuildings(geometries: THREE.BufferGeometry[]) {
+		for (const child of [...this.buildings.children]) {
+			this.buildings.remove(child);
+			(child as THREE.Mesh).geometry.dispose();
+		}
+		for (const g of geometries) this.buildings.add(new THREE.Mesh(g, this.buildingMaterial));
 	}
 
 	resize(width: number, height: number) {
@@ -316,6 +331,8 @@ export class FujiScene {
 	dispose() {
 		for (const { mesh } of this.meshes) mesh.geometry.dispose();
 		this.material.dispose();
+		this.setBuildings([]);
+		this.buildingMaterial.dispose();
 		this.clouds.geometry.dispose();
 		this.clouds.material.dispose();
 		this.renderer.dispose();
