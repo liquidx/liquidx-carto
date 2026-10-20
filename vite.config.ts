@@ -17,7 +17,10 @@ export default defineConfig({
 			'fflate',
 			'three',
 			'three/addons/controls/OrbitControls.js',
-			'three/addons/exporters/GLTFExporter.js'
+			'three/addons/exporters/GLTFExporter.js',
+			'three/addons/objects/Sky.js',
+			'three/addons/loaders/GLTFLoader.js',
+			'three/addons/libs/meshopt_decoder.module.js'
 		]
 	},
 	worker: { format: 'es' },
