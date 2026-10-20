@@ -436,8 +436,12 @@
 		return () => cancelAnimationFrame(frame);
 	});
 	/** The moment the slider counts from: the crossing, or failing that the sun at summit height. */
+	/** The crossing counts only while the sun is still in the sky; long after sunset it's dark. */
+	const crossingInSky = $derived(
+		!!alignment && sunPosition(alignment.time, observer.lat, observer.lon).apparent > -1
+	);
 	const baseTime = $derived(
-		alignment?.time ?? sunAtSummitHeight(day)?.time ?? day + 17 * 3_600_000
+		(crossingInSky ? alignment?.time : null) ?? sunAtSummitHeight(day)?.time ?? day + 17 * 3_600_000
 	);
 	const previewTime = $derived(baseTime + minutes * 60_000);
 	const previewSun = $derived.by(() => {
@@ -445,8 +449,8 @@
 		return { azimuth: s.azimuth, altitude: s.apparent };
 	});
 
-	/** Buildings from re:earth in the preview: loaded on demand, for the view from here. */
-	let showBuildings = $state(false);
+	/** Buildings from re:earth in the view: on by default, loaded around where you stand. */
+	let showBuildings = $state(true);
 	let buildingGeometries = $state.raw<THREE.BufferGeometry[]>([]);
 	let buildingsStatus = $state('');
 	$effect(() => {
@@ -458,8 +462,9 @@
 		const g = groundAt;
 		const origin = { lon: point.lon, lat: point.lat };
 		const brg = line.bearing;
-		const half = hfov / 2 + 6;
-		// Small buildings only matter close by; the big ones at zoom 12 can show from far off.
+		// A wide arc towards the summit, fixed so a change of lens doesn't reload anything.
+		const half = 45;
+		// Everything close by in every direction; further out only big buildings, towards Fuji.
 		const inView = (t: TileId) => {
 			const b = tileBounds(t);
 			const corners = [
@@ -496,7 +501,7 @@
 					.then((tile) => {
 						if (!live) return;
 						if (tile) {
-							built.push(buildingGeometry(tile, g, { origin }));
+							built.push(buildingGeometry(tile, g, { origin, clearOrigin: true }));
 							count += tile.features.length;
 							buildingGeometries = [...built];
 						}
@@ -747,7 +752,7 @@
 					max={RANGE}
 					step={1}
 					format={(v) =>
-						`${fmtTime(previewTime)} · ${v === 0 ? (alignment ? 'on the summit' : 'at summit height') : `${Math.abs(v)} min ${v < 0 ? 'before' : 'after'}`}`}
+						`${fmtTime(previewTime)} · ${v === 0 ? (crossingInSky ? 'on the summit' : 'at summit height') : `${Math.abs(v)} min ${v < 0 ? 'before' : 'after'}`}`}
 				/>
 			</div>
 			<Toggle label="play" bind:checked={playing} />

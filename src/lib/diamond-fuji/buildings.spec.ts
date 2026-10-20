@@ -26,11 +26,15 @@ function ecef(lon: number, lat: number) {
 	return [N * Math.cos(p) * Math.cos(l), N * Math.cos(p) * Math.sin(l), N * (1 - e2) * Math.sin(p)];
 }
 
-/** A tile with boxes, each `size` metres square and `height` tall, at east/north offsets. */
+/**
+ * A tile with boxes, each `size` metres square and `height` tall, at east/north offsets. Written
+ * z-up (ENU axes in the matrix) or, as re:earth writes them, y-up: x east, y up, z south.
+ */
 function boxes(
 	tile: { z: number; x: number; y: number },
 	anchor: { lon: number; lat: number },
-	list: { e: number; n: number; size: number; height: number }[]
+	list: { e: number; n: number; size: number; height: number }[],
+	yUp = false
 ): RawTile {
 	const positions: number[] = [];
 	const index: number[] = [];
@@ -45,7 +49,8 @@ function boxes(
 				[h, h],
 				[-h, h]
 			]) {
-				positions.push(b.e + dx, b.n + dy, z);
+				if (yUp) positions.push(b.e + dx, z, -(b.n + dy));
+				else positions.push(b.e + dx, b.n + dy, z);
 				featureIds.push(f + 7);
 			}
 		// four walls and a roof
@@ -56,7 +61,17 @@ function boxes(
 		index.push(base + 4, base + 5, base + 6, base + 4, base + 6, base + 7);
 	});
 	const [tx, ty, tz] = ecef(anchor.lon, anchor.lat);
-	const matrix = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];
+	const l = (anchor.lon * Math.PI) / 180,
+		p = (anchor.lat * Math.PI) / 180;
+	const E = [-Math.sin(l), Math.cos(l), 0];
+	const N = [-Math.sin(p) * Math.cos(l), -Math.sin(p) * Math.sin(l), Math.cos(p)];
+	const U = [Math.cos(p) * Math.cos(l), Math.cos(p) * Math.sin(l), Math.sin(p)];
+	// ECEF (x, y, z) held y-up as (x, z, −y).
+	const g = ([x, y, z]: number[]) => (yUp ? [x, z, -y] : [x, y, z]);
+	const S = N.map((v) => -v);
+	const cols = yUp ? [E, U, S] : [E, N, U];
+	const t = g([tx, ty, tz]);
+	const matrix = [...g(cols[0]), 0, ...g(cols[1]), 0, ...g(cols[2]), 0, t[0], t[1], t[2], 1];
 	return {
 		positions: Float32Array.from(positions),
 		index: Uint32Array.from(index),
@@ -111,6 +126,19 @@ describe('decoding', () => {
 		expect(t.features[1].lon).toBeCloseTo(east.lon, 4);
 		expect(t.features[1].triangles.length).toBe(10);
 		expect(Math.min(...t.rel)).toBe(0);
+	});
+	it('reads y-up tiles the same', () => {
+		const list = [
+			{ e: 0, n: 0, size: 20, height: 30 },
+			{ e: 0, n: 400, size: 40, height: 100 }
+		];
+		const t = decodeTile(boxes(tile, TOKYO, list, true), tile);
+		expect(t.features[0].height).toBeCloseTo(30, 3);
+		expect(t.features[1].height).toBeCloseTo(100, 3);
+		const north = destination(TOKYO, 0, 400);
+		expect(t.features[1].lat).toBeCloseTo(north.lat, 4);
+		expect(t.features[1].lon).toBeCloseTo(TOKYO.lon, 4);
+		expect(t.features[0].radius).toBeCloseTo(Math.SQRT2 * 10, 0);
 	});
 	it('stands them on the ground in a scene frame', () => {
 		const raw = boxes(tile, TOKYO, [{ e: 0, n: 0, size: 20, height: 30 }]);

@@ -139,7 +139,7 @@ export function tileBounds(t: TileId) {
 }
 
 export interface RawTile {
-	/** East, north, up metres about the anchor, three per vertex. */
+	/** Metres about the anchor in the GLB's own frame, three per vertex; `matrix` takes them to ECEF. */
 	positions: Float32Array;
 	index: Uint32Array;
 	/** One per vertex. */
@@ -149,27 +149,46 @@ export interface RawTile {
 }
 
 /**
- * The anchor the GLB's vertices are about. A 3D Tiles GLB may carry its matrix in the
- * y-up frame the format asks for, so both readings of the translation are tried and the one
- * inside the tile wins.
+ * The anchor the GLB's vertices are about, and how its axes lie. A 3D Tiles GLB may carry its
+ * matrix in the y-up frame the format asks for (ECEF = (x, −z, y) of what it holds), so both
+ * readings of the translation are tried and the one inside the tile wins.
  */
-export function anchorOf(matrix: ArrayLike<number>, tile: TileId): LngLat {
-	const tx = matrix[12],
-		ty = matrix[13],
-		tz = matrix[14];
+function frameOf(matrix: ArrayLike<number>, tile: TileId) {
 	const b = tileBounds(tile);
-	const candidates = [ecefToLngLat(tx, ty, tz), ecefToLngLat(tx, -tz, ty)];
 	const inside = (p: LngLat) =>
 		p.lon >= b.west - 0.01 &&
 		p.lon <= b.east + 0.01 &&
 		p.lat >= b.south - 0.01 &&
 		p.lat <= b.north + 0.01;
-	return candidates.find(inside) ?? candidates[0];
+	const asIs = (x: number, y: number, z: number) => [x, y, z];
+	const yUp = (x: number, y: number, z: number) => [x, -z, y];
+	const readings = [asIs, yUp].map((toEcef) => ({
+		toEcef,
+		anchor: ecefToLngLat(
+			...(toEcef(matrix[12], matrix[13], matrix[14]) as [number, number, number])
+		)
+	}));
+	return readings.find((r) => inside(r.anchor)) ?? readings[0];
+}
+
+export function anchorOf(matrix: ArrayLike<number>, tile: TileId): LngLat {
+	return frameOf(matrix, tile).anchor;
 }
 
 /** Decode a tile's arrays into buildings on the globe. */
 export function decodeTile(raw: RawTile, tile: TileId): BuildingTile {
-	const anchor = anchorOf(raw.matrix, tile);
+	const { anchor, toEcef } = frameOf(raw.matrix, tile);
+	const m = raw.matrix;
+	// The matrix's axes in ECEF, then in east / north / up at the anchor, so a vertex's local
+	// offsets can be read straight off whichever way up the tile was written.
+	const axes = [0, 4, 8].map((c) => toEcef(m[c], m[c + 1], m[c + 2]));
+	const lo = anchor.lon * RAD,
+		la = anchor.lat * RAD;
+	const E = [-Math.sin(lo), Math.cos(lo), 0];
+	const N = [-Math.sin(la) * Math.cos(lo), -Math.sin(la) * Math.sin(lo), Math.cos(la)];
+	const U = [Math.cos(la) * Math.cos(lo), Math.cos(la) * Math.sin(lo), Math.sin(la)];
+	const dot = (a: number[], b: number[]) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+	const toEnu = [E, N, U].map((dir) => axes.map((a) => dot(a, dir)));
 	const n = raw.positions.length / 3;
 	const lon = new Float64Array(n);
 	const lat = new Float64Array(n);
@@ -179,9 +198,12 @@ export function decodeTile(raw: RawTile, tile: TileId): BuildingTile {
 	// Each building's base is its lowest vertex.
 	const base = new Map<number, number>();
 	for (let i = 0; i < n; i++) {
-		const e = raw.positions[3 * i],
-			no = raw.positions[3 * i + 1],
-			up = raw.positions[3 * i + 2];
+		const px = raw.positions[3 * i],
+			py = raw.positions[3 * i + 1],
+			pz = raw.positions[3 * i + 2];
+		const e = toEnu[0][0] * px + toEnu[0][1] * py + toEnu[0][2] * pz;
+		const no = toEnu[1][0] * px + toEnu[1][1] * py + toEnu[1][2] * pz;
+		const up = toEnu[2][0] * px + toEnu[2][1] * py + toEnu[2][2] * pz;
 		lon[i] = anchor.lon + (e / (WGS84_A * cosLat)) * DEG;
 		lat[i] = anchor.lat + (no / WGS84_A) * DEG;
 		rel[i] = up;
@@ -311,6 +333,11 @@ export function groundedHeights(tile: BuildingTile, ground: Elevation): Float32A
 /** How a scene lays the globe out: metres east and north of its origin, and the drop of the earth. */
 export interface LocalFrame {
 	origin: LngLat;
+	/**
+	 * Leave out any building whose footprint takes in the origin: the one you stand in or on,
+	 * which would otherwise wall in the view.
+	 */
+	clearOrigin?: boolean;
 }
 
 /** Local east/north metres of a point about the frame's origin. */
@@ -343,9 +370,32 @@ export function buildingGeometry(
 		pos[3 * i + 1] = heights[i] - curvatureDrop(x * x + north * north);
 		pos[3 * i + 2] = -north;
 	}
+	let index = tile.index;
+	if (frame.clearOrigin) {
+		// A footprint's bounding box is close enough to say whether the origin is inside it.
+		const m = tile.features.length;
+		const box = new Float64Array(m * 4).fill(Infinity);
+		for (let f = 0; f < m; f++) box[4 * f + 1] = box[4 * f + 3] = -Infinity;
+		for (let i = 0; i < n; i++) {
+			const f = tile.feature[i] * 4;
+			const x = pos[3 * i],
+				z = pos[3 * i + 2];
+			box[f] = Math.min(box[f], x);
+			box[f + 1] = Math.max(box[f + 1], x);
+			box[f + 2] = Math.min(box[f + 2], z);
+			box[f + 3] = Math.max(box[f + 3], z);
+		}
+		const hidden = (f: number) =>
+			box[4 * f] <= 0 && box[4 * f + 1] >= 0 && box[4 * f + 2] <= 0 && box[4 * f + 3] >= 0;
+		const kept: number[] = [];
+		for (let t = 0; t < tile.index.length; t += 3)
+			if (!hidden(tile.feature[tile.index[t]]))
+				kept.push(tile.index[t], tile.index[t + 1], tile.index[t + 2]);
+		if (kept.length < tile.index.length) index = Uint32Array.from(kept);
+	}
 	const geo = new THREE.BufferGeometry();
 	geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-	geo.setIndex(new THREE.BufferAttribute(tile.index, 1));
+	geo.setIndex(new THREE.BufferAttribute(index, 1));
 	geo.computeVertexNormals();
 	return geo;
 }
