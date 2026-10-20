@@ -69,10 +69,12 @@
 
 	// ── where you stand ─────────────────────────────────
 
-	let spotId = $state<string>(SPOTS[0].id);
-	let point = $state<LngLat>({ lon: SPOTS[0].lon, lat: SPOTS[0].lat });
+	/** Start on tokyo tower's deck: a sunset view most people can get to. */
+	const START = SPOTS.find((s) => s.id === 'tokyo-tower') ?? SPOTS[0];
+	let spotId = $state<string>(START.id);
+	let point = $state<LngLat>({ lon: START.lon, lat: START.lat });
 	/** Height of the eye above the ground, in metres. */
-	let eye = $state(SPOTS[0].eye);
+	let eye = $state(START.eye);
 	/** A name for a place picked from the search, if that is how it was chosen. */
 	let placeName = $state('');
 
@@ -418,32 +420,40 @@
 
 	// ── the preview ─────────────────────────────────────
 
-	/** Minutes before or after the crossing, and how far the slider reaches either way. */
+	/** Minutes before or after the crossing. */
 	let minutes = $state(0);
-	const RANGE = 90;
+	/** The crossing counts only while the sun is still in the sky; long after sunset it's dark. */
+	const crossingInSky = $derived(
+		!!alignment && sunPosition(alignment.time, observer.lat, observer.lon).apparent > -1
+	);
+	/** The moment the slider counts from: the crossing, or failing that the sun at summit height. */
+	const baseTime = $derived(
+		(crossingInSky ? alignment?.time : null) ?? sunAtSummitHeight(day)?.time ?? day + 17 * 3_600_000
+	);
+	/** The slider reaches over the afternoon and evening (or the night and morning), in JST. */
+	const HOURS: Record<Phase, [number, number]> = { sunset: [12, 22], sunrise: [2, 12] };
+	const span = $derived({
+		lo: Math.ceil((day + HOURS[phase][0] * 3_600_000 - baseTime) / 60_000),
+		hi: Math.ceil((day + HOURS[phase][1] * 3_600_000 - baseTime) / 60_000)
+	});
+	const offset = $derived(Math.max(span.lo, Math.min(span.hi, minutes)));
 	let playing = $state(false);
 	$effect(() => {
 		if (!playing) return;
 		const start = performance.now();
-		const from = minutes;
+		const from = offset;
+		const { lo, hi } = span;
 		let frame = 0;
 		const tick = () => {
-			// A minute of sun a second, looping back round.
-			minutes = Math.round(((from + (performance.now() - start) / 1000 + 40) % 80) - 40);
+			// Five minutes of sun a second, looping back round.
+			const t = from - lo + ((performance.now() - start) / 1000) * 5;
+			minutes = lo + Math.round(t % (hi - lo));
 			frame = requestAnimationFrame(tick);
 		};
 		frame = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(frame);
 	});
-	/** The moment the slider counts from: the crossing, or failing that the sun at summit height. */
-	/** The crossing counts only while the sun is still in the sky; long after sunset it's dark. */
-	const crossingInSky = $derived(
-		!!alignment && sunPosition(alignment.time, observer.lat, observer.lon).apparent > -1
-	);
-	const baseTime = $derived(
-		(crossingInSky ? alignment?.time : null) ?? sunAtSummitHeight(day)?.time ?? day + 17 * 3_600_000
-	);
-	const previewTime = $derived(baseTime + minutes * 60_000);
+	const previewTime = $derived(baseTime + offset * 60_000);
 	const previewSun = $derived.by(() => {
 		const s = sunPosition(previewTime, observer.lat, observer.lon);
 		return { azimuth: s.azimuth, altitude: s.apparent };
@@ -573,6 +583,8 @@
 
 	const km = (m: number) => (m / 1000).toFixed(m < 20_000 ? 1 : 0);
 	const deg = (d: number, n = 1) => d.toFixed(n) + '°';
+	const duration = (m: number) =>
+		m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
 	const sunsOff = (o: number) => Math.abs(o / SUN_RADIUS).toFixed(1);
 </script>
 
@@ -748,11 +760,11 @@
 				<Slider
 					label="time"
 					bind:value={minutes}
-					min={-RANGE}
-					max={RANGE}
+					min={span.lo}
+					max={span.hi}
 					step={1}
 					format={(v) =>
-						`${fmtTime(previewTime)} · ${v === 0 ? (crossingInSky ? 'on the summit' : 'at summit height') : `${Math.abs(v)} min ${v < 0 ? 'before' : 'after'}`}`}
+						`${fmtTime(previewTime)} · ${v === 0 ? (crossingInSky ? 'on the summit' : 'at summit height') : `${duration(Math.abs(v))} ${v < 0 ? 'before' : 'after'}`}`}
 				/>
 			</div>
 			<Toggle label="play" bind:checked={playing} />
