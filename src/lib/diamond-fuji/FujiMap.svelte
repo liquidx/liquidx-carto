@@ -15,13 +15,17 @@
 		locus: LngLat[];
 		/** The lens in the preview: its bearing and horizontal angle of view, drawn as a wedge. */
 		view?: { bearing: number; hfov: number } | null;
+		/** Places found along the line, drawn as points; `clear` ones have the summit in sight. */
+		spots?: { id: string; lon: number; lat: number; clear: boolean }[];
 		onpick: (p: LngLat) => void;
+		onspot?: (id: string) => void;
 	};
 
-	let { observer, locus, view = null, onpick }: Props = $props();
+	let { observer, locus, view = null, spots = [], onpick, onspot }: Props = $props();
 
 	const ACCENT = '#36b6e9';
 	const SIGHT = '#c9c9d0';
+	const BLOCKED = '#7a7a84';
 
 	let container: HTMLDivElement;
 	let map: maplibregl.Map | null = $state.raw(null);
@@ -46,6 +50,14 @@
 		type: 'Feature',
 		properties: {},
 		geometry: { type: 'Polygon', coordinates: coords.length ? [coords] : [] }
+	});
+	const points = (): GeoJSON.FeatureCollection => ({
+		type: 'FeatureCollection',
+		features: spots.map((s) => ({
+			type: 'Feature',
+			properties: { id: s.id, clear: s.clear },
+			geometry: { type: 'Point', coordinates: [s.lon, s.lat] }
+		}))
 	});
 	/** The wedge the lens sees, out to 150 km. */
 	function wedge(): [number, number][] {
@@ -109,11 +121,31 @@
 				},
 				basemaps.firstSymbol
 			);
+			m.addSource('spots', { type: 'geojson', data: points() });
+			m.addLayer({
+				id: 'spots',
+				type: 'circle',
+				source: 'spots',
+				paint: {
+					'circle-radius': 5,
+					'circle-color': ['case', ['get', 'clear'], ACCENT, BLOCKED],
+					'circle-stroke-color': '#08080a',
+					'circle-stroke-width': 1.5
+				}
+			});
+			m.on('mouseenter', 'spots', () => (m.getCanvas().style.cursor = 'pointer'));
+			m.on('mouseleave', 'spots', () => (m.getCanvas().style.cursor = 'crosshair'));
 			fujiMarker.setLngLat([FUJI.lon, FUJI.lat]).addTo(m);
 			observerMarker.addTo(m);
 			ready = true;
 		});
-		m.on('click', (e) => onpick({ lon: e.lngLat.lng, lat: e.lngLat.lat }));
+		m.on('click', (e) => {
+			const hit = m.getLayer('spots')
+				? m.queryRenderedFeatures(e.point, { layers: ['spots'] })
+				: [];
+			if (hit.length && onspot) onspot(String(hit[0].properties.id));
+			else onpick({ lon: e.lngLat.lng, lat: e.lngLat.lat });
+		});
 		m.getCanvas().style.cursor = 'crosshair';
 		map = m;
 		return () => {
@@ -131,6 +163,11 @@
 				[FUJI.lon, FUJI.lat]
 			])
 		);
+	});
+
+	$effect(() => {
+		if (!map || !ready) return;
+		(map.getSource('spots') as maplibregl.GeoJSONSource).setData(points());
 	});
 
 	$effect(() => {

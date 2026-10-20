@@ -19,6 +19,9 @@
 		type Elevation,
 		type Observer
 	} from '$lib/diamond-fuji/alignment';
+	import Button from '$lib/components/Button.svelte';
+	import Chip from '$lib/components/Chip.svelte';
+	import { findSpots, type FindResult, type Spot, type SpotKind } from '$lib/diamond-fuji/finder';
 	import FujiMap from '$lib/diamond-fuji/FujiMap.svelte';
 	import FujiScene from '$lib/diamond-fuji/FujiScene.svelte';
 	import { SNOW_LINE_BY_MONTH, type Conditions } from '$lib/diamond-fuji/scene';
@@ -184,6 +187,72 @@
 	const locus = $derived(diamondLocus(day, phase, terrain ? terrain.ground : () => 0, eye));
 	const sky = $derived(grids ? skyline(observer, grids, line.bearing, 4) : null);
 
+	// ── spots along the line ────────────────────────────
+
+	/** Kilometres around the observer to look for places on the line. */
+	let searchRadius = $state(8);
+	let finding = $state(false);
+	let findError = $state('');
+	let found = $state.raw<FindResult | null>(null);
+	/** What the search was for, so a change of day can say the results are stale. */
+	let foundFor = $state<{ day: number; phase: Phase } | null>(null);
+	let kindFilter = $state<SpotKind | 'all'>('all');
+	let findController: AbortController | null = null;
+
+	async function find() {
+		findController?.abort();
+		const ctrl = new AbortController();
+		findController = ctrl;
+		finding = true;
+		findError = '';
+		try {
+			const r = await findSpots({
+				day,
+				phase,
+				centre: point,
+				radius: searchRadius * 1000,
+				ground: groundAt ?? (() => 0),
+				signal: ctrl.signal
+			});
+			if (ctrl.signal.aborted) return;
+			found = r;
+			foundFor = { day, phase };
+			kindFilter = 'all';
+		} catch (e) {
+			if (!ctrl.signal.aborted) findError = (e as Error).message;
+		} finally {
+			if (!ctrl.signal.aborted) finding = false;
+		}
+	}
+
+	const stale = $derived(foundFor !== null && (foundFor.day !== day || foundFor.phase !== phase));
+	const KIND_LABELS: Record<SpotKind, string> = {
+		park: 'parks',
+		viewpoint: 'viewpoints',
+		bridge: 'bridges',
+		beach: 'beaches',
+		street: 'streets',
+		path: 'paths'
+	};
+	const kindCounts = $derived.by(() => {
+		// Rebuilt whole each time, so it never needs to be reactive itself.
+		// eslint-disable-next-line svelte/prefer-svelte-reactivity
+		const counts = new Map<SpotKind, number>();
+		for (const s of found?.spots ?? []) counts.set(s.kind, (counts.get(s.kind) ?? 0) + 1);
+		return (Object.keys(KIND_LABELS) as SpotKind[])
+			.filter((k) => counts.has(k))
+			.map((k) => ({ kind: k, count: counts.get(k)! }));
+	});
+	const shownSpots = $derived(
+		(found?.spots ?? []).filter((s) => kindFilter === 'all' || s.kind === kindFilter)
+	);
+	let showAll = $state(false);
+	const LIST_LIMIT = 40;
+
+	function goToSpot(s: Spot) {
+		goTo(s, `${s.name} · ${KIND_LABELS[s.kind].replace(/s$/, '')}`, 1.6);
+	}
+
 	// ── the preview ─────────────────────────────────────
 
 	/** Minutes before or after the crossing. */
@@ -284,7 +353,17 @@
 				observer={point}
 				{locus}
 				view={{ bearing: line.bearing, hfov }}
+				spots={(found?.spots ?? []).map((s) => ({
+					id: s.id,
+					lon: s.lon,
+					lat: s.lat,
+					clear: s.visibility.visible
+				}))}
 				onpick={(p) => goTo(p, 'picked on the map')}
+				onspot={(id) => {
+					const s = found?.spots.find((s) => s.id === id);
+					if (s) goToSpot(s);
+				}}
 			/>
 		</div>
 		<div class="legend">
@@ -293,6 +372,12 @@
 			>
 			<span><span class="swatch dashed"></span>your line of sight to the summit</span>
 			<span><span class="swatch wedge"></span>what the lens in the preview takes in</span>
+			{#if found?.spots.length}
+				<span
+					><span class="swatch dot"></span>places on the line ·
+					<span class="swatch dot blocked"></span>a ridge in the way</span
+				>
+			{/if}
 		</div>
 		<StatRow
 			stats={[
@@ -376,6 +461,98 @@
 <section>
 	<SectionLabel
 		index="03"
+		label="Where to stand"
+		descriptor={found ? `${fmtDate(foundFor!.day)} · ${found.spots.length} places` : fmtDate(day)}
+	/>
+	<div class="body">
+		<p class="note">
+			streets, parks, bridges, beaches and viewpoints from openstreetmap that the line for
+			{fmtDate(day)} runs through, within reach of where you stand now. each is pinned to the point where
+			it meets the line, to within the width of the sun. the terrain is checked from there; buildings
+			and trees are not.
+		</p>
+		<div class="find-row">
+			<div class="radius">
+				<Slider
+					label="search around you"
+					bind:value={searchRadius}
+					min={1}
+					max={25}
+					step={1}
+					unit=" km"
+					format={(v) => v.toFixed(0)}
+				/>
+			</div>
+			<Button variant="primary" onclick={find} disabled={finding || !terrain}>
+				{finding ? 'asking openstreetmap…' : found ? 'search again' : 'find places on the line'}
+			</Button>
+			{#if findError}
+				<span class="error">{findError}</span>
+			{/if}
+		</div>
+		{#if found}
+			{#if stale}
+				<p class="note warn">
+					these places are for {fmtDate(foundFor!.day)}; the line has moved since. search again for {fmtDate(
+						day
+					)}.
+				</p>
+			{/if}
+			{#if found.spots.length}
+				<div class="kinds">
+					<Chip active={kindFilter === 'all'} onclick={() => (kindFilter = 'all')}>
+						all · {found.spots.length}
+					</Chip>
+					{#each kindCounts as k (k.kind)}
+						<Chip active={kindFilter === k.kind} onclick={() => (kindFilter = k.kind)}>
+							{KIND_LABELS[k.kind]} · {k.count}
+						</Chip>
+					{/each}
+				</div>
+				<ul class="spots">
+					{#each showAll ? shownSpots : shownSpots.slice(0, LIST_LIMIT) as s (s.id)}
+						<li>
+							<button
+								class="spot"
+								class:blocked={!s.visibility.visible}
+								onclick={() => goToSpot(s)}
+							>
+								<span class="spot-name">{s.name}</span>
+								<span class="spot-kind">{KIND_LABELS[s.kind].replace(/s$/, '')}</span>
+								<span class="spot-meta">
+									{km(s.fromCentre)} km from you · {km(s.toSummit)} km to the summit ·
+									{fmtTime(s.time)} · sun {Math.abs(s.offset).toFixed(2)}°
+									{s.offset >= 0 ? 'above' : 'below'}
+								</span>
+								<span class="spot-sight" class:warn={!s.visibility.visible}>
+									{#if s.visibility.visible}
+										summit in sight over the terrain
+									{:else}
+										a ridge {km(s.visibility.blockedAt!.distance)} km away stands in the way
+									{/if}
+								</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+				{#if shownSpots.length > LIST_LIMIT && !showAll}
+					<Button size="sm" onclick={() => (showAll = true)}>
+						show all {shownSpots.length}
+					</Button>
+				{/if}
+			{:else}
+				<p class="note">
+					nothing mapped lies on the line within {searchRadius} km of you. widen the search, or move:
+					the line for {fmtDate(day)} is drawn on the map.
+				</p>
+			{/if}
+		{/if}
+	</div>
+</section>
+
+<section>
+	<SectionLabel
+		index="04"
 		label="The view"
 		descriptor={`${fmtDate(day)} · looking ${deg(line.bearing)}`}
 	/>
@@ -408,7 +585,7 @@
 
 <section>
 	<SectionLabel
-		index="04"
+		index="05"
 		label="Preview"
 		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
 	/>
@@ -504,7 +681,7 @@
 </section>
 
 <section>
-	<SectionLabel index="05" label="Terrain" />
+	<SectionLabel index="06" label="Terrain" />
 	<div class="body">
 		<div class="provider">
 			<Select
@@ -532,6 +709,7 @@
 		CREDITS.reearthTerrain,
 		CREDITS.gsiDem,
 		CREDITS.openFreeMap,
+		CREDITS.overpass,
 		CREDITS.nominatim
 	]}
 />
@@ -603,6 +781,77 @@
 	}
 	.swatch.dashed {
 		border-top: 1px dashed var(--color-text-ui);
+	}
+	.swatch.dot {
+		width: 8px;
+		height: 8px;
+		border: 0;
+		background: var(--color-accent);
+	}
+	.swatch.dot.blocked {
+		background: var(--color-text-tertiary);
+	}
+	.find-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 16px 32px;
+	}
+	.radius {
+		width: 280px;
+		max-width: 100%;
+	}
+	.kinds {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 8px;
+	}
+	.spots {
+		list-style: none;
+		margin: 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+		gap: 24px 48px;
+	}
+	.spot {
+		appearance: none;
+		background: none;
+		border: 0;
+		padding: 0;
+		margin: 0;
+		width: 100%;
+		text-align: left;
+		display: flex;
+		flex-direction: column;
+		gap: 4px;
+		font-family: inherit;
+		color: inherit;
+		cursor: pointer;
+	}
+	.spot-name {
+		font-size: var(--text-list);
+		color: var(--color-text);
+	}
+	.spot.blocked .spot-name {
+		color: var(--color-text-tertiary);
+	}
+	@media (hover: hover) {
+		.spot:hover .spot-name {
+			color: var(--color-accent);
+		}
+	}
+	.spot-kind {
+		font-size: var(--text-meta);
+		letter-spacing: var(--tracking-label);
+		text-transform: uppercase;
+		color: var(--color-text-label);
+	}
+	.spot-meta,
+	.spot-sight {
+		font-size: var(--text-small);
+		color: var(--color-text-tertiary);
+		line-height: 1.6;
 	}
 	.swatch.wedge {
 		height: 8px;

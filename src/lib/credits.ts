@@ -81,6 +81,12 @@ export const CREDITS = {
 		use: 'prefecture coastline and municipal borders',
 		url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N03-2025.html'
 	},
+	overpass: {
+		name: 'overpass api',
+		by: '© openstreetmap contributors, odbl',
+		use: 'parks, streets, bridges and viewpoints along the line',
+		url: 'https://overpass-api.de'
+	},
 	nominatim: {
 		name: 'nominatim',
 		by: '© openstreetmap contributors, odbl',
