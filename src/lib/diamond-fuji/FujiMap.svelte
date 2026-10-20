@@ -1,19 +1,29 @@
 <!--
-	The region around Fuji: the observer (click anywhere to move it), the line of sight to the
-	summit, and the line of places the sun sets on the summit from on the chosen day.
+	A map around Fuji, in one of two framings. `region` takes in the mountain, the land the sun
+	can set on its summit from, and where you stand; click anywhere to move there. `local` is
+	close in on where you stand, with a pin to drag to the exact spot.
+
+	Both draw the line of sight to the summit and the direction of the sun, from where you stand,
+	at the moment it is the summit's height above the horizon: on the chosen day, and at the
+	solstices either side of it.
 -->
 <script lang="ts">
 	import * as maplibregl from 'maplibre-gl';
 	import { onMount } from 'svelte';
-	import { installBasemaps, showBasemap, type Basemaps } from '$lib/map/basemaps';
+	import { installBasemaps, showBasemap } from '$lib/map/basemaps';
 	import { createMap } from '$lib/map/create';
 	import { FUJI } from './alignment';
-	import { destination, type LngLat } from './geo';
+	import { destination, distance, type LngLat } from './geo';
+
+	export type SunRay = { bearing: number; label: string; strong: boolean };
 
 	type Props = {
+		kind: 'region' | 'local';
 		observer: LngLat;
 		locus: LngLat[];
-		/** The lens in the preview: its bearing and horizontal angle of view, drawn as a wedge. */
+		/** Directions of the sun from the observer, drawn as rays. */
+		rays?: SunRay[];
+		/** Where the 3D view is looking, drawn as a wedge. */
 		view?: { bearing: number; hfov: number } | null;
 		/** Places found along the line, drawn as points; `clear` ones have the summit in sight. */
 		spots?: { id: string; lon: number; lat: number; clear: boolean }[];
@@ -31,8 +41,10 @@
 	};
 
 	let {
+		kind,
 		observer,
 		locus,
+		rays = [],
 		view = null,
 		spots = [],
 		viewshed = null,
@@ -42,15 +54,27 @@
 	}: Props = $props();
 
 	const ACCENT = '#36b6e9';
-	const SIGHT = '#c9c9d0';
+	const SUN = '#d0a24c';
+	const SIGHT = '#e6e6ea';
 	const BLOCKED = '#7a7a84';
+	/** How far the rays reach, in metres: past Fuji on the region map, off the edge close in. */
+	const RAY_LENGTH = $derived(kind === 'region' ? 160_000 : 12_000);
+	/** Labels sit partway out, inside the frame: halfway to Fuji on the region map. */
+	const LABEL_AT = $derived(
+		kind === 'region' ? Math.max(6_000, distance(observer, FUJI) * 0.5) : 450
+	);
 
 	let container: HTMLDivElement;
 	let map: maplibregl.Map | null = $state.raw(null);
 	let ready = $state(false);
-	let basemaps: Basemaps | undefined;
 
-	const observerMarker = new maplibregl.Marker({ element: square('observer-mark') });
+	// The framing is fixed for the life of the map.
+	// svelte-ignore state_referenced_locally
+	const local = kind === 'local';
+	const observerMarker = new maplibregl.Marker({
+		element: square(local ? 'observer-pin' : 'observer-mark'),
+		draggable: local
+	});
 	const fujiMarker = new maplibregl.Marker({ element: square('fuji-mark') });
 
 	function square(className: string) {
@@ -77,6 +101,31 @@
 			geometry: { type: 'Polygon', coordinates: [ring.map((p) => [p.lon, p.lat])] }
 		}))
 	});
+	const rayShapes = (): GeoJSON.FeatureCollection => ({
+		type: 'FeatureCollection',
+		features: rays.flatMap((r) => {
+			const end = destination(observer, r.bearing, RAY_LENGTH);
+			const at = destination(observer, r.bearing, LABEL_AT);
+			return [
+				{
+					type: 'Feature' as const,
+					properties: { strong: r.strong },
+					geometry: {
+						type: 'LineString' as const,
+						coordinates: [
+							[observer.lon, observer.lat],
+							[end.lon, end.lat]
+						]
+					}
+				},
+				{
+					type: 'Feature' as const,
+					properties: { strong: r.strong, label: r.label },
+					geometry: { type: 'Point' as const, coordinates: [at.lon, at.lat] }
+				}
+			];
+		})
+	});
 	/** The viewshed pixels as an image the map can drape over the region. */
 	function viewshedUrl() {
 		if (!viewshed) return null;
@@ -95,7 +144,7 @@
 		return c.toDataURL();
 	}
 	const BLANK =
-		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+		'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=';
 	const points = (): GeoJSON.FeatureCollection => ({
 		type: 'FeatureCollection',
 		features: spots.map((s) => ({
@@ -104,24 +153,43 @@
 			geometry: { type: 'Point', coordinates: [s.lon, s.lat] }
 		}))
 	});
-	/** The wedge the lens sees, out to 150 km. */
+	/** The wedge the 3D view takes in, out to the summit and a little past. */
 	function wedge(): [number, number][] {
 		if (!view) return [];
 		const pts: [number, number][] = [[observer.lon, observer.lat]];
 		for (let i = 0; i <= 12; i++) {
 			const b = view.bearing - view.hfov / 2 + (view.hfov * i) / 12;
-			const p = destination(observer, b, 150_000);
+			const p = destination(observer, b, RAY_LENGTH);
 			pts.push([p.lon, p.lat]);
 		}
 		pts.push([observer.lon, observer.lat]);
 		return pts;
 	}
 
+	/** The region framing: the mountain and the observer, with room around them. */
+	function regionBounds(): maplibregl.LngLatBoundsLike {
+		const pad = 0.25;
+		return [
+			[Math.min(FUJI.lon, observer.lon) - pad, Math.min(FUJI.lat, observer.lat) - pad],
+			[Math.max(FUJI.lon, observer.lon) + pad, Math.max(FUJI.lat, observer.lat) + pad]
+		];
+	}
+
 	onMount(() => {
-		const m = createMap(container, { center: [139.3, 35.5], zoom: 7.4, minZoom: 5 });
+		const m = createMap(container, {
+			...(kind === 'region'
+				? { bounds: regionBounds(), fitBoundsOptions: { padding: 32 }, minZoom: 5 }
+				: { center: [observer.lon, observer.lat], zoom: 14 }),
+			// A page that scrolls past the map shouldn't be caught by it: zoom with ctrl / two fingers.
+			cooperativeGestures: true,
+			dragRotate: false,
+			pitchWithRotate: false
+		});
+		m.touchZoomRotate.disableRotation();
 		m.on('load', () => {
-			basemaps = installBasemaps(m);
+			const basemaps = installBasemaps(m);
 			showBasemap(m, basemaps, 'terrain', true);
+			const below = basemaps.firstSymbol;
 			m.addSource('viewshed', {
 				type: 'image',
 				url: BLANK,
@@ -137,69 +205,91 @@
 					id: 'viewshed',
 					type: 'raster',
 					source: 'viewshed',
-					paint: { 'raster-opacity': 1, 'raster-resampling': 'linear', 'raster-fade-duration': 0 }
+					paint: {
+						'raster-opacity': 0.5,
+						'raster-resampling': 'linear',
+						'raster-fade-duration': 0
+					}
 				},
-				basemaps.firstSymbol
+				below
 			);
 			m.addSource('sectors', { type: 'geojson', data: sectorShapes() });
+			m.addLayer(
+				{
+					id: 'sectors-fill',
+					type: 'fill',
+					source: 'sectors',
+					paint: { 'fill-color': SUN, 'fill-opacity': 0.12 }
+				},
+				below
+			);
 			m.addLayer(
 				{
 					id: 'sectors',
 					type: 'line',
 					source: 'sectors',
-					paint: {
-						'line-color': '#e6e6ea',
-						'line-width': 1,
-						'line-opacity': 0.45,
-						'line-dasharray': [4, 3]
-					}
+					paint: { 'line-color': SUN, 'line-width': 1.5, 'line-opacity': 0.7 }
 				},
-				basemaps.firstSymbol
+				below
 			);
-			m.addSource('locus', { type: 'geojson', data: line([]) });
-			m.addSource('sight', { type: 'geojson', data: line([]) });
 			m.addSource('wedge', { type: 'geojson', data: polygon([]) });
 			m.addLayer(
 				{
 					id: 'wedge',
 					type: 'fill',
 					source: 'wedge',
-					paint: { 'fill-color': ACCENT, 'fill-opacity': 0.08 }
+					paint: { 'fill-color': ACCENT, 'fill-opacity': 0.06 }
 				},
-				basemaps.firstSymbol
+				below
 			);
-			m.addLayer(
-				{
-					id: 'wedge-edge',
-					type: 'line',
-					source: 'wedge',
-					paint: { 'line-color': ACCENT, 'line-width': 1, 'line-opacity': 0.35 }
-				},
-				basemaps.firstSymbol
-			);
+			m.addSource('locus', { type: 'geojson', data: line([]) });
 			m.addLayer(
 				{
 					id: 'locus',
 					type: 'line',
 					source: 'locus',
-					paint: { 'line-color': ACCENT, 'line-width': 2 }
+					paint: { 'line-color': ACCENT, 'line-width': kind === 'local' ? 3 : 2 }
 				},
-				basemaps.firstSymbol
+				below
 			);
-			m.addLayer(
-				{
-					id: 'sight',
-					type: 'line',
-					source: 'sight',
-					paint: {
-						'line-color': SIGHT,
-						'line-width': 1,
-						'line-opacity': 0.7,
-						'line-dasharray': [2, 3]
-					}
+			m.addSource('rays', { type: 'geojson', data: rayShapes() });
+			m.addLayer({
+				id: 'rays',
+				type: 'line',
+				source: 'rays',
+				filter: ['==', ['geometry-type'], 'LineString'],
+				paint: {
+					'line-color': SUN,
+					'line-width': ['case', ['get', 'strong'], 1.5, 1],
+					'line-opacity': ['case', ['get', 'strong'], 0.95, 0.45],
+					'line-dasharray': [3, 2]
+				}
+			});
+			m.addLayer({
+				id: 'ray-labels',
+				type: 'symbol',
+				source: 'rays',
+				filter: ['==', ['geometry-type'], 'Point'],
+				layout: {
+					'text-field': ['get', 'label'],
+					'text-font': ['Noto Sans Regular'],
+					'text-size': 11,
+					'text-allow-overlap': true
 				},
-				basemaps.firstSymbol
-			);
+				paint: {
+					'text-color': SUN,
+					'text-opacity': ['case', ['get', 'strong'], 1, 0.6],
+					'text-halo-color': '#08080a',
+					'text-halo-width': 1.5
+				}
+			});
+			m.addSource('sight', { type: 'geojson', data: line([]) });
+			m.addLayer({
+				id: 'sight',
+				type: 'line',
+				source: 'sight',
+				paint: { 'line-color': SIGHT, 'line-width': 1.5, 'line-opacity': 0.85 }
+			});
 			m.addSource('spots', { type: 'geojson', data: points() });
 			m.addLayer({
 				id: 'spots',
@@ -214,9 +304,14 @@
 			});
 			m.on('mouseenter', 'spots', () => (m.getCanvas().style.cursor = 'pointer'));
 			m.on('mouseleave', 'spots', () => (m.getCanvas().style.cursor = 'crosshair'));
+			// Markers need a position before they join the map, or every map move throws.
 			fujiMarker.setLngLat([FUJI.lon, FUJI.lat]).addTo(m);
-			observerMarker.addTo(m);
+			observerMarker.setLngLat([observer.lon, observer.lat]).addTo(m);
 			ready = true;
+		});
+		observerMarker.on('dragend', () => {
+			const p = observerMarker.getLngLat();
+			onpick({ lon: p.lng, lat: p.lat });
 		});
 		m.on('click', (e) => {
 			const hit = m.getLayer('spots')
@@ -233,15 +328,20 @@
 		};
 	});
 
+	// Follow the observer: close in, keep them centred; on the region, only when they leave it.
 	$effect(() => {
 		if (!map || !ready) return;
-		observerMarker.setLngLat([observer.lon, observer.lat]);
+		const { lon, lat } = observer;
+		observerMarker.setLngLat([lon, lat]);
 		(map.getSource('sight') as maplibregl.GeoJSONSource).setData(
 			line([
-				[observer.lon, observer.lat],
+				[lon, lat],
 				[FUJI.lon, FUJI.lat]
 			])
 		);
+		if (kind === 'local') map.easeTo({ center: [lon, lat], duration: 400 });
+		else if (!map.getBounds().contains([lon, lat]))
+			map.fitBounds(regionBounds(), { padding: 32, duration: 600 });
 	});
 
 	$effect(() => {
@@ -252,6 +352,12 @@
 	$effect(() => {
 		if (!map || !ready) return;
 		(map.getSource('sectors') as maplibregl.GeoJSONSource).setData(sectorShapes());
+	});
+
+	$effect(() => {
+		if (!map || !ready) return;
+		void [rays, observer];
+		(map.getSource('rays') as maplibregl.GeoJSONSource).setData(rayShapes());
 	});
 
 	$effect(() => {
@@ -276,7 +382,7 @@
 
 	$effect(() => {
 		if (!map || !ready) return;
-		void view;
+		void [view, observer];
 		(map.getSource('wedge') as maplibregl.GeoJSONSource).setData(polygon(wedge()));
 	});
 
@@ -302,12 +408,22 @@
 		outline: 2px solid var(--color-base);
 		pointer-events: none;
 	}
+	.map :global(.observer-pin) {
+		width: 16px;
+		height: 16px;
+		background: var(--color-accent);
+		outline: 3px solid var(--color-base);
+		cursor: grab;
+	}
+	.map :global(.observer-pin:active) {
+		cursor: grabbing;
+	}
 	.map :global(.fuji-mark) {
 		width: 0;
 		height: 0;
-		border-left: 6px solid transparent;
-		border-right: 6px solid transparent;
-		border-bottom: 10px solid var(--color-text);
+		border-left: 7px solid transparent;
+		border-right: 7px solid transparent;
+		border-bottom: 12px solid var(--color-text);
 		pointer-events: none;
 	}
 </style>

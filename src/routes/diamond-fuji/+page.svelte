@@ -15,7 +15,6 @@
 		diamondWindows,
 		lineOfSight,
 		sightline,
-		skyline,
 		type Elevation,
 		type Observer
 	} from '$lib/diamond-fuji/alignment';
@@ -35,12 +34,12 @@
 	import { angleDiff, bearing as bearingTo } from '$lib/diamond-fuji/geo';
 	import Chip from '$lib/components/Chip.svelte';
 	import { findSpots, type FindResult, type Spot, type SpotKind } from '$lib/diamond-fuji/finder';
-	import FujiMap from '$lib/diamond-fuji/FujiMap.svelte';
-	import FujiScene from '$lib/diamond-fuji/FujiScene.svelte';
+	import FujiMap, { type SunRay } from '$lib/diamond-fuji/FujiMap.svelte';
+	import FujiScene, { type SunPath } from '$lib/diamond-fuji/FujiScene.svelte';
+	import Segmented from '$lib/components/Segmented.svelte';
 	import { SNOW_LINE_BY_MONTH, type Conditions } from '$lib/diamond-fuji/scene';
 	import Toggle from '$lib/components/Toggle.svelte';
 	import type { LngLat } from '$lib/diamond-fuji/geo';
-	import Skyline from '$lib/diamond-fuji/Skyline.svelte';
 	import { SPOTS } from '$lib/diamond-fuji/spots';
 	import {
 		SUN_RADIUS,
@@ -51,6 +50,7 @@
 		jstMidnight,
 		jstParts,
 		sunPosition,
+		timeAtAltitude,
 		type Phase
 	} from '$lib/diamond-fuji/sun';
 	import {
@@ -249,21 +249,65 @@
 	const windows = $derived(diamondWindows(days));
 	const alignment = $derived(alignmentOn(observer, day, phase));
 
-	/** The sun's centre every two minutes over the hour around the crossing. */
-	const sunPath = $derived.by(() => {
-		if (!alignment) return [];
-		return Array.from({ length: 61 }, (_, i) => {
-			const time = alignment.time + (i - 30) * 120_000;
-			const s = sunPosition(time, observer.lat, observer.lon);
-			return { azimuth: s.azimuth, apparent: s.apparent, time };
-		});
-	});
-	const sunNow = $derived(sunPath[30] ?? null);
-
 	// ── where ───────────────────────────────────────────
 
 	const locus = $derived(diamondLocus(day, phase, terrain ? terrain.ground : () => 0, eye));
-	const sky = $derived(grids ? skyline(observer, grids, line.bearing, 4) : null);
+
+	/** Where the sun is, seen from here, as it comes down (or up) through the summit's height. */
+	function sunAtSummitHeight(d: number) {
+		const t = timeAtAltitude(d, observer.lat, observer.lon, line.summitAngle, phase);
+		return t === null ? null : { time: t, ...sunPosition(t, observer.lat, observer.lon) };
+	}
+	const june = $derived(jstMidnight(year, 6, 21));
+	const december = $derived(jstMidnight(year, 12, 21));
+	/** On the maps: which way to look for the sun on the day, and at its two extremes. */
+	const rays = $derived.by((): SunRay[] => {
+		const out: SunRay[] = [];
+		for (const [d, label, strong] of [
+			[june, '21 jun', false],
+			[december, '21 dec', false],
+			[day, fmtDate(day), true]
+		] as const) {
+			const s = sunAtSummitHeight(d);
+			if (s) out.push({ bearing: s.azimuth, label, strong });
+		}
+		return out;
+	});
+
+	/** The sun's path through the sky on a day, from well up to below the horizon, on whole minutes. */
+	function pathOn(d: number) {
+		const t0 = timeAtAltitude(d, observer.lat, observer.lon, 0, phase);
+		if (t0 === null) return [];
+		const start = Math.floor(t0 / 600_000) * 600_000;
+		const dir = phase === 'sunset' ? 1 : -1;
+		return Array.from({ length: 81 }, (_, i) => {
+			const time = start + dir * (i - 70) * 120_000;
+			const s = sunPosition(time, observer.lat, observer.lon);
+			return { azimuth: s.azimuth, altitude: s.apparent, time };
+		});
+	}
+	/**
+	 * A path for the 21st of each month, and the chosen day's on top. Months either side of a
+	 * solstice share a path near enough (january's sun is november's), so they share a line.
+	 */
+	const paths = $derived.by((): SunPath[] => {
+		const pairs: [number, string][] = [
+			[12, 'dec'],
+			[1, 'jan · nov'],
+			[2, 'feb · oct'],
+			[3, 'mar · sep'],
+			[4, 'apr · aug'],
+			[5, 'may · jul'],
+			[6, 'jun']
+		];
+		const out: SunPath[] = pairs.map(([m, label]) => ({
+			label,
+			strong: false,
+			points: pathOn(jstMidnight(year, m, 21))
+		}));
+		out.push({ label: fmtDate(day), strong: true, points: pathOn(day) });
+		return out;
+	});
 
 	// ── spots along the line ────────────────────────────
 
@@ -374,8 +418,9 @@
 
 	// ── the preview ─────────────────────────────────────
 
-	/** Minutes before or after the crossing. */
+	/** Minutes before or after the crossing, and how far the slider reaches either way. */
 	let minutes = $state(0);
+	const RANGE = 90;
 	let playing = $state(false);
 	$effect(() => {
 		if (!playing) return;
@@ -390,7 +435,11 @@
 		frame = requestAnimationFrame(tick);
 		return () => cancelAnimationFrame(frame);
 	});
-	const previewTime = $derived((alignment?.time ?? day + 17 * 3_600_000) + minutes * 60_000);
+	/** The moment the slider counts from: the crossing, or failing that the sun at summit height. */
+	const baseTime = $derived(
+		alignment?.time ?? sunAtSummitHeight(day)?.time ?? day + 17 * 3_600_000
+	);
+	const previewTime = $derived(baseTime + minutes * 60_000);
 	const previewSun = $derived.by(() => {
 		const s = sunPosition(previewTime, observer.lat, observer.lon);
 		return { azimuth: s.azimuth, altitude: s.apparent };
@@ -474,8 +523,15 @@
 	let haze = $state(0.25);
 	let cloud = $state(0);
 	let cloudBase = $state(1800);
-	let focalLength = $state(135);
-	let exposure = $state(0.35);
+	let focalLength = $state(24);
+	let exposure = $state(1);
+	const LENSES = [
+		{ value: '24', label: '24 mm' },
+		{ value: '50', label: '50 mm' },
+		{ value: '135', label: '135 mm' },
+		{ value: '400', label: '400 mm' }
+	];
+	let showConditions = $state(false);
 	/** Snow follows the season until the slider is touched. */
 	let snowTouched = $state(false);
 	let snowLine = $state(SNOW_LINE_BY_MONTH[today.month - 1]);
@@ -495,8 +551,20 @@
 	const vfov = $derived(
 		(2 * Math.atan(Math.tan((hfov * Math.PI) / 360) / (16 / 9)) * 180) / Math.PI
 	);
-	/** Look at the summit, a little above the middle of the frame. */
-	const pitch = $derived(line.summitAngle - vfov * 0.12);
+	/**
+	 * Where the view looks. It starts on the summit, a little below the middle of the frame so the
+	 * sky the sun comes down through shows, and comes back there whenever you move or change lens.
+	 */
+	let lookBearing = $state(0);
+	let lookPitch = $state(0);
+	function aim() {
+		lookBearing = line.bearing;
+		lookPitch = line.summitAngle + vfov * 0.2;
+	}
+	$effect(() => {
+		void [line.bearing, line.summitAngle, vfov];
+		aim();
+	});
 
 	const km = (m: number) => (m / 1000).toFixed(m < 20_000 ? 1 : 0);
 	const deg = (d: number, n = 1) => d.toFixed(n) + '°';
@@ -511,34 +579,17 @@
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
 	<p>
-		Twice a year, from the right spot, the sun sets exactly on the summit of Mount Fuji. This works
-		out where and when, from the sun's path, the terrain and the buildings between you and the
-		mountain.
+		From the right spot, on two days a year, the sun sets exactly on the summit of Mount Fuji. Pick
+		where you would stand, then move through the year to watch the sunset slide across the mountain.
 	</p>
-	<ol class="steps">
-		<li>
-			<span class="step-n">1</span>
-			<span>
-				the map shades the land the summit shows from. click where you would stand, or search a
-				place.
-			</span>
-		</li>
-		<li>
-			<span class="step-n">2</span>
-			<span>the dates and times the sun sits on the summit from there appear below. pick one.</span>
-		</li>
-		<li>
-			<span class="step-n">3</span>
-			<span>
-				find the exact streets and parks on that day's line, check the buildings in the way, and
-				preview the moment.
-			</span>
-		</li>
-	</ol>
 </section>
 
 <section>
-	<SectionLabel index="01" label="Where you stand" descriptor="click the map to move" />
+	<SectionLabel
+		index="01"
+		label="Where you stand"
+		descriptor="click either map · drag the pin to fine-tune"
+	/>
 	<div class="body">
 		<div class="bar">
 			<div class="spot">
@@ -551,7 +602,6 @@
 				/>
 			</div>
 			<div class="eye">
-				<Toggle label="shade where it shows" bind:checked={showViewshed} />
 				<Slider
 					label="eye above ground"
 					bind:value={eye}
@@ -563,112 +613,155 @@
 				/>
 			</div>
 		</div>
-		<div class="map">
-			<FujiMap
-				observer={point}
-				{locus}
-				view={{ bearing: line.bearing, hfov }}
-				viewshed={viewshedLayer}
-				{sectors}
-				spots={(found?.spots ?? []).map((s) => ({
-					id: s.id,
-					lon: s.lon,
-					lat: s.lat,
-					clear: clearOf(s)
-				}))}
-				onpick={(p) => goTo(p, 'picked on the map')}
-				onspot={(id) => {
-					const s = found?.spots.find((s) => s.id === id);
-					if (s) goToSpot(s);
-				}}
-			/>
+		<div class="maps">
+			<div class="map">
+				<FujiMap
+					kind="region"
+					observer={point}
+					{locus}
+					{rays}
+					view={{ bearing: lookBearing, hfov }}
+					viewshed={viewshedLayer}
+					{sectors}
+					onpick={(p) => goTo(p, 'picked on the map')}
+				/>
+			</div>
+			<div class="map">
+				<FujiMap
+					kind="local"
+					observer={point}
+					{locus}
+					{rays}
+					spots={(found?.spots ?? []).map((s) => ({
+						id: s.id,
+						lon: s.lon,
+						lat: s.lat,
+						clear: clearOf(s)
+					}))}
+					onpick={(p) => goTo(p, 'picked on the map')}
+					onspot={(id) => {
+						const s = found?.spots.find((s) => s.id === id);
+						if (s) goToSpot(s);
+					}}
+				/>
+			</div>
 		</div>
 		<div class="legend">
+			<span><span class="swatch sight"></span>your line of sight to the summit</span>
+			<span><span class="swatch ray"></span>where the sun is when it is the summit's height</span>
 			<span>
-				<span class="swatch shade"></span>
-				land the summit shows from, standing on the ground: the deeper the shade, the more of the mountain
-				{#if viewshedBusy}<span class="faint">· computing…</span>{/if}
+				<span class="swatch sector"></span>the sun sits on the summit from here on some day of the
+				year
 			</span>
-			<span
-				><span class="swatch sector"></span>between these, the sun sits on the summit on some day of
-				the year</span
-			>
 			<span><span class="swatch accent"></span>where it does on {fmtDate(day)}</span>
-			<span><span class="swatch dashed"></span>your line of sight to the summit</span>
-			<span><span class="swatch wedge"></span>what the lens in the preview takes in</span>
-			{#if found?.spots.length}
-				<span
-					><span class="swatch dot"></span>places on the line ·
-					<span class="swatch dot blocked"></span>something in the way</span
-				>
-			{/if}
+			<span>
+				<Toggle label="shade where the mountain shows" bind:checked={showViewshed} />
+				{#if viewshedBusy}<span class="faint">computing…</span>{/if}
+			</span>
 		</div>
-		<StatRow
-			stats={[
-				{ value: km(line.distance), unit: 'km', label: 'to the summit' },
-				{
-					value: deg(line.bearing),
-					label: `bearing · the sun ${phase === 'sunset' ? 'sets' : 'rises'} there`
-				},
-				{ value: deg(line.summitAngle, 2), label: 'summit above your horizontal' },
-				{
-					value: ground === null ? '…' : Math.round(observer.elevation),
-					unit: 'm',
-					label: `eye above sea level · ground ${ground === null ? '…' : Math.round(ground)} m`
-				}
-			]}
-		/>
-		<p class="note">
-			{#if terrainError}
-				<span class="error">terrain failed to load: {terrainError}</span>
-			{:else if !terrain || !visibility}
-				loading terrain…
-			{:else if visibility.visible}
-				the summit clears everything in between, by the terrain at {Math.round(
-					terrain.resolution.region
-				)} m in the region and {Math.round(terrain.resolution.mountain)} m on the mountain.
-			{:else}
-				<span class="warn">
-					terrain at {km(visibility.blockedAt!.distance)} km, {Math.round(
-						visibility.blockedAt!.elevation
-					)} m high, stands {deg(visibility.blockedAt!.angle - line.summitAngle, 2)} above the summit
-					from here.
-				</span>
-				you would see the sun set on that ridge instead.
-			{/if}
-		</p>
+		{#if terrainError}
+			<p class="note error">terrain failed to load: {terrainError}</p>
+		{:else if visibility && !visibility.visible}
+			<p class="note warn">
+				a ridge {km(visibility.blockedAt!.distance)} km away hides the summit from here: you would see
+				the sun set on that ridge instead.
+			</p>
+		{/if}
 	</div>
 </section>
 
 <section>
-	<SectionLabel index="02" label="When" descriptor={`${phase} · ${year}`} />
+	<SectionLabel
+		index="02"
+		label="The view"
+		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
+	/>
 	<div class="body">
-		<div class="when">
-			<div class="windows">
+		<div class="windows">
+			{#each windows as w (w.best.day)}
+				<button
+					class="window"
+					class:current={w.days.some((d) => d.day === day)}
+					onclick={() => {
+						doy = Math.round((w.best.day - jstDay(year, 1)) / 86_400_000) + 1;
+						minutes = 0;
+					}}
+				>
+					<span class="when-date">{fmtDate(w.best.day)}</span>
+					<span class="when-time">{fmtTime(w.best.time)}</span>
+				</button>
+			{:else}
+				<p class="note">
+					from here the {phase} never lands on the summit: the line to it is outside the sun's
+					{phase === 'sunset' ? 'setting' : 'rising'} points over the year.
+				</p>
+			{/each}
+			<span class="windows-note">
 				{#if windows.length}
-					{#each windows as w (w.best.day)}
-						<button
-							class="window"
-							class:current={w.days.some((d) => d.day === day)}
-							onclick={() => (doy = Math.round((w.best.day - jstDay(year, 1)) / 86_400_000) + 1)}
-						>
-							<span class="when-date">{fmtDate(w.best.day)}</span>
-							<span class="when-time">{fmtTime(w.best.time)}</span>
-							<span class="when-note">
-								centre {sunsOff(w.best.offset)} radii {w.best.offset >= 0 ? 'above' : 'below'} the summit
-								{#if w.days.length > 1}
-									· {w.days.length} days, {fmtDate(w.days[0].day)} – {fmtDate(w.days.at(-1)!.day)}
-								{/if}
-							</span>
-						</button>
-					{/each}
-				{:else}
-					<p class="note">
-						from here the {phase} never lands on the summit: its bearing is outside the sun's
-						{phase === 'sunset' ? 'setting' : 'rising'} points over the year.
-					</p>
+					{phase === 'sunset' ? 'sunset' : 'sunrise'} on the summit from here, {year}
 				{/if}
+			</span>
+		</div>
+		<div class="view">
+			<FujiScene
+				{grids}
+				{observer}
+				sun={previewSun}
+				bind:bearing={lookBearing}
+				bind:pitch={lookPitch}
+				{conditions}
+				summit={{ bearing: line.bearing, angle: line.summitAngle }}
+				{paths}
+				buildings={buildingGeometries}
+				animate={playing || cloud > 0}
+			/>
+		</div>
+		<p class="note">
+			{#if !terrain}
+				loading terrain…
+			{:else if alignment && Math.abs(alignment.offset) <= SUN_RADIUS}
+				<span class="accent"
+					>on {fmtDate(day)} the sun touches the summit at {fmtTime(alignment.time)}.</span
+				>
+			{:else if alignment}
+				on {fmtDate(day)} the sun passes {Math.abs(alignment.offset).toFixed(1)}° {alignment.offset >=
+				0
+					? 'above'
+					: 'below'} the summit.
+			{:else}
+				on {fmtDate(day)} the sun {phase === 'sunset' ? 'sets' : 'rises'} well to the side of the mountain.
+			{/if}
+			<span class="faint">
+				each faint line is the sun's path on the 21st of a month; they sweep across the mountain
+				over the year, and only on the days the path crosses the summit does the sun sit on it. drag
+				the view to look around.
+			</span>
+		</p>
+		<YearStrip {days} {year} {doy} onpick={(d) => (doy = d)} />
+		<div class="time-row">
+			<div class="time-slider">
+				<Slider
+					label="time"
+					bind:value={minutes}
+					min={-RANGE}
+					max={RANGE}
+					step={1}
+					format={(v) =>
+						`${fmtTime(previewTime)} · ${v === 0 ? (alignment ? 'on the summit' : 'at summit height') : `${Math.abs(v)} min ${v < 0 ? 'before' : 'after'}`}`}
+				/>
 			</div>
+			<Toggle label="play" bind:checked={playing} />
+		</div>
+		<div class="lens-row">
+			<Segmented
+				label="lens"
+				options={LENSES}
+				value={String(focalLength)}
+				onchange={(v) => (focalLength = Number(v))}
+			/>
+			<Button size="sm" onclick={aim}>look at the summit</Button>
+			<Toggle label="buildings" bind:checked={showBuildings} />
+			<Toggle label="weather" bind:checked={showConditions} />
 			<div class="year">
 				<Select
 					label="year"
@@ -678,7 +771,68 @@
 				/>
 			</div>
 		</div>
-		<YearStrip {days} {year} {doy} onpick={(d) => (doy = d)} />
+		{#if showBuildings}
+			<p class="note">
+				{buildingsStatus || 'loading buildings…'}
+				<span class="faint">· re:earth buildings, overture maps footprints with their heights</span>
+			</p>
+		{/if}
+		{#if showConditions}
+			<div class="controls">
+				<Slider
+					label="haze"
+					bind:value={haze}
+					min={0}
+					max={1}
+					step={0.01}
+					format={(v) => (v < 0.2 ? 'crisp' : v < 0.5 ? 'clear' : v < 0.8 ? 'hazy' : 'murky')}
+				/>
+				<Slider
+					label="cloud"
+					bind:value={cloud}
+					min={0}
+					max={1}
+					step={0.01}
+					format={(v) =>
+						v < 0.02 ? 'none' : v < 0.4 ? 'scattered' : v < 0.75 ? 'broken' : 'overcast'}
+				/>
+				<Slider
+					label="cloud base"
+					bind:value={cloudBase}
+					min={500}
+					max={4500}
+					step={100}
+					unit=" m"
+					format={(v) => v.toFixed(0)}
+				/>
+				<Slider
+					label="snow line"
+					bind:value={snowLine}
+					min={1500}
+					max={4000}
+					step={50}
+					oninput={() => (snowTouched = true)}
+					format={(v) => (v >= 3900 ? 'none' : `${v} m${snowTouched ? '' : ' · by season'}`)}
+				/>
+				<Slider
+					label="lens"
+					bind:value={focalLength}
+					min={14}
+					max={800}
+					step={1}
+					unit=" mm"
+					format={(v) => v.toFixed(0)}
+				/>
+				<Slider
+					label="exposure"
+					bind:value={exposure}
+					min={0.25}
+					max={4}
+					step={0.05}
+					format={(v) => `${v.toFixed(2)}×`}
+				/>
+			</div>
+		{/if}
 	</div>
 </section>
 
@@ -691,9 +845,7 @@
 	<div class="body">
 		<p class="note">
 			streets, parks, bridges, beaches and viewpoints from openstreetmap that the line for
-			{fmtDate(day)} runs through, within reach of where you stand now. each is pinned to the point where
-			it meets the line, to within the width of the sun. the terrain is checked from there, and buildings
-			can be checked too, below; trees cannot.
+			{fmtDate(day)} runs through, near where you stand. pick one to stand there.
 		</p>
 		<div class="find-row">
 			<div class="radius">
@@ -744,25 +896,20 @@
 								<span class="spot-name">{s.name}</span>
 								<span class="spot-kind">{KIND_LABELS[s.kind].replace(/s$/, '')}</span>
 								<span class="spot-meta">
-									{km(s.fromCentre)} km from you · {km(s.toSummit)} km to the summit ·
-									{fmtTime(s.time)} · sun {Math.abs(s.offset).toFixed(2)}°
-									{s.offset >= 0 ? 'above' : 'below'}
+									{km(s.fromCentre)} km from you · {fmtTime(s.time)}
 								</span>
 								<span class="spot-sight" class:warn={!s.visibility.visible}>
 									{#if s.visibility.visible}
-										summit in sight over the terrain
+										summit in sight
 									{:else}
-										a ridge {km(s.visibility.blockedAt!.distance)} km away stands in the way
+										a ridge {km(s.visibility.blockedAt!.distance)} km away is in the way
 									{/if}
 								</span>
 								{#if obstructions.has(s.id)}
 									{@const o = obstructions.get(s.id)}
 									<span class="spot-sight" class:warn={!!o}>
 										{#if o}
-											a building {Math.round(o.distance)} m away, {Math.round(
-												o.top - o.sightHeight
-											)}
-											m taller than the line of sight
+											a building {Math.round(o.distance)} m away is in the way
 										{:else}
 											no building in the way
 										{/if}
@@ -782,10 +929,6 @@
 							check buildings along each sightline
 						{/if}
 					</Button>
-					<span class="note">
-						re:earth buildings, from overture maps footprints: the first kilometre and a half of
-						every sightline for small buildings, fifteen for towers.
-					</span>
 					{#if checkError}
 						<span class="error">{checkError}</span>
 					{/if}
@@ -798,7 +941,7 @@
 			{:else}
 				<p class="note">
 					nothing mapped lies on the line within {searchRadius} km of you. widen the search, or move:
-					the line for {fmtDate(day)} is drawn on the map.
+					the line for {fmtDate(day)} is drawn on the maps.
 				</p>
 			{/if}
 		{/if}
@@ -806,148 +949,63 @@
 </section>
 
 <section>
-	<SectionLabel
-		index="04"
-		label="The view"
-		descriptor={`${fmtDate(day)} · looking ${deg(line.bearing)}`}
-	/>
+	<SectionLabel index="04" label="The numbers" />
 	<div class="body">
-		{#if alignment}
-			<p class="note">
-				at {fmtTime(alignment.time)} the sun is on the summit's bearing, its centre
-				{deg(Math.abs(alignment.offset), 2)} ({sunsOff(alignment.offset)} radii)
-				{alignment.offset >= 0 ? 'above' : 'below'} the top.
-				{#if Math.abs(alignment.offset) <= SUN_RADIUS}
-					<span class="accent">the disc touches the summit: diamond fuji.</span>
-				{/if}
-				the skyline is the terrain as seen from your eye, {Math.round(observer.elevation)} m up, with
-				the earth's curve and refraction; the sun is drawn to scale, every two minutes.
-			</p>
-		{:else}
-			<p class="note">the sun does not cross the summit's bearing on this day.</p>
-		{/if}
-		<div class="sky">
-			<Skyline
-				skyline={sky}
-				bearing={line.bearing}
-				summitAngle={line.summitAngle}
-				path={sunPath}
-				sun={sunNow}
-			/>
-		</div>
-	</div>
-</section>
-
-<section>
-	<SectionLabel
-		index="05"
-		label="Preview"
-		descriptor={`${fmtDate(day)} · ${fmtTime(previewTime)} · ${focalLength} mm`}
-	/>
-	<div class="body">
-		<p class="note">
-			how it should look through the lens from where you stand: the real terrain, lit by the sun
-			where it is at this moment, under a physical sky. the air, the cloud and the snow are yours to
-			set.
-			{#if previewSun.altitude < -0.3}
-				<span class="faint">the sun is below the horizon now.</span>
+		<StatRow
+			stats={[
+				{ value: km(line.distance), unit: 'km', label: 'to the summit' },
+				{
+					value: deg(line.bearing),
+					label: `bearing · the sun ${phase === 'sunset' ? 'sets' : 'rises'} there`
+				},
+				{ value: deg(line.summitAngle, 2), label: 'summit above your horizontal' },
+				{
+					value: ground === null ? '…' : Math.round(observer.elevation),
+					unit: 'm',
+					label: `eye above sea level · ground ${ground === null ? '…' : Math.round(ground)} m`
+				}
+			]}
+		/>
+		<div class="notes">
+			{#if alignment}
+				<p class="note">
+					on {fmtDate(day)} the sun is on the summit's bearing at {fmtTime(alignment.time)}, its
+					centre {deg(Math.abs(alignment.offset), 2)} ({sunsOff(alignment.offset)} radii)
+					{alignment.offset >= 0 ? 'above' : 'below'} the top. the disc touches the summit when that is
+					under one radius, {deg(SUN_RADIUS, 2)}.
+				</p>
 			{/if}
-		</p>
-		<div class="preview">
-			<FujiScene
-				{grids}
-				{observer}
-				sun={previewSun}
-				bearing={line.bearing}
-				{pitch}
-				{conditions}
-				buildings={buildingGeometries}
-				animate={playing || cloud > 0}
-			/>
-		</div>
-		<div class="time-row">
-			<div class="time-slider">
-				<Slider
-					label="time"
-					bind:value={minutes}
-					min={-40}
-					max={40}
-					step={1}
-					format={(v) =>
-						`${fmtTime(previewTime)} · ${v === 0 ? 'on the bearing' : `${Math.abs(v)} min ${v < 0 ? 'before' : 'after'}`}`}
-				/>
-			</div>
-			<Toggle label="play" bind:checked={playing} />
-			<Toggle label="buildings" bind:checked={showBuildings} />
-		</div>
-		{#if showBuildings}
+			{#each windows as w (w.best.day)}
+				<p class="note">
+					{fmtDate(w.best.day)} at {fmtTime(w.best.time)}: centre {sunsOff(w.best.offset)} radii
+					{w.best.offset >= 0 ? 'above' : 'below'} the summit{#if w.days.length > 1}; the disc
+						touches it on {w.days.length} days, {fmtDate(w.days[0].day)} – {fmtDate(
+							w.days.at(-1)!.day
+						)}{/if}.
+				</p>
+			{/each}
+			{#if visibility && terrain}
+				<p class="note">
+					{#if visibility.visible}
+						the summit clears everything in between, by the terrain at {Math.round(
+							terrain.resolution.region
+						)} m in the region and {Math.round(terrain.resolution.mountain)} m on the mountain.
+					{:else}
+						terrain at {km(visibility.blockedAt!.distance)} km, {Math.round(
+							visibility.blockedAt!.elevation
+						)} m high, stands {deg(visibility.blockedAt!.angle - line.summitAngle, 2)} above the summit
+						from here.
+					{/if}
+				</p>
+			{/if}
 			<p class="note">
-				{buildingsStatus || 'loading buildings…'}
-				<span class="faint"
-					>· re:earth buildings, overture maps footprints with their heights, stood on this terrain</span
-				>
+				the summit is kengamine, {FUJI.elevation} m at {FUJI.lat.toFixed(4)}°, {FUJI.lon.toFixed(
+					4
+				)}°. the sun is placed with the noaa algorithm and lifted by atmospheric refraction; distant
+				ground is lowered by the earth's curvature less a refraction coefficient of 0.13. times are
+				jst. buildings come from re:earth; trees are not modelled.
 			</p>
-		{/if}
-		<div class="controls">
-			<Slider
-				label="haze"
-				bind:value={haze}
-				min={0}
-				max={1}
-				step={0.01}
-				format={(v) => (v < 0.2 ? 'crisp' : v < 0.5 ? 'clear' : v < 0.8 ? 'hazy' : 'murky')}
-			/>
-			<Slider
-				label="cloud"
-				bind:value={cloud}
-				min={0}
-				max={1}
-				step={0.01}
-				format={(v) =>
-					v < 0.02 ? 'none' : v < 0.4 ? 'scattered' : v < 0.75 ? 'broken' : 'overcast'}
-			/>
-			<Slider
-				label="cloud base"
-				bind:value={cloudBase}
-				min={500}
-				max={4500}
-				step={100}
-				unit=" m"
-				format={(v) => v.toFixed(0)}
-			/>
-			<Slider
-				label="snow line"
-				bind:value={snowLine}
-				min={1500}
-				max={4000}
-				step={50}
-				oninput={() => (snowTouched = true)}
-				format={(v) => (v >= 3900 ? 'none' : `${v} m${snowTouched ? '' : ' · by season'}`)}
-			/>
-			<Slider
-				label="lens"
-				bind:value={focalLength}
-				min={24}
-				max={600}
-				step={1}
-				unit=" mm"
-				format={(v) => v.toFixed(0)}
-			/>
-			<Slider
-				label="exposure"
-				bind:value={exposure}
-				min={0.2}
-				max={1.5}
-				step={0.05}
-				format={(v) => v.toFixed(2)}
-			/>
 		</div>
-	</div>
-</section>
-
-<section>
-	<SectionLabel index="06" label="Terrain" />
-	<div class="body">
 		<div class="provider">
 			<Select
 				label="elevation"
@@ -959,11 +1017,6 @@
 				<span class="faint">{provider.attribution}</span>
 			</div>
 		</div>
-		<p class="note">
-			the summit is kengamine, {FUJI.elevation} m at {FUJI.lat.toFixed(4)}°, {FUJI.lon.toFixed(4)}°.
-			the sun is placed with the noaa algorithm and lifted by atmospheric refraction; distant ground
-			is lowered by the earth's curvature less a refraction coefficient of 0.13. times are jst.
-		</p>
 	</div>
 </section>
 
@@ -1006,35 +1059,6 @@
 		font-size: var(--text-content);
 		color: var(--color-text-tertiary);
 	}
-	.steps {
-		list-style: none;
-		margin: 8px 0 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(min(240px, 100%), 1fr));
-		gap: 16px 40px;
-		max-width: 900px;
-	}
-	.steps li {
-		display: flex;
-		gap: 12px;
-		font-size: var(--text-small);
-		line-height: 1.7;
-		color: var(--color-text-secondary);
-	}
-	.step-n {
-		color: var(--color-accent);
-		letter-spacing: var(--tracking-micro);
-	}
-	.swatch.shade {
-		height: 10px;
-		border: 0;
-		background: linear-gradient(90deg, rgba(54, 182, 233, 0.15), rgba(54, 182, 233, 0.6));
-	}
-	.swatch.sector {
-		border-top: 1px dashed var(--color-text);
-		opacity: 0.6;
-	}
 	section + section {
 		margin-top: 72px;
 	}
@@ -1050,20 +1074,21 @@
 	.bar {
 		display: grid;
 		grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 260px);
-	}
-	.eye {
-		display: flex;
-		flex-direction: column;
-		gap: 18px;
 		gap: 16px 32px;
 		align-items: end;
 	}
+	.maps {
+		display: grid;
+		grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+		gap: 16px;
+	}
 	.map {
-		height: 520px;
+		height: 480px;
 	}
 	.legend {
 		display: flex;
 		flex-wrap: wrap;
+		align-items: center;
 		gap: 8px 32px;
 		font-size: var(--text-small);
 		color: var(--color-text-tertiary);
@@ -1079,17 +1104,80 @@
 		height: 0;
 		border-top: 2px solid var(--color-accent);
 	}
-	.swatch.dashed {
-		border-top: 1px dashed var(--color-text-ui);
+	.swatch.sight {
+		border-top: 2px solid var(--color-text);
 	}
-	.swatch.dot {
-		width: 8px;
-		height: 8px;
+	.swatch.ray {
+		border-top: 2px dashed var(--color-warn);
+	}
+	.swatch.sector {
+		height: 10px;
+		border: 1px solid rgba(208, 162, 76, 0.5);
+		background: rgba(208, 162, 76, 0.1);
+	}
+	.windows {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 16px 48px;
+	}
+	.window {
+		appearance: none;
+		background: none;
 		border: 0;
-		background: var(--color-accent);
+		padding: 0;
+		margin: 0;
+		text-align: left;
+		display: flex;
+		align-items: baseline;
+		gap: 14px;
+		font-family: inherit;
+		color: inherit;
+		cursor: pointer;
 	}
-	.swatch.dot.blocked {
-		background: var(--color-text-tertiary);
+	.when-date {
+		font-size: var(--text-display);
+		font-weight: 600;
+		line-height: 1;
+		letter-spacing: -0.02em;
+		color: var(--color-text);
+	}
+	.window.current .when-date {
+		color: var(--color-accent);
+	}
+	@media (hover: hover) {
+		.window:not(.current):hover .when-date {
+			color: var(--color-text-secondary);
+		}
+	}
+	.when-time {
+		font-size: var(--text-title);
+		color: var(--color-text-secondary);
+	}
+	.windows-note {
+		font-size: var(--text-small);
+		color: var(--color-text-faint);
+		padding-bottom: 4px;
+	}
+	.time-row,
+	.lens-row {
+		display: flex;
+		flex-wrap: wrap;
+		align-items: flex-end;
+		gap: 16px 32px;
+	}
+	.time-slider {
+		flex: 1;
+		min-width: 240px;
+	}
+	.year {
+		width: 120px;
+		margin-left: auto;
+	}
+	.controls {
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
+		gap: 36px 48px;
 	}
 	.find-row {
 		display: flex;
@@ -1153,29 +1241,10 @@
 		color: var(--color-text-tertiary);
 		line-height: 1.6;
 	}
-	.swatch.wedge {
-		height: 8px;
-		border: 0;
-		background: var(--color-accent-tint);
-		outline: 1px solid var(--color-accent-muted);
-	}
-	.preview {
-		max-width: 1000px;
-	}
-	.time-row {
-		max-width: 1000px;
+	.notes {
 		display: flex;
-		align-items: flex-end;
-		gap: 32px;
-	}
-	.time-slider {
-		flex: 1;
-	}
-	.controls {
-		max-width: 1000px;
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
-		gap: 36px 48px;
+		flex-direction: column;
+		gap: 12px;
 	}
 	.note {
 		max-width: 720px;
@@ -1195,56 +1264,6 @@
 	.accent {
 		color: var(--color-accent);
 	}
-	.when {
-		display: flex;
-		flex-wrap: wrap;
-		justify-content: space-between;
-		align-items: flex-start;
-		gap: 24px 48px;
-	}
-	.windows {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 24px 64px;
-	}
-	.window {
-		appearance: none;
-		background: none;
-		border: 0;
-		padding: 0;
-		margin: 0;
-		text-align: left;
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-		font-family: inherit;
-		color: inherit;
-		cursor: pointer;
-	}
-	.when-date {
-		font-size: var(--text-display);
-		font-weight: 600;
-		line-height: 1;
-		letter-spacing: -0.02em;
-		color: var(--color-text);
-	}
-	.window.current .when-date {
-		color: var(--color-accent);
-	}
-	.when-time {
-		font-size: var(--text-title);
-		color: var(--color-text-secondary);
-	}
-	.when-note {
-		font-size: var(--text-small);
-		color: var(--color-text-tertiary);
-	}
-	.year {
-		width: 120px;
-	}
-	.sky {
-		max-width: 1000px;
-	}
 	.provider {
 		display: grid;
 		grid-template-columns: minmax(0, 280px) 1fr;
@@ -1256,14 +1275,18 @@
 			padding-top: 48px;
 		}
 		.bar,
+		.maps,
 		.provider {
 			grid-template-columns: 1fr;
 		}
 		.map {
-			height: 60vh;
+			height: 50vh;
 		}
 		.when-date {
 			font-size: 32px;
+		}
+		.year {
+			margin-left: 0;
 		}
 	}
 </style>

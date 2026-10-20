@@ -21,8 +21,17 @@ export interface Conditions {
 	snowLine: number;
 	/** 35 mm-equivalent focal length. */
 	focalLength: number;
+	/** 0.25 … 4: a multiplier on the exposure that keeps the sky out of white. */
 	exposure: number;
 }
+
+/** The tone-mapping exposure at `exposure` 1. The sky shader's radiance needs about this much. */
+const BASE_EXPOSURE = 0.09;
+/**
+ * Cloud colours are set as if at exposure 1, then scaled to match the sky. Haze isn't: three
+ * mixes fog in after tone mapping, so its colour is what shows on screen.
+ */
+const LIGHT = 1 / BASE_EXPOSURE;
 
 export interface SunState {
 	azimuth: number;
@@ -154,6 +163,8 @@ const CLOUD_FRAG = /* glsl */ `
 		vec3 col = mix(uLit, uShade, thick * 0.8);
 		col += uLit * toward * (1.0 - thick) * 0.8;
 		gl_FragColor = vec4(col, a * 0.96);
+		#include <tonemapping_fragment>
+		#include <colorspace_fragment>
 		#include <fog_fragment>
 	}`;
 
@@ -163,7 +174,7 @@ export class FujiScene {
 	readonly camera: THREE.PerspectiveCamera;
 	readonly sky = new Sky();
 	private sun = new THREE.DirectionalLight(0xffffff, 3);
-	private hemi = new THREE.HemisphereLight(0xb0c0d0, 0x202020, 0.5);
+	private hemi = new THREE.HemisphereLight(0xb0c0d0, 0x403a34, 0.5);
 	private fog = new THREE.FogExp2(0x9aa4ae, 0);
 	private material = new THREE.MeshStandardMaterial({
 		vertexColors: true,
@@ -190,10 +201,12 @@ export class FujiScene {
 		});
 		this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 		this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-		this.renderer.toneMappingExposure = 0.35;
+		this.renderer.toneMappingExposure = BASE_EXPOSURE;
 		this.camera = new THREE.PerspectiveCamera(20, 16 / 9, 5, 600_000);
 		this.scene.fog = this.fog;
 		this.sky.scale.setScalar(500_000);
+		// This sky draws its own clouds unless told not to; ours are a deck at a real height.
+		this.sky.material.uniforms.cloudCoverage.value = 0;
 		this.scene.add(this.sky, this.sun, this.sun.target, this.hemi, this.buildings);
 		this.clouds = new THREE.Mesh(
 			new THREE.PlaneGeometry(500_000, 500_000),
@@ -293,7 +306,7 @@ export class FujiScene {
 		u.rayleigh.value = 1.8 + c.haze * 1.2;
 		u.mieCoefficient.value = 0.0015 + c.haze * 0.006;
 		u.mieDirectionalG.value = 0.65 + c.haze * 0.15;
-		this.renderer.toneMappingExposure = c.exposure;
+		this.renderer.toneMappingExposure = BASE_EXPOSURE * c.exposure;
 
 		// Light: the sun fades and warms as it nears the horizon, then is gone.
 		const alt = sun.altitude;
@@ -303,17 +316,19 @@ export class FujiScene {
 		this.sun.intensity = 3.5 * day * (1 - c.cloud * 0.6);
 		const dusk = THREE.MathUtils.smoothstep(alt, -8, 0);
 		this.hemi.color.setRGB(0.55 + warm * 0.3, 0.6, 0.75).multiplyScalar(0.25 + dusk * 0.75);
-		this.hemi.intensity = 0.7;
+		// The sky is bright and the exposure low, so the shaded ground needs a strong fill to read.
+		this.hemi.intensity = 9;
+		this.sun.intensity *= 6;
 
 		// Haze colour follows the sky near the horizon; thick haze also hides distance.
 		const fogColor = new THREE.Color().setRGB(
-			0.62 + warm * 0.3,
-			0.64 - warm * 0.1,
-			0.7 - warm * 0.3
+			0.62 + warm * 0.15,
+			0.62 - warm * 0.05,
+			0.66 - warm * 0.12
 		);
-		fogColor.multiplyScalar(0.3 + dusk * 0.7);
+		fogColor.multiplyScalar((0.3 + dusk * 0.7) * Math.min(1, c.exposure));
 		this.fog.color.copy(fogColor);
-		this.fog.density = (0.4 + c.haze * 6) * 1e-5;
+		this.fog.density = (0.2 + c.haze * 4) * 1e-5;
 
 		const cu = this.clouds.material.uniforms;
 		this.clouds.position.y = c.cloudBase;
@@ -323,9 +338,29 @@ export class FujiScene {
 		cu.uSunDir.value.copy(this.sunDir);
 		(cu.uLit.value as THREE.Color)
 			.setRGB(1, 0.85 - warm * 0.35, 0.8 - warm * 0.55)
-			.multiplyScalar(0.3 + dusk * 0.9);
-		(cu.uShade.value as THREE.Color).setRGB(0.35, 0.37, 0.45).multiplyScalar(0.3 + dusk * 0.7);
+			.multiplyScalar((0.3 + dusk * 0.9) * LIGHT);
+		(cu.uShade.value as THREE.Color)
+			.setRGB(0.35, 0.37, 0.45)
+			.multiplyScalar((0.3 + dusk * 0.7) * LIGHT);
 		this.renderer.render(this.scene, this.camera);
+	}
+
+	/**
+	 * Where a direction (degrees of azimuth and apparent altitude) falls in the last frame drawn,
+	 * in pixels from the top left of a `width` × `height` box; null if behind the camera.
+	 */
+	project(azimuth: number, altitude: number, width: number, height: number) {
+		const a = azimuth * RAD,
+			e = altitude * RAD;
+		const dir = new THREE.Vector3(
+			Math.sin(a) * Math.cos(e),
+			Math.sin(e),
+			-Math.cos(a) * Math.cos(e)
+		);
+		const forward = this.camera.getWorldDirection(new THREE.Vector3());
+		if (dir.dot(forward) <= 0.01) return null;
+		const p = dir.multiplyScalar(1000).add(this.camera.position).project(this.camera);
+		return { x: ((p.x + 1) / 2) * width, y: ((1 - p.y) / 2) * height };
 	}
 
 	dispose() {
