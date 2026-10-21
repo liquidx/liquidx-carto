@@ -43,6 +43,7 @@
 	import { SPOTS } from '$lib/fuji-sun/spots';
 	import { OFFICIAL, OFFICIAL_DEFINITION, OFFICIAL_SOURCE } from '$lib/fuji-sun/official';
 	import {
+		SUN_RADIUS,
 		daysInYear,
 		fmtDate,
 		fmtTime,
@@ -123,6 +124,12 @@
 		'nov',
 		'dec'
 	];
+	/** The first to the last of a run of days, as `7–9 feb`. */
+	const spanOf = (days: { day: number }[]) => {
+		const a = jstParts(days[0].day);
+		const b = jstParts(days.at(-1)!.day);
+		return fmtRange([a.month, a.day, b.month, b.day]);
+	};
 	const fmtRange = ([m1, d1, m2, d2]: [number, number, number, number]) =>
 		m1 === m2 && d1 === d2
 			? `${d1} ${MONTHS[m1 - 1]}`
@@ -967,6 +974,17 @@
 				</p>
 			{/if}
 		</div>
+		<div class="provider">
+			<Select
+				label="elevation"
+				options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
+				bind:value={providerId}
+			/>
+			<div class="note">
+				{provider.coverage}<br />
+				<span class="faint">{provider.attribution}</span>
+			</div>
+		</div>
 	</div>
 </section>
 
@@ -988,6 +1006,19 @@
 				}
 			]}
 		/>
+		{#if windows.length}
+			<StatRow
+				stats={windows.map((w) => ({
+					value: fmtDate(w.best.day),
+					unit: fmtTime(w.best.time),
+					label: w.touches
+						? w.days.length > 1
+							? `disc on the summit ${spanOf(w.days)} · ${w.days.length} days`
+							: 'disc on the summit this day only'
+						: `near · centre passes ${Math.abs(w.best.offset).toFixed(2)}° ${w.best.offset >= 0 ? 'above' : 'below'}`
+				}))}
+			/>
+		{/if}
 		<div class="notes">
 			{#if visibility && terrain}
 				<p class="note">
@@ -1000,25 +1031,83 @@
 					{/if}
 				</p>
 			{/if}
-			<p class="note">
-				<span class="faint"
-					>kengamine, {FUJI.elevation} m · noaa sun with refraction · earth curvature · times in jst ·
-					no trees</span
-				>
-			</p>
-		</div>
-		<div class="provider">
-			<Select
-				label="elevation"
-				options={PROVIDERS.map((p) => ({ value: p.id, label: p.label }))}
-				bind:value={providerId}
-			/>
-			<div class="note">
-				{provider.coverage}<br />
-				<span class="faint">{provider.attribution}</span>
-			</div>
 		</div>
 	</div>
+</section>
+
+<section>
+	<SectionLabel index="02" label="How it's worked out" />
+	<ol class="method">
+		<li>
+			<h3>The summit</h3>
+			<p>
+				The target is Kengamine (剣ヶ峰), the highest point of the crater rim: {FUJI.elevation} m at
+				{FUJI.lat.toFixed(4)}° N, {FUJI.lon.toFixed(4)}° E.
+			</p>
+		</li>
+		<li>
+			<h3>Where you stand</h3>
+			<p>
+				Your eye is the ground under the pin, read from the elevation tiles chosen above, plus the
+				eye height. From there the distance and compass bearing to the summit are measured along the
+				great circle on a spherical earth.
+			</p>
+		</li>
+		<li>
+			<h3>How high the summit looks</h3>
+			<p>
+				The summit's angle above your horizontal comes from its height above you over that distance,
+				lowered by the curve of the earth and raised again by the air bending light around it, taken
+				as the surveyor's standard coefficient of 0.13. This sets how high the sun must be to sit on
+				the peak.
+			</p>
+		</li>
+		<li>
+			<h3>Where the sun is</h3>
+			<p>
+				The sun's position comes from NOAA's solar calculator (after Meeus's Astronomical
+				Algorithms), good to about 0.01°, with its height lifted by atmospheric refraction as it
+				nears the horizon. Times are JST.
+			</p>
+		</li>
+		<li>
+			<h3>The moment and the days</h3>
+			<p>
+				For every day of the year, the time the sun's direction matches the summit's bearing is
+				found by bisection: in the afternoon from east of the mountain, where it sets on the peak,
+				or the morning from the west, where it rises. The sun's height at that moment, less the
+				summit's, is how far it passes above or below. When that is under {SUN_RADIUS.toFixed(2)}°,
+				half the sun's width, the disc touches the summit; days in a row that do make a window, and
+				the closest of them is the day shown. Around the equinoxes the sun can step over the peak
+				between one evening and the next, and around the solstices turn back just short of it; the
+				closest day still counts, marked near, if the centre passes within one diameter.
+			</p>
+		</li>
+		<li>
+			<h3>What gets in the way</h3>
+			<p>
+				The line of sight is walked against the terrain, finer close to you and on the mountain,
+				coarser across the region, to see whether a ridge rises above the summit. The shading on the
+				map does the same from every point for a standing eye. Buildings come from re:earth
+				(Overture footprints with heights) and are drawn in the view and checked along each
+				sightline when asked. Trees are not modelled, and the weather settings only change the
+				picture.
+			</p>
+		</li>
+		<li>
+			<h3>The recommended locations</h3>
+			<p>
+				The white dots are the
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a href={OFFICIAL_SOURCE} target="_blank" rel="noopener"
+					>Kanto Regional Development Bureau's</a
+				>
+				diamond Fuji views, with the days it published from its own simulation. They are placed here from
+				their names, so only roughly; from them this simulation lands within a day of the published date
+				about four times in five.
+			</p>
+		</li>
+	</ol>
 </section>
 
 <DataCredits
@@ -1306,6 +1395,42 @@
 	}
 	.accent {
 		color: var(--color-accent);
+	}
+	.method {
+		list-style: none;
+		margin: 24px 0 0;
+		padding: 0;
+		display: grid;
+		grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
+		gap: 32px 48px;
+		counter-reset: step;
+	}
+	.method li {
+		counter-increment: step;
+		display: flex;
+		flex-direction: column;
+		gap: 8px;
+	}
+	.method h3 {
+		font-size: var(--text-meta);
+		font-weight: 400;
+		letter-spacing: var(--tracking-label);
+		text-transform: uppercase;
+		color: var(--color-text-label);
+	}
+	.method h3::before {
+		content: counter(step, decimal-leading-zero) '  ';
+		color: var(--color-accent);
+	}
+	.method p {
+		font-size: var(--text-small);
+		color: var(--color-text-tertiary);
+		line-height: 1.7;
+	}
+	.method a {
+		color: inherit;
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 	.provider {
 		display: grid;

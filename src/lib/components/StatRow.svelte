@@ -7,7 +7,7 @@
 </script>
 
 <dl class="stats">
-	{#each stats as s (s.label)}
+	{#each stats as s (`${s.label}${s.value}`)}
 		<!-- Caption first for screen readers; shown beneath the value. -->
 		<div class="stat">
 			<dt class="label">{s.label}</dt>
