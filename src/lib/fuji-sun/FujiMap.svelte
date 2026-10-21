@@ -25,8 +25,11 @@
 		rays?: SunRay[];
 		/** Where the 3D view is looking, drawn as a wedge. */
 		view?: { bearing: number; hfov: number } | null;
-		/** Places found along the line, drawn as points; `clear` ones have the summit in sight. */
-		spots?: { id: string; lon: number; lat: number; clear: boolean }[];
+		/**
+		 * Places drawn as points: `clear` ones have the summit in sight; `muted` ones are just
+		 * somewhere to pick, drawn small and pale.
+		 */
+		spots?: { id: string; lon: number; lat: number; clear: boolean; muted?: boolean }[];
 		/** Where the mountain shows from, as pixels over the region box. */
 		viewshed?: {
 			pixels: Uint8ClampedArray;
@@ -149,7 +152,7 @@
 		type: 'FeatureCollection',
 		features: spots.map((s) => ({
 			type: 'Feature',
-			properties: { id: s.id, clear: s.clear },
+			properties: { id: s.id, clear: s.clear, muted: !!s.muted },
 			geometry: { type: 'Point', coordinates: [s.lon, s.lat] }
 		}))
 	});
@@ -296,8 +299,9 @@
 				type: 'circle',
 				source: 'spots',
 				paint: {
-					'circle-radius': 5,
-					'circle-color': ['case', ['get', 'clear'], ACCENT, BLOCKED],
+					'circle-radius': ['case', ['get', 'muted'], 3, 5],
+					'circle-color': ['case', ['get', 'muted'], SIGHT, ['get', 'clear'], ACCENT, BLOCKED],
+					'circle-opacity': ['case', ['get', 'muted'], 0.7, 1],
 					'circle-stroke-color': '#08080a',
 					'circle-stroke-width': 1.5
 				}

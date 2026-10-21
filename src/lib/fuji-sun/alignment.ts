@@ -72,34 +72,53 @@ export function alignmentDays(observer: Observer, year: number, phase: Phase): A
 }
 
 export interface DiamondWindow {
-	/** Consecutive days on which some of the sun's disc touches the summit, best day first. */
+	/** Consecutive days on which some of the sun's disc touches the summit; just the best day if none does. */
 	days: AlignmentDay[];
 	best: AlignmentDay;
+	/** True when the disc touches the summit; false when the sun only passes close by. */
+	touches: boolean;
 }
+
+/** How close the centre of the sun can pass and still count as a near diamond: one diameter. */
+const NEAR = 2 * SUN_RADIUS;
 
 /**
  * The runs of days when the sun's disc overlaps the summit. Usually two a year: once as the
  * sunset point moves south in autumn and once as it comes back north in late winter, or the
  * other way round for somewhere the sunset azimuth of Fuji is north of west.
+ *
+ * Near the equinoxes the sun's path moves by more than its own width from one day to the next,
+ * so it can step right over the summit without touching it on any day; around the solstices it
+ * can turn back just short of it. Either way the closest day still counts, as it does in the
+ * published lists, as long as the centre passes within a diameter of the summit.
  */
 export function diamondWindows(days: AlignmentDay[]): DiamondWindow[] {
 	const windows: DiamondWindow[] = [];
+	const touching = (d: AlignmentDay) => Math.abs(d.offset) <= SUN_RADIUS;
+	const nextTo = (a: AlignmentDay | undefined, b: AlignmentDay | undefined) =>
+		!!a && !!b && Math.abs(b.day - a.day) <= 86_400_000;
 	let run: AlignmentDay[] = [];
 	const flush = () => {
 		if (!run.length) return;
 		const best = run.reduce((a, b) => (Math.abs(b.offset) < Math.abs(a.offset) ? b : a));
-		windows.push({ days: run, best });
+		windows.push({ days: run, best, touches: true });
 		run = [];
 	};
-	for (const d of days) {
-		const touching = Math.abs(d.offset) <= SUN_RADIUS;
-		const last = run.at(-1);
-		if (touching && (!last || d.day - last.day <= 86_400_000)) run.push(d);
-		else {
-			flush();
-			if (touching) run.push(d);
+	days.forEach((d, i) => {
+		if (touching(d)) {
+			if (!nextTo(run.at(-1), d)) flush();
+			run.push(d);
+			return;
 		}
-	}
+		flush();
+		const prev = nextTo(days[i - 1], d) ? days[i - 1] : undefined;
+		const next = nextTo(d, days[i + 1]) ? days[i + 1] : undefined;
+		const closest =
+			Math.abs(d.offset) <= NEAR &&
+			(!prev || (!touching(prev) && Math.abs(d.offset) <= Math.abs(prev.offset))) &&
+			(!next || (!touching(next) && Math.abs(d.offset) < Math.abs(next.offset)));
+		if (closest && (prev || next)) windows.push({ days: [d], best: d, touches: false });
+	});
 	flush();
 	return windows;
 }

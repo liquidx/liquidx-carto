@@ -41,6 +41,7 @@
 	import Toggle from '$lib/components/Toggle.svelte';
 	import type { LngLat } from '$lib/fuji-sun/geo';
 	import { SPOTS } from '$lib/fuji-sun/spots';
+	import { OFFICIAL, OFFICIAL_DEFINITION, OFFICIAL_SOURCE } from '$lib/fuji-sun/official';
 	import {
 		daysInYear,
 		fmtDate,
@@ -84,8 +85,11 @@
 		spotId = name ? '' : spotId;
 	}
 
+	/** Our own spots and the kanto bureau's: the bureau's are picked on the map, not the list. */
+	const ALL_SPOTS = [...SPOTS, ...OFFICIAL.map((s) => ({ ...s, label: `${s.num} · ${s.name}` }))];
+
 	function pickSpot(id: string) {
-		const s = SPOTS.find((s) => s.id === id);
+		const s = ALL_SPOTS.find((s) => s.id === id);
 		if (!s) return;
 		spotId = id;
 		goTo(s, '', s.eye);
@@ -94,18 +98,41 @@
 
 	/** The place you stand, as words. */
 	const here = $derived(
-		SPOTS.find((s) => s.id === spotId)?.label ??
+		ALL_SPOTS.find((s) => s.id === spotId)?.label ??
 			(placeName && placeName !== 'picked on the map' ? placeName : 'the spot on the map')
 	);
 
+	/** The bureau's spot, when that is where you stand. */
+	const official = $derived(OFFICIAL.find((s) => s.id === spotId) ?? null);
 	const spotOptions = $derived([
 		...(spotId ? [] : [{ value: '', label: placeName || 'picked on the map' }]),
+		...(official ? [{ value: official.id, label: `${official.num} · ${official.name}` }] : []),
 		...SPOTS.map((s) => ({ value: s.id, label: s.label }))
 	]);
+	const MONTHS = [
+		'jan',
+		'feb',
+		'mar',
+		'apr',
+		'may',
+		'jun',
+		'jul',
+		'aug',
+		'sep',
+		'oct',
+		'nov',
+		'dec'
+	];
+	const fmtRange = ([m1, d1, m2, d2]: [number, number, number, number]) =>
+		m1 === m2 && d1 === d2
+			? `${d1} ${MONTHS[m1 - 1]}`
+			: m1 === m2
+				? `${d1}–${d2} ${MONTHS[m1 - 1]}`
+				: `${d1} ${MONTHS[m1 - 1]} – ${d2} ${MONTHS[m2 - 1]}`;
 
 	// ── terrain ─────────────────────────────────────────
 
-	let providerId = $state(PROVIDERS[0].id);
+	let providerId = $state('reearth');
 	const provider = $derived(findProvider(providerId));
 
 	let terrain = $state.raw<Terrain | null>(null);
@@ -601,11 +628,14 @@
 	<div class="meta">
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
-	<p>Find the days the sun rises or sets right on the summit of Mount Fuji.</p>
+	<p>
+		Find the days the sun rises or sets right on the summit of Mount Fuji, known as
+		<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+		<a href={OFFICIAL_DEFINITION} target="_blank" rel="noopener">Diamond Fuji</a> (ダイヤモンド富士).
+	</p>
 </section>
 
 <section>
-	<SectionLabel index="01" label="Where you stand" descriptor="click a map to move" />
 	<div class="body">
 		<div class="bar">
 			<div class="spot">
@@ -635,6 +665,11 @@
 			<span><span class="swatch sector"></span>on the summit some day</span>
 			<span><span class="swatch accent"></span>on {fmtDate(day)}</span>
 			<span>
+				<span class="swatch dot"></span>
+				<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+				<a href={OFFICIAL_SOURCE} target="_blank" rel="noopener">recommended locations</a>
+			</span>
+			<span>
 				<Toggle label="where fuji shows" bind:checked={showViewshed} />
 				{#if viewshedBusy}<span class="faint">computing…</span>{/if}
 			</span>
@@ -656,7 +691,15 @@
 					view={{ bearing: lookBearing, hfov }}
 					viewshed={viewshedLayer}
 					{sectors}
+					spots={OFFICIAL.map((s) => ({
+						id: s.id,
+						lon: s.lon,
+						lat: s.lat,
+						clear: true,
+						muted: true
+					}))}
 					onpick={(p) => goTo(p, 'picked on the map')}
+					onspot={pickSpot}
 				/>
 			</div>
 			<div class="map">
@@ -910,16 +953,25 @@
 						>
 							<span class="when-date">{fmtDate(w.best.day)}</span>
 							<span class="when-time">{fmtTime(w.best.time)}</span>
+							{#if !w.touches}<span class="when-time faint">near</span>{/if}
 						</button>
 					{/each}
 				</div>
+			{/if}
+			{#if official}
+				<p class="the-day-note">
+					official listing: {official.dates.map(fmtRange).join(' · ') || 'none'}
+					·
+					<!-- eslint-disable-next-line svelte/no-navigation-without-resolve -->
+					<a href={official.url} target="_blank" rel="noopener">source</a>
+				</p>
 			{/if}
 		</div>
 	</div>
 </section>
 
 <section>
-	<SectionLabel index="02" label="The numbers" />
+	<SectionLabel index="01" label="The numbers" />
 	<div class="body">
 		<StatRow
 			stats={[
@@ -1063,6 +1115,14 @@
 	.swatch.ray {
 		border-top: 2px dashed var(--color-warn);
 	}
+	.swatch.dot {
+		width: 6px;
+		height: 6px;
+		border: 0;
+		border-radius: 50%;
+		background: #e6e6ea;
+		opacity: 0.7;
+	}
 	.swatch.sector {
 		height: 10px;
 		border: 1px solid rgba(208, 162, 76, 0.5);
@@ -1089,6 +1149,13 @@
 		font-size: var(--text-meta);
 		letter-spacing: 0.14em;
 		color: var(--color-text-label);
+	}
+	.head a,
+	.legend a,
+	.the-day-note a {
+		color: inherit;
+		text-decoration: underline;
+		text-underline-offset: 3px;
 	}
 	.the-day-note {
 		max-width: 640px;
