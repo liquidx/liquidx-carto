@@ -94,7 +94,7 @@
 			</span>
 		{:else}
 			<span class="dot">·</span>
-			<span class="faint">the sun never crosses the summit's bearing this day</span>
+			<span class="faint">not on the summit this day</span>
 		{/if}
 	</div>
 	<svg

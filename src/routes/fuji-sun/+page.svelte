@@ -42,7 +42,6 @@
 	import type { LngLat } from '$lib/fuji-sun/geo';
 	import { SPOTS } from '$lib/fuji-sun/spots';
 	import {
-		SUN_RADIUS,
 		daysInYear,
 		fmtDate,
 		fmtTime,
@@ -593,7 +592,6 @@
 	const deg = (d: number, n = 1) => d.toFixed(n) + '°';
 	const duration = (m: number) =>
 		m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ` ${m % 60} min` : ''}`;
-	const sunsOff = (o: number) => Math.abs(o / SUN_RADIUS).toFixed(1);
 </script>
 
 <svelte:head><title>Fuji Sun · Carto</title></svelte:head>
@@ -603,20 +601,11 @@
 	<div class="meta">
 		<time datetime={data.tool.date}>{data.tool.date}</time>
 	</div>
-	<p>
-		A simulator of where you can see the sun rise or set directly on the summit of Mount Fuji. Stand
-		east of the mountain and it sets there; stand west and it rises there, each on two days a year
-		from any one spot. Pick where you would stand, then move through the year to watch the sun slide
-		across the mountain.
-	</p>
+	<p>Find the days the sun rises or sets right on the summit of Mount Fuji.</p>
 </section>
 
 <section>
-	<SectionLabel
-		index="01"
-		label="Where you stand"
-		descriptor="click either map · drag the pin to fine-tune"
-	/>
+	<SectionLabel index="01" label="Where you stand" descriptor="click a map to move" />
 	<div class="body">
 		<div class="bar">
 			<div class="spot">
@@ -641,15 +630,12 @@
 			</div>
 		</div>
 		<div class="legend">
-			<span><span class="swatch sight"></span>your line of sight to the summit</span>
-			<span><span class="swatch ray"></span>where the sun is when it is the summit's height</span>
+			<span><span class="swatch sight"></span>to the summit</span>
+			<span><span class="swatch ray"></span>the sun</span>
+			<span><span class="swatch sector"></span>on the summit some day</span>
+			<span><span class="swatch accent"></span>on {fmtDate(day)}</span>
 			<span>
-				<span class="swatch sector"></span>the sun sits on the summit from here on some day of the
-				year
-			</span>
-			<span><span class="swatch accent"></span>where it does on {fmtDate(day)}</span>
-			<span>
-				<Toggle label="shade where the mountain shows" bind:checked={showViewshed} />
+				<Toggle label="where fuji shows" bind:checked={showViewshed} />
 				{#if viewshedBusy}<span class="faint">computing…</span>{/if}
 			</span>
 		</div>
@@ -657,8 +643,7 @@
 			<p class="note error">terrain failed to load: {terrainError}</p>
 		{:else if visibility && !visibility.visible}
 			<p class="note warn">
-				a ridge {km(visibility.blockedAt!.distance)} km away hides the summit from here: you would see
-				the sun set on that ridge instead.
+				a ridge {km(visibility.blockedAt!.distance)} km away hides the summit.
 			</p>
 		{/if}
 		<div class="maps">
@@ -708,27 +693,9 @@
 				animate={playing || cloud > 0}
 			/>
 		</div>
-		<p class="note">
-			{#if !terrain}
-				loading terrain…
-			{:else if alignment && Math.abs(alignment.offset) <= SUN_RADIUS}
-				<span class="accent"
-					>on {fmtDate(day)} the sun touches the summit at {fmtTime(alignment.time)}.</span
-				>
-			{:else if alignment}
-				on {fmtDate(day)} the sun passes {Math.abs(alignment.offset).toFixed(1)}° {alignment.offset >=
-				0
-					? 'above'
-					: 'below'} the summit.
-			{:else}
-				on {fmtDate(day)} the sun {phase === 'sunset' ? 'sets' : 'rises'} well to the side of the mountain.
-			{/if}
-			<span class="faint">
-				each faint line is the sun's path on the 21st of a month; they sweep across the mountain
-				over the year, and only on the days the path crosses the summit does the sun sit on it. drag
-				the view to look around.
-			</span>
-		</p>
+		{#if !terrain}
+			<p class="note">loading terrain…</p>
+		{/if}
 		<YearStrip {days} {year} {doy} onpick={(d) => (doy = d)} />
 		<div class="time-row">
 			<div class="time-slider">
@@ -759,17 +726,14 @@
 				value={String(focalLength)}
 				onchange={(v) => (focalLength = Number(v))}
 			/>
-			<Button size="sm" onclick={aim}>look at the summit</Button>
+			<Button size="sm" onclick={aim}>re-aim</Button>
 			<Toggle label="buildings" bind:checked={showBuildings} />
 			<Toggle label="weather" bind:checked={showConditions} />
-			<Toggle label="places on the line" bind:checked={showPlaces} />
+			<Toggle label="places to stand" bind:checked={showPlaces} />
+			{#if showBuildings && buildingsStatus.startsWith('loading')}
+				<span class="note faint">{buildingsStatus}</span>
+			{/if}
 		</div>
-		{#if showBuildings}
-			<p class="note">
-				{buildingsStatus || 'loading buildings…'}
-				<span class="faint">· re:earth buildings, overture maps footprints with their heights</span>
-			</p>
-		{/if}
 		{#if showConditions}
 			<div class="controls">
 				<Slider
@@ -807,15 +771,7 @@
 					oninput={() => (snowTouched = true)}
 					format={(v) => (v >= 3900 ? 'none' : `${v} m${snowTouched ? '' : ' · by season'}`)}
 				/>
-				<Slider
-					label="lens"
-					bind:value={focalLength}
-					min={14}
-					max={800}
-					step={1}
-					unit=" mm"
-					format={(v) => v.toFixed(0)}
-				/>
+
 				<Slider
 					label="exposure"
 					bind:value={exposure}
@@ -834,14 +790,11 @@
 							· {fmtDate(foundFor!.day)} · {found.spots.length} places</span
 						>{/if}
 				</div>
-				<p class="note">
-					streets, parks, bridges, beaches and viewpoints from openstreetmap that the line for
-					{fmtDate(day)} runs through, near where you stand. pick one to stand there.
-				</p>
+
 				<div class="find-row">
 					<div class="radius">
 						<Slider
-							label="search around you"
+							label="within"
 							bind:value={searchRadius}
 							min={1}
 							max={25}
@@ -851,7 +804,7 @@
 						/>
 					</div>
 					<Button variant="primary" onclick={find} disabled={finding || !terrain}>
-						{finding ? 'asking openstreetmap…' : found ? 'search again' : 'find places on the line'}
+						{finding ? 'searching…' : found ? 'search again' : 'find places'}
 					</Button>
 					{#if findError}
 						<span class="error">{findError}</span>
@@ -860,8 +813,7 @@
 				{#if found}
 					{#if stale}
 						<p class="note warn">
-							these places are for {fmtDate(foundFor!.day)}; the line has moved since. search again
-							for {fmtDate(day)}.
+							these are for {fmtDate(foundFor!.day)}; search again for {fmtDate(day)}.
 						</p>
 					{/if}
 					{#if found.spots.length}
@@ -892,16 +844,16 @@
 											{#if s.visibility.visible}
 												summit in sight
 											{:else}
-												a ridge {km(s.visibility.blockedAt!.distance)} km away is in the way
+												ridge in the way
 											{/if}
 										</span>
 										{#if obstructions.has(s.id)}
 											{@const o = obstructions.get(s.id)}
 											<span class="spot-sight" class:warn={!!o}>
 												{#if o}
-													a building {Math.round(o.distance)} m away is in the way
+													building {Math.round(o.distance)} m away in the way
 												{:else}
-													no building in the way
+													no buildings in the way
 												{/if}
 											</span>
 										{/if}
@@ -916,7 +868,7 @@
 								{:else if obstructions.size}
 									check buildings again
 								{:else}
-									check buildings along each sightline
+									check buildings
 								{/if}
 							</Button>
 							{#if checkError}
@@ -930,8 +882,7 @@
 						{/if}
 					{:else}
 						<p class="note">
-							nothing mapped lies on the line within {searchRadius} km of you. widen the search, or move:
-							the line for {fmtDate(day)} is drawn on the maps.
+							nothing on the line within {searchRadius} km.
 						</p>
 					{/if}
 				{/if}
@@ -941,12 +892,9 @@
 			<div class="the-day-label">THE DAY</div>
 			<p class="the-day-note">
 				{#if windows.length}
-					the {['day', 'two days', 'three days'][windows.length - 1] ?? `${windows.length} days`} in {year}
-					when, from {here}, the sun {phase === 'sunset' ? 'sets' : 'rises'} directly on the peak of mount
-					fuji. pick one to see it.
+					{phase} on the summit from {here}, {year}
 				{:else}
-					from {here} the {phase} never lands on the peak: the line to it is outside where the sun
-					{phase === 'sunset' ? 'sets' : 'rises'} over the year.
+					from {here} the {phase} never lands on the summit
 				{/if}
 			</p>
 			{#if windows.length}
@@ -989,43 +937,22 @@
 			]}
 		/>
 		<div class="notes">
-			{#if alignment}
-				<p class="note">
-					on {fmtDate(day)} the sun is on the summit's bearing at {fmtTime(alignment.time)}, its
-					centre {deg(Math.abs(alignment.offset), 2)} ({sunsOff(alignment.offset)} radii)
-					{alignment.offset >= 0 ? 'above' : 'below'} the top. the disc touches the summit when that is
-					under one radius, {deg(SUN_RADIUS, 2)}.
-				</p>
-			{/if}
-			{#each windows as w (w.best.day)}
-				<p class="note">
-					{fmtDate(w.best.day)} at {fmtTime(w.best.time)}: centre {sunsOff(w.best.offset)} radii
-					{w.best.offset >= 0 ? 'above' : 'below'} the summit{#if w.days.length > 1}; the disc
-						touches it on {w.days.length} days, {fmtDate(w.days[0].day)} – {fmtDate(
-							w.days.at(-1)!.day
-						)}{/if}.
-				</p>
-			{/each}
 			{#if visibility && terrain}
 				<p class="note">
 					{#if visibility.visible}
-						the summit clears everything in between, by the terrain at {Math.round(
-							terrain.resolution.region
-						)} m in the region and {Math.round(terrain.resolution.mountain)} m on the mountain.
+						the summit is in clear sight.
 					{:else}
-						terrain at {km(visibility.blockedAt!.distance)} km, {Math.round(
-							visibility.blockedAt!.elevation
-						)} m high, stands {deg(visibility.blockedAt!.angle - line.summitAngle, 2)} above the summit
-						from here.
+						a {Math.round(visibility.blockedAt!.elevation)} m ridge {km(
+							visibility.blockedAt!.distance
+						)} km away hides it.
 					{/if}
 				</p>
 			{/if}
 			<p class="note">
-				the summit is kengamine, {FUJI.elevation} m at {FUJI.lat.toFixed(4)}°, {FUJI.lon.toFixed(
-					4
-				)}°. the sun is placed with the noaa algorithm and lifted by atmospheric refraction; distant
-				ground is lowered by the earth's curvature less a refraction coefficient of 0.13. times are
-				jst. buildings come from re:earth; trees are not modelled.
+				<span class="faint"
+					>kengamine, {FUJI.elevation} m · noaa sun with refraction · earth curvature · times in jst ·
+					no trees</span
+				>
 			</p>
 		</div>
 		<div class="provider">
@@ -1109,7 +1036,7 @@
 		gap: 16px;
 	}
 	.map {
-		height: 480px;
+		height: 300px;
 	}
 	.legend {
 		display: flex;
@@ -1329,7 +1256,7 @@
 			grid-template-columns: 1fr;
 		}
 		.map {
-			height: 50vh;
+			height: 40vh;
 		}
 		.when-date {
 			font-size: 32px;
