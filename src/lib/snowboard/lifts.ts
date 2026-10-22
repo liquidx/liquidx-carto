@@ -276,8 +276,6 @@ export function buildLifts(
 		for (let i = 1; i < tops.length; i++)
 			lengths.push(lengths[i - 1] + tops[i].distanceTo(tops[i - 1]));
 		const total = lengths[lengths.length - 1];
-		// Assigned below; the line's methods only run once it exists.
-		let fleet!: Fleet;
 		const model =
 			lift.kind === 'chair'
 				? chairModels[lift.seats]
@@ -349,7 +347,8 @@ export function buildLifts(
 		}
 		for (const mesh of meshes) mesh.frustumCulled = false;
 		group.add(...meshes);
-		fleet = {
+		// The line's methods above read this; they only run once it exists.
+		const fleet: Fleet = {
 			meshes,
 			count,
 			line,
