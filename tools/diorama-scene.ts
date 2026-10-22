@@ -7,7 +7,8 @@
  * They are written as one GeoJSON file, each feature with a `kind`, clipped to that circle's
  * square, next to the features file unless an output path is given.
  */
-import { readFile, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { readdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { DuckDBInstance, type DuckDBConnection } from '@duckdb/node-api';
 import type { Feature, FeatureCollection, Geometry, Position } from 'geojson';
@@ -205,45 +206,58 @@ function simplify(path: Path, perLon: number, perLat: number, closed: boolean): 
 	return out.length > (closed ? 3 : 1) ? out : [];
 }
 
-async function build(source: string, target = scenePathFor(source)) {
-	const features = JSON.parse(await readFile(source, 'utf8')) as FeatureCollection;
-	const points = fitPoints(features);
-	// Nothing to fit a circle around, so no square to read: leave the file without a scene.
-	if (!points.length) {
-		console.log(`no runs, lifts or resort area in ${source}, skipping`);
-		return;
-	}
-	// The same circle as the page: around the runs, lifts and resort area.
-	const circle = fitCircle(points);
-	// A resort known only as a single point fits a circle of no size: nothing to read either.
-	if (!circle.radius) {
-		console.log(`only a point for the resort in ${source}, skipping`);
-		return;
-	}
-	const box = circleBounds(circle);
-
-	const perLat = 111_320;
-	const perLon = perLat * Math.cos((circle.lat * Math.PI) / 180);
-	const round = (p: Position): Position => [+p[0].toFixed(6), +p[1].toFixed(6)];
-	const tidy = (path: Path, closed: boolean, simplified: boolean) =>
-		(simplified ? simplify(path, perLon, perLat, closed) : path).map(round);
-
+/**
+ * One DuckDB for the whole run. Nearly all of a query's time goes on reading the footers of
+ * Overture's Parquet files (500-odd for buildings, over a minute from S3), not on the rows: with
+ * the object cache on, the footers are read once per process and every later query against
+ * the same files takes a second or two. So many resorts should share one instance.
+ */
+async function openOverture() {
 	console.log(`overture ${OVERTURE_RELEASE}`);
 	const db = await DuckDBInstance.create(':memory:');
 	const setup = await db.connect();
 	// The extensions are downloaded once and cached under ~/.duckdb.
 	await setup.run(
-		`INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial; SET s3_region = 'us-west-2';`
+		`INSTALL httpfs; LOAD httpfs; INSTALL spatial; LOAD spatial;
+		 SET GLOBAL s3_region = 'us-west-2'; SET GLOBAL enable_object_cache = true;`
 	);
 	setup.closeSync();
+	return db;
+}
+
+/** The box the scene of a features file covers, or why it has none. */
+async function sceneBox(source: string): Promise<Box | string> {
+	const features = JSON.parse(await readFile(source, 'utf8')) as FeatureCollection;
+	const points = fitPoints(features);
+	// Nothing to fit a circle around, so no square to read: leave the file without a scene.
+	if (!points.length) return 'no runs, lifts or resort area';
+	// The same circle as the page: around the runs, lifts and resort area.
+	const circle = fitCircle(points);
+	// A resort known only as a single point fits a circle of no size: nothing to read either.
+	if (!circle.radius) return 'only a point for the resort';
+	return circleBounds(circle);
+}
+
+async function build(db: DuckDBInstance, source: string, target = scenePathFor(source)) {
+	const box = await sceneBox(source);
+	if (typeof box === 'string') {
+		console.log(`${source}: ${box}, skipping`);
+		return;
+	}
+	const lat = (box[1] + box[3]) / 2;
+	const perLat = 111_320;
+	const perLon = perLat * Math.cos((lat * Math.PI) / 180);
+	const round = (p: Position): Position => [+p[0].toFixed(6), +p[1].toFixed(6)];
+	const tidy = (path: Path, closed: boolean, simplified: boolean) =>
+		(simplified ? simplify(path, perLon, perLat, closed) : path).map(round);
 
 	// Each layer on its own connection, so that the reads overlap: they wait on S3, not the CPU.
 	const scene: Feature[] = [];
 	const counts: Record<string, number> = {};
+	const log: string[] = [];
 	await Promise.all(
 		Object.entries(LAYERS).map(async ([name, layer]) => {
 			const connection = await db.connect();
-			await connection.run(`SET s3_region = 'us-west-2';`);
 			const rows = await read(connection, layer, box);
 			connection.closeSync();
 			let kept = 0;
@@ -270,7 +284,7 @@ async function build(source: string, target = scenePathFor(source)) {
 				}
 			}
 			counts[name] = kept;
-			console.log(`  ${name.padEnd(10)} ${rows.length} read → ${kept} features`);
+			log.push(`  ${name.padEnd(10)} ${rows.length} read → ${kept} features`);
 		})
 	);
 	// In a steady order, whatever the order the reads finished in.
@@ -293,18 +307,81 @@ async function build(source: string, target = scenePathFor(source)) {
 		features: scene
 	});
 	await writeFile(target, text);
-	console.log(`  ${target}  ${(Buffer.byteLength(text) / 1024).toFixed(0)} kB`);
+	// All of a resort's lines together, as several resorts may be building at once.
+	console.log(
+		[`${source}`, ...log, `  ${target}  ${(Buffer.byteLength(text) / 1024).toFixed(0)} kB`].join(
+			'\n'
+		)
+	);
 }
 
-const [command = 'help', source = DEFAULT_FEATURES, target] = process.argv.slice(2);
+/** How many resorts build at once; each runs its five layer reads in parallel too. */
+const CONCURRENCY = 4;
+
+/**
+ * Build the scene for every ski features file in a directory that lacks one (all of them with
+ * `--force`). The first resort builds alone, so that the one slow read of the Parquet footers
+ * happens once rather than once per resort in flight; the rest go several at a time.
+ */
+async function buildAll(db: DuckDBInstance, dir: string, force: boolean) {
+	const pending = (await readdir(dir))
+		.filter((name) => name.endsWith('-ski-features.geojson'))
+		.sort()
+		.map((name) => ({ source: join(dir, name), target: scenePathFor(join(dir, name)) }))
+		.filter(({ target }) => force || !existsSync(target));
+	console.log(`${pending.length} scenes to build in ${dir}`);
+	if (!pending.length) return;
+	const failed: string[] = [];
+	const started = performance.now();
+	let done = 0;
+	// The pace is that of the resorts after the first, which paid for the footers.
+	let warm = 0;
+	const one = async ({ source, target }: { source: string; target: string }) => {
+		try {
+			await build(db, source, target);
+		} catch (error) {
+			failed.push(source);
+			console.error(`${source}: ${error instanceof Error ? error.message : error}`);
+		}
+		done++;
+		const elapsed = (performance.now() - started) / 1000;
+		const left = done > 1 ? ((pending.length - done) * (elapsed - warm)) / (done - 1) : NaN;
+		console.log(
+			`[${done}/${pending.length}] ${elapsed.toFixed(0)}s elapsed` +
+				(left >= 0 ? `, ~${left.toFixed(0)}s left` : '')
+		);
+	};
+	await one(pending[0]);
+	warm = (performance.now() - started) / 1000;
+	const queue = pending.slice(1);
+	await Promise.all(
+		Array.from({ length: CONCURRENCY }, async () => {
+			for (let next = queue.shift(); next; next = queue.shift()) await one(next);
+		})
+	);
+	if (failed.length) {
+		console.error(`\n${failed.length} failed:\n  ${failed.join('\n  ')}`);
+		process.exitCode = 1;
+	}
+}
+
+const args = process.argv.slice(2);
+const force = args.includes('--force');
+const [command = 'help', source = DEFAULT_FEATURES, target] = args.filter((a) => a !== '--force');
 
 if (command === 'build') {
-	await build(source, target);
+	await build(await openOverture(), source, target);
+} else if (command === 'build-all') {
+	await buildAll(await openOverture(), source, force);
 } else {
 	console.log(`usage: pnpm diorama-scene build [features.geojson] [scene.geojson]
+       pnpm diorama-scene build-all dir/ [--force]
 
-  build   fetch the woods, water, buildings, roads and car parks around the runs and lifts
-          in a ski features file (default ${DEFAULT_FEATURES}) and
-          write them to the output path, or beside the features file as <name>-scene.geojson
-          when none is given`);
+  build      fetch the woods, water, buildings, roads and car parks around the runs and lifts
+             in a ski features file (default ${DEFAULT_FEATURES}) and
+             write them to the output path, or beside the features file as <name>-scene.geojson
+             when none is given
+  build-all  the same for every *-ski-features.geojson in a directory that has no scene yet
+             (every one with --force), sharing one Overture session: the first resort takes
+             a minute or two, each after that a few seconds`);
 }

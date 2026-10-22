@@ -50,7 +50,7 @@ Sources in `tools/ev-jp/source/`:
 pnpm diorama-scene build                      # static/diorama/appi-kogen-scene.geojson
 pnpm diorama-scene build path/to/x.geojson    # another resort's features → x-scene.geojson beside it
 pnpm diorama-scene build path/to/x.geojson out/scene.geojson   # … written to the given path instead
-tools/diorama-scene-multi.sh dir/             # every *-ski-features.geojson in dir without a scene
+pnpm diorama-scene build-all dir/ [--force]   # every *-ski-features.geojson in dir without a scene (or all)
 ```
 
 Reads the runs and lifts in a ski features file, fits the same circle around them as the
@@ -69,11 +69,17 @@ GeoJSON file comes out, each feature with a `kind`:
 
 Paths (footways, trails, steps, cycleways, bridleways, sidewalks, crossings and pedestrian
 streets) are left out of the roads; tracks stay in. DuckDB (in-process, via `@duckdb/node-api`)
-reads just the row groups overlapping the area, the layers in parallel, about a minute and a
-half with no API or rate limit in the way; its `httpfs` and `spatial` extensions are downloaded
-once into `~/.duckdb`. The features are clipped to the circle's square and simplified to 2 m
-(buildings keep every corner) and written beside the features file. Rerun after changing the
-runs or lifts; bump `OVERTURE_RELEASE` in the tool for newer mapping.
+reads just the row groups overlapping the area, the layers in parallel, with no API or rate
+limit in the way; its `httpfs` and `spatial` extensions are downloaded once into `~/.duckdb`.
+Nearly all of a build's time goes on reading the footers of Overture's Parquet files (over a
+minute for the 500-odd building files), not on the rows, so a lone `build` takes a minute or two
+whatever the resort. `build-all` shares one DuckDB session with those footers cached across every
+resort in the directory: the first is as slow as a lone build, each after that takes a few
+seconds, four at a time. Resorts that already have a scene are skipped unless `--force` is given;
+one that fails is reported at the end without stopping the rest. The features are clipped to
+the circle's square and simplified to 2 m (buildings keep every corner) and written beside the
+features file. Rerun after changing the runs or lifts; bump `OVERTURE_RELEASE` in the tool for
+newer mapping.
 
 Source: © OpenStreetMap contributors, ODbL, via Overture Maps. Some building footprints are
 Overture's own (Microsoft and Google), with no OpenStreetMap id.
