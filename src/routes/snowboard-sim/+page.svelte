@@ -322,13 +322,10 @@
 	}
 
 	const credits: Credit[] = [
-		CREDITS.gsiDem,
-		{
-			name: 'openskidata',
-			by: 'openskidata.org · © openstreetmap contributors, odbl',
-			use: 'ski runs, lifts and resort area',
-			url: 'https://openskidata.org/'
-		}
+		CREDITS.snowline,
+		CREDITS.openSkiData,
+		CREDITS.overture,
+		CREDITS.gsiDem
 	];
 	const fmt = (n: number) => Math.round(n).toLocaleString();
 	/** Seconds as minutes and seconds, 1:05. */

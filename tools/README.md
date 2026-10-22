@@ -41,6 +41,9 @@ Sources in `tools/ev-jp/source/`:
 - `hokkaido-coastline.txt`: simplified from [dataofjapan/land](https://github.com/dataofjapan/land),
   delta-encoded.
 
+The /ev-jp page credits both; keep `CREDITS.hokkaidoEv` in `src/lib/credits.ts` in step with the
+data date.
+
 `data/ev-jp/` (gitignored) gets the full-attribute exports: `hokkaido_chargers_all.geojson`,
 `hokkaido_chademo_dc.geojson`, `hokkaido_chargers_all.csv` and `hokkaido_outline.geojson`.
 
@@ -53,7 +56,8 @@ pnpm diorama-scene build path/to/x.geojson out/scene.geojson   # … written to 
 pnpm diorama-scene build-all dir/ [--force]   # every *-ski-features.geojson in dir without a scene (or all)
 ```
 
-Reads the runs and lifts in a ski features file, fits the same circle around them as the
+Reads the runs and lifts in a ski features file (exported by [snowline](https://snowline.jp)
+from openskidata.org, OpenStreetMap data), fits the same circle around them as the
 /diorama-snow page, and reads what OpenStreetMap maps there from
 [Overture Maps](https://overturemaps.org), which republishes it monthly as Parquet on S3. One
 GeoJSON file comes out, each feature with a `kind`:
@@ -120,7 +124,9 @@ Sources:
   content.liquidx.net.
 - Prefecture boundaries: the `open-data-jp-prefectures-geojson` package (MIT), derived from
   国土数値情報 行政区域データ.
-- `japan-outline.geojson` has no script; it's carried over as-is from liquidx-japan-train-lines.
+- `japan-outline.geojson` has no script: it was made with the
+  [simplified-japan](https://observablehq.com/@liquidx/simplified-japan) notebook on Observable,
+  derived from Simplified Earth, and carried over from liquidx-japan-train-lines.
 
 ## tokyo-outline
 

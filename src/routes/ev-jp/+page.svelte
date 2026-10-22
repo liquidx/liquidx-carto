@@ -1,6 +1,7 @@
 <script lang="ts">
 	import BarChart from '$lib/components/BarChart.svelte';
 	import ChargerMap from '$lib/components/ChargerMap.svelte';
+	import DataCredits from '$lib/components/DataCredits.svelte';
 	import PromptField from '$lib/components/PromptField.svelte';
 	import RampLegend from '$lib/components/RampLegend.svelte';
 	import SectionLabel from '$lib/components/SectionLabel.svelte';
@@ -9,6 +10,7 @@
 	import Slider from '$lib/components/Slider.svelte';
 	import StatRow from '$lib/components/StatRow.svelte';
 	import Toggle from '$lib/components/Toggle.svelte';
+	import { CREDITS } from '$lib/credits';
 	import { BASEMAP_OPTIONS, type BasemapId } from '$lib/map/basemaps';
 	import {
 		blackspots,
@@ -301,6 +303,8 @@
 		mountain passes close.
 	</p>
 </section>
+
+<DataCredits credits={[CREDITS.hokkaidoEv, CREDITS.dataofjapanLand, CREDITS.openFreeMap]} />
 
 <style>
 	.head {

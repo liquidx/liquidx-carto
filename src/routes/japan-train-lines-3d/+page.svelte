@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import TrainMap3D from '$lib/train-lines/3d/TrainMap3D.svelte';
+	import MapCredits from '$lib/components/MapCredits.svelte';
+	import { CREDITS } from '$lib/credits';
 	import { DATA_URLS } from '$lib/train-lines/data';
 
 	let { data } = $props();
@@ -38,6 +40,7 @@
 {:else}
 	<div class="loading">loading railway data…</div>
 {/if}
+<MapCredits credits={[CREDITS.ksjRail, CREDITS.prefectures]} />
 
 <style>
 	.loading {

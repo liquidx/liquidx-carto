@@ -382,14 +382,10 @@
 	);
 
 	const credits: Credit[] = [
-		CREDITS.awsTerrain,
-		{
-			name: 'openskidata',
-			by: 'openskidata.org · © openstreetmap contributors, odbl',
-			use: 'ski runs and lifts',
-			url: 'https://openskidata.org/'
-		},
-		CREDITS.overture
+		CREDITS.snowline,
+		CREDITS.openSkiData,
+		CREDITS.overture,
+		CREDITS.awsTerrain
 	];
 </script>
 

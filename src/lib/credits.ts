@@ -98,6 +98,48 @@ export const CREDITS = {
 		by: '© openstreetmap contributors, odbl',
 		use: 'place search',
 		url: 'https://nominatim.org'
+	},
+	ksjRail: {
+		name: '国土数値情報 鉄道データ',
+		by: '国土交通省 (mlit japan) · n02, 2019',
+		use: 'railway lines and stations',
+		url: 'https://nlftp.mlit.go.jp/ksj/gml/datalist/KsjTmplt-N02-2019.html'
+	},
+	prefectures: {
+		name: 'open-data-jp-prefectures-geojson',
+		by: 'piuccio, mit · from 国土数値情報 行政区域データ, 国土交通省 (mlit japan)',
+		use: 'prefecture shapes',
+		url: 'https://github.com/piuccio/open-data-jp-prefectures-geojson'
+	},
+	japanOutline: {
+		name: 'simplified japan',
+		by: '@liquidx on observable · from simplified earth',
+		use: 'japan outline',
+		url: 'https://observablehq.com/@liquidx/simplified-japan'
+	},
+	hokkaidoEv: {
+		name: '北海道のEV・PHV充電器マップ',
+		by: '一般社団法人北海道開発技術センター · data as of 2026-06-01, accuracy not guaranteed',
+		use: 'charging sites',
+		url: 'https://decnet.or.jp/hokkaido_evphv'
+	},
+	dataofjapanLand: {
+		name: 'dataofjapan/land',
+		by: 'dataofjapan on github',
+		use: 'hokkaido coastline',
+		url: 'https://github.com/dataofjapan/land'
+	},
+	snowline: {
+		name: 'snowline',
+		by: 'snowline.jp',
+		use: 'resorts, their runs and lifts, scene and terrain models',
+		url: 'https://snowline.jp'
+	},
+	openSkiData: {
+		name: 'openskidata',
+		by: 'openskidata.org · © openstreetmap contributors, odbl',
+		use: 'ski runs, lifts and resort area',
+		url: 'https://openskidata.org/'
 	}
 } satisfies Record<string, Credit>;
 
@@ -114,4 +156,11 @@ export const TERRAIN_TOOL_CREDITS: Credit[] = [
 	CREDITS.esriImagery,
 	CREDITS.gsiStd,
 	CREDITS.nominatim
+];
+
+/** Behind both Japan Train Lines pages. */
+export const TRAIN_LINES_CREDITS: Credit[] = [
+	CREDITS.ksjRail,
+	CREDITS.prefectures,
+	CREDITS.japanOutline
 ];
