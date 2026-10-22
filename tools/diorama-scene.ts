@@ -366,9 +366,13 @@ async function buildAll(db: DuckDBInstance, dir: string, force: boolean) {
 				(left >= 0 ? `, ~${left.toFixed(0)}s left` : '')
 		);
 	};
-	await one(pending[0]);
+	// Skipped resorts read nothing, so they warm nothing: go on alone until one really builds.
+	const queue = [...pending];
+	for (let next = queue.shift(); next; next = queue.shift()) {
+		await one(next);
+		if (existsSync(next.target)) break;
+	}
 	warm = (performance.now() - started) / 1000;
-	const queue = pending.slice(1);
 	await Promise.all(
 		Array.from({ length: CONCURRENCY }, async () => {
 			for (let next = queue.shift(); next; next = queue.shift()) await one(next);
