@@ -22,6 +22,12 @@ const overture = (theme: string, type: string) =>
 /** Corners closer than this to the line between their neighbours are dropped, in metres. */
 const SIMPLIFY = 2;
 /**
+ * The widest circle a resort can plausibly fit (the largest, Shiga Kogen, is 8.4 km). A wider
+ * one means the features file mixes two resorts of the same name, far apart: reading all the
+ * buildings between them runs out of memory, or writes a scene of hundreds of megabytes.
+ */
+const MAX_RADIUS = 15_000;
+/**
  * Overture road classes that are paths rather than roads: footways, trails, stairs, cycle
  * tracks and the like. Everything else under `subtype = 'road'` is kept, tracks included.
  */
@@ -235,14 +241,21 @@ async function sceneBox(source: string): Promise<Box | string> {
 	const circle = fitCircle(points);
 	// A resort known only as a single point fits a circle of no size: nothing to read either.
 	if (!circle.radius) return 'only a point for the resort';
+	if (circle.radius > MAX_RADIUS)
+		return `a circle of ${(circle.radius / 1000).toFixed(0)} km around the runs and lifts, the file likely mixes two resorts`;
 	return circleBounds(circle);
 }
 
-async function build(db: DuckDBInstance, source: string, target = scenePathFor(source)) {
+/** Build the scene of one features file; the reason when it has none. */
+async function build(
+	db: DuckDBInstance,
+	source: string,
+	target = scenePathFor(source)
+): Promise<string | undefined> {
 	const box = await sceneBox(source);
 	if (typeof box === 'string') {
 		console.log(`${source}: ${box}, skipping`);
-		return;
+		return box;
 	}
 	const lat = (box[1] + box[3]) / 2;
 	const perLat = 111_320;
@@ -332,13 +345,15 @@ async function buildAll(db: DuckDBInstance, dir: string, force: boolean) {
 	console.log(`${pending.length} scenes to build in ${dir}`);
 	if (!pending.length) return;
 	const failed: string[] = [];
+	const skipped: string[] = [];
 	const started = performance.now();
 	let done = 0;
 	// The pace is that of the resorts after the first, which paid for the footers.
 	let warm = 0;
 	const one = async ({ source, target }: { source: string; target: string }) => {
 		try {
-			await build(db, source, target);
+			const reason = await build(db, source, target);
+			if (reason) skipped.push(`${source}: ${reason}`);
 		} catch (error) {
 			failed.push(source);
 			console.error(`${source}: ${error instanceof Error ? error.message : error}`);
@@ -359,6 +374,7 @@ async function buildAll(db: DuckDBInstance, dir: string, force: boolean) {
 			for (let next = queue.shift(); next; next = queue.shift()) await one(next);
 		})
 	);
+	if (skipped.length) console.log(`\n${skipped.length} skipped:\n  ${skipped.join('\n  ')}`);
 	if (failed.length) {
 		console.error(`\n${failed.length} failed:\n  ${failed.join('\n  ')}`);
 		process.exitCode = 1;

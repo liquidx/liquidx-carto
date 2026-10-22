@@ -80,7 +80,10 @@ minute for the 500-odd building files), not on the rows, so a lone `build` takes
 whatever the resort. `build-all` shares one DuckDB session with those footers cached across every
 resort in the directory: the first is as slow as a lone build, each after that takes a few
 seconds, four at a time. Resorts that already have a scene are skipped unless `--force` is given;
-one that fails is reported at the end without stopping the rest. The features are clipped to
+one that fails is reported at the end without stopping the rest. A features file whose runs and
+lifts need a circle wider than 15 km in radius is skipped as well, and listed at the end: it mixes
+two resorts of the same name far apart (snowline's export has done this for 井川 and 八森), and
+the buildings between them would run the tool out of memory. The features are clipped to
 the circle's square and simplified to 2 m (buildings keep every corner) and written beside the
 features file. Rerun after changing the runs or lifts; bump `OVERTURE_RELEASE` in the tool for
 newer mapping.
