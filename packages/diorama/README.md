@@ -54,10 +54,11 @@ in the browser. It renders nothing during SSR and needs no `ssr = false`.
 | `background`         | CSS colour behind the model             | transparent     |
 | `backgroundGradient` | backdrop shading, 0 to 1                | `0.5`           |
 | `autoRotate`         | `boolean`, bindable                     | `true`          |
-| `rotateSpeed`        | `number`                                | `1.2`           |
+| `rotateSpeed`        | `number`, negative turns clockwise      | `1.2`           |
 | `rotateButton`       | play/pause overlay for `autoRotate`     | `false`         |
 | `minDistance`        | closest zoom, in radii of the model     | `0.8`           |
 | `distance`           | how far the view is, in radii; bindable |                 |
+| `showDistance`       | shows `distance` in the top-left corner | `false`         |
 | `onload`             | `(meta: DioramaMeta \| null) => void`   |                 |
 | `onerror`            | `(error: unknown) => void`              |                 |
 | `class`              | `string`                                |                 |

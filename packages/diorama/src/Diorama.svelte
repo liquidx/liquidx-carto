@@ -67,6 +67,7 @@
 		backgroundGradient?: number;
 		/** Turn the model slowly while nobody is dragging it. Bindable, so `rotateButton` can pause it. */
 		autoRotate?: boolean;
+		/** How fast `autoRotate` turns the model: positive is anticlockwise seen from above, negative clockwise. */
 		rotateSpeed?: number;
 		/** Show a play/pause button in the bottom-right corner that stops and starts `autoRotate`. */
 		rotateButton?: boolean;
@@ -80,6 +81,8 @@
 		 * Bind it to follow the zoom; setting it does nothing.
 		 */
 		distance?: number;
+		/** Show `distance` in the top-left corner, to find the zoom at which something should appear. */
+		showDistance?: boolean;
 		/** Called when a GLB from `src` has loaded. */
 		onload?: (meta: DioramaMeta | null) => void;
 		onerror?: (error: unknown) => void;
@@ -107,6 +110,7 @@
 		rotateButton = false,
 		minDistance = 0.8,
 		distance = $bindable(),
+		showDistance = false,
 		onload,
 		onerror,
 		class: className,
@@ -342,6 +346,9 @@
 	{#if context}
 		{#key context}{@render children?.()}{/key}
 	{/if}
+	{#if showDistance && distance !== undefined}
+		<div class="distance">distance {distance.toFixed(2)}</div>
+	{/if}
 	{#if rotateButton && model}
 		<button
 			type="button"
@@ -374,6 +381,19 @@
 	.canvas {
 		position: absolute;
 		inset: 0;
+	}
+	.distance {
+		position: absolute;
+		top: 0;
+		left: 0;
+		margin: 12px;
+		padding: 2px 8px;
+		border-radius: 999px;
+		background: rgba(0, 0, 0, 0.45);
+		color: #fff;
+		font-size: 11px;
+		font-variant-numeric: tabular-nums;
+		pointer-events: none;
 	}
 	.rotate {
 		position: absolute;

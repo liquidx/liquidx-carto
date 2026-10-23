@@ -165,8 +165,17 @@
 		if (!isGondola(f)) return n * 0.55 + 0.2;
 		return n >= 8 ? 2.4 : n >= 6 ? 2.1 : 1.8;
 	}
+	/** A lift that no longer runs: its towers and cable stand, with nothing on them. */
+	const isOutOfService = (f: Feature) =>
+		f.properties?.status === 'disused' || f.properties?.status === 'abandoned';
+	/** A lift's name for its label, marked ⛔ when it no longer runs. */
+	function liftName(f: Feature) {
+		const name = f.properties?.nameEn;
+		return name && isOutOfService(f) ? `⛔ ${name}` : name;
+	}
 	/** Metres a second: from the ride time where the lift has one, else typical for its kind. */
 	function liftSpeed(f: Feature) {
+		if (isOutOfService(f)) return 0;
 		const { lengthMeters, durationSecs } = f.properties ?? {};
 		if (lengthMeters && durationSecs) return lengthMeters / durationSecs;
 		if (isCarpet(f)) return 0.7;
@@ -209,6 +218,8 @@
 	 * is close enough for its pixels to show.
 	 */
 	const drapeResolution = $derived((distance ?? Infinity) < 1.2 ? 4096 : 2048);
+	/** Lift names are shown once the view is close enough to make out the chairs. */
+	const liftsLabelled = $derived((distance ?? Infinity) <= 1);
 	/** Average snowboarding speed by run, in metres a second: a cruise on the greens, faster on the blacks. */
 	const RIDING_SPEED: Record<string, number> = { easy: 8, intermediate: 11, advanced: 14 };
 	const ridingSpeed = (f: Feature) => RIDING_SPEED[f.properties?.difficulty] ?? 10;
@@ -438,6 +449,7 @@
 			{background}
 			{backgroundGradient}
 			bind:autoRotate
+			rotateSpeed={-1.2}
 			bind:distance
 			{drapeResolution}
 			rotateButton
@@ -484,7 +496,8 @@
 				stationModel={(f) => (isCabin(f) ? null : liftStation)}
 				carrier={(f) => (isCabin(f) ? 'cabin' : isRopeTow(f) ? 'ball' : 'chair')}
 				shuttle={isCableCar}
-				carrierEvery={(f) => (isGondola(f) ? 45 : isRopeTow(f) ? 12 : seats(f) >= 4 ? 28 : 14)}
+				carrierEvery={(f) =>
+					isOutOfService(f) ? 0 : isGondola(f) ? 45 : isRopeTow(f) ? 12 : seats(f) >= 4 ? 28 : 14}
 				carrierSize={carrierWidth}
 				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
 				carrierColor={(f) => (isCabin(f) ? '#f08c00' : '#e03131')}
@@ -503,7 +516,9 @@
 			{/if}
 			<Marker data={features} filter={kind('locationPeak')} height={pinHeight} />
 			{#if showLabels}
-				<Label data={features} filter={isLift} text={(f) => f.properties?.nameEn} />
+				{#if liftsLabelled}
+					<Label data={features} filter={isLift} text={liftName} class="lift-label" />
+				{/if}
 				<Label data={features} filter={kind('locationPeak')} altitude={pinHeight + 25}>
 					{#snippet children(f)}<strong>{f.properties?.maxElevation} m</strong>{/snippet}
 				</Label>
@@ -653,6 +668,13 @@
 		position: relative;
 		height: 640px;
 		--diorama-background: var(--color-surface);
+	}
+	/* Lift names sit on a white tag so they read over busy terrain. */
+	.stage :global(.lift-label) {
+		padding: 2px 7px;
+		border-radius: 999px;
+		background: #fff;
+		text-shadow: none;
 	}
 	.hint {
 		position: absolute;
