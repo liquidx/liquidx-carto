@@ -114,10 +114,11 @@
 				g = created;
 				game = created;
 				if (import.meta.env.DEV) (window as unknown as { __snowboard: Game }).__snowboard = created;
-				// Top of the gondola if there is one, else the longest lift.
-				const pick =
-					created.lifts.find((l) => l.lift.kind === 'gondola') ??
-					[...created.lifts].sort((a, b) => b.total - a.total)[0];
+				// The top of the lift that goes highest, for the longest way down.
+				const pick = created.lifts.reduce<(typeof created.lifts)[number] | undefined>(
+					(best, l) => (!best || l.top.y > best.top.y ? l : best),
+					undefined
+				);
 				liftId = pick?.lift.id ?? '';
 				// Stand at the start, paused, so the menu sits over the view from the top.
 				created.startAt(liftId);
