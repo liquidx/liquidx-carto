@@ -1,42 +1,28 @@
 /**
- * The snow surface painted once over the whole area: a colour texture for the terrain and a
- * mask the physics and tree scatter read, so "on a groomed run" and "keep trees off" come from
- * the same strokes the player sees.
+ * A mask painted once over the whole area, which the physics and tree scatter read: "on a
+ * groomed run" and "keep trees off" come from the same runs and lifts the snow shader draws.
  */
 import type { FeatureCollection, Position } from 'geojson';
-import * as THREE from 'three';
 import type { LocalFrame } from './frame';
-import { DIFFICULTY_COLOR, type Resort } from './resort';
+import type { Resort } from './resort';
 
 /** Groomed width of a run in metres. */
 export const RUN_WIDTH = 36;
 /** Trees stay this far from a run's centre line, and lifts clear a narrow strip. */
 const TREE_CLEARANCE = RUN_WIDTH / 2 + 14;
-const LIFT_CLEARANCE = 10;
-/** Ground covered by one tile of the grain texture. */
-const GRAIN_METRES = 6;
-/** The snow texture's long side is capped at this many pixels. */
-const MAX_TEXTURE_PX = 2048;
-/** The mask need only tell a run from the woods: coarser than the colour. */
+export const LIFT_CLEARANCE = 10;
+/** The mask need only tell a run from the woods... */
 const MASK_METRES_PER_PIXEL = 4;
+/** ...and its long side is capped at this many pixels. */
+const MAX_MASK_PX = 2048;
 
 export interface Ground {
-	texture: THREE.CanvasTexture;
-	/**
-	 * Fine snow grain, a small tile repeated every `GRAIN_METRES` across the frame, for the
-	 * terrain's bump map: the colour texture is far too coarse to show the surface streaming
-	 * past, and this is what gives a sense of speed.
-	 */
-	grain: THREE.CanvasTexture;
-	/** The painted surface, also used for the minimap. */
-	canvas: HTMLCanvasElement;
 	/** Whether world x, z is on a groomed run. */
 	groomed(x: number, z: number): boolean;
 	/** Whether a tree may stand at world x, z. */
 	treeAllowed(x: number, z: number): boolean;
 	/** Whether the woods file covers world x, z, so where trees stand there is known. */
 	woodsMapped(x: number, z: number): boolean;
-	dispose(): void;
 }
 
 /**
@@ -47,15 +33,14 @@ export interface Ground {
 export function paintGround(
 	frame: LocalFrame,
 	resort: Resort,
-	woods?: FeatureCollection | null,
-	metresPerPixel = 2
+	woods?: FeatureCollection | null
 ): Ground {
-	// A resort several kilometres across would make a texture of tens of millions of pixels,
-	// which is what runs phones out of memory: cap the long side, and the mask (only read by
-	// the physics and the tree scatter, at a 10 m clearance) coarser still.
-	const long = Math.max(frame.width, frame.height);
-	const colourMpp = Math.max(metresPerPixel, long / MAX_TEXTURE_PX);
-	const maskMpp = Math.max(colourMpp, MASK_METRES_PER_PIXEL);
+	// A resort several kilometres across would make a mask of tens of millions of pixels, which
+	// is what runs phones out of memory: cap the long side.
+	const maskMpp = Math.max(
+		MASK_METRES_PER_PIXEL,
+		Math.max(frame.width, frame.height) / MAX_MASK_PX
+	);
 	const scaled = (mpp: number) => {
 		const w = Math.ceil(frame.width / mpp);
 		const h = Math.ceil(frame.height / mpp);
@@ -73,44 +58,6 @@ export function paintGround(
 		};
 		return { w, h, toPx, stroke };
 	};
-
-	// Colour.
-	const { w, h, stroke } = scaled(colourMpp);
-	const canvas = document.createElement('canvas');
-	canvas.width = w;
-	canvas.height = h;
-	const ctx = canvas.getContext('2d')!;
-	ctx.lineCap = 'round';
-	ctx.lineJoin = 'round';
-	ctx.fillStyle = '#e4e9f1';
-	ctx.fillRect(0, 0, w, h);
-	// Wind-worked off-piste snow: faint speckle so the untouched slopes read as a surface,
-	// as a small tile repeated rather than noise the size of the whole canvas.
-	const speckleTile = document.createElement('canvas');
-	speckleTile.width = speckleTile.height = 128;
-	const st = speckleTile.getContext('2d')!;
-	const speckle = st.createImageData(128, 128);
-	for (let i = 0; i < speckle.data.length; i += 4) {
-		const v = Math.random();
-		speckle.data[i] = speckle.data[i + 1] = speckle.data[i + 2] = v > 0.5 ? 255 : 190;
-		speckle.data[i + 3] = 14;
-	}
-	st.putImageData(speckle, 0, 0);
-	ctx.fillStyle = ctx.createPattern(speckleTile, 'repeat')!;
-	ctx.fillRect(0, 0, w, h);
-	// Lift lines: a cleared strip, slightly shaded.
-	ctx.strokeStyle = 'rgba(190, 200, 214, 0.6)';
-	for (const lift of resort.lifts) stroke(ctx, lift.path, LIFT_CLEARANCE);
-	// Runs: a groomed corridor, bright and cool, edged in the difficulty colour.
-	for (const run of resort.runs) {
-		ctx.strokeStyle = DIFFICULTY_COLOR[run.difficulty] + '99';
-		stroke(ctx, run.path, RUN_WIDTH + 3);
-	}
-	ctx.strokeStyle = '#f6f8fc';
-	for (const run of resort.runs) stroke(ctx, run.path, RUN_WIDTH);
-	// Corduroy: a faint centre line down each run.
-	ctx.strokeStyle = 'rgba(205, 214, 228, 0.5)';
-	for (const run of resort.runs) stroke(ctx, run.path, 2);
 
 	// Mask: red where trees must stay away, green on groomed snow.
 	const { w: mw, h: mh, toPx: maskPx, stroke: maskStroke } = scaled(maskMpp);
@@ -173,53 +120,7 @@ export function paintGround(
 	const inWoodBox = (x: number, z: number) =>
 		!!woodBox && x >= woodBox[0] && x <= woodBox[2] && z >= woodBox[1] && z <= woodBox[3];
 
-	const texture = new THREE.CanvasTexture(canvas);
-	texture.colorSpace = THREE.SRGBColorSpace;
-	texture.anisotropy = 8;
-	texture.generateMipmaps = true;
-	texture.minFilter = THREE.LinearMipmapLinearFilter;
-
-	// Grain: wind-worked snow as soft blobs a few centimetres across, blurred so the tile
-	// repeats without a visible seam, over fine noise.
-	const grainCanvas = document.createElement('canvas');
-	const G = 256;
-	grainCanvas.width = grainCanvas.height = G;
-	const g = grainCanvas.getContext('2d')!;
-	g.fillStyle = '#808080';
-	g.fillRect(0, 0, G, G);
-	const noise = g.createImageData(G, G);
-	for (let i = 0; i < noise.data.length; i += 4) {
-		const v = 128 + (Math.random() - 0.5) * 80;
-		noise.data[i] = noise.data[i + 1] = noise.data[i + 2] = v;
-		noise.data[i + 3] = 255;
-	}
-	g.putImageData(noise, 0, 0);
-	g.filter = 'blur(2px)';
-	for (let i = 0; i < 260; i++) {
-		const r = 4 + Math.random() * 14;
-		const x = Math.random() * G;
-		const y = Math.random() * G;
-		g.fillStyle = Math.random() > 0.5 ? 'rgba(255,255,255,0.24)' : 'rgba(0,0,0,0.24)';
-		// Drawn at the tile's wrapped positions too, so the edges match up.
-		for (const ox of [-G, 0, G])
-			for (const oy of [-G, 0, G]) {
-				g.beginPath();
-				g.ellipse(x + ox, y + oy, r * 1.8, r, 0.4, 0, Math.PI * 2);
-				g.fill();
-			}
-	}
-	g.filter = 'none';
-	const grain = new THREE.CanvasTexture(grainCanvas);
-	grain.wrapS = grain.wrapT = THREE.RepeatWrapping;
-	grain.repeat.set(frame.width / GRAIN_METRES, frame.height / GRAIN_METRES);
-	grain.anisotropy = 8;
-	grain.generateMipmaps = true;
-	grain.minFilter = THREE.LinearMipmapLinearFilter;
-
 	return {
-		texture,
-		grain,
-		canvas,
 		groomed(x, z) {
 			const i = index(x, z);
 			return i >= 0 && mask[i + 1] > 128;
@@ -229,10 +130,6 @@ export function paintGround(
 			if (i < 0 || mask[i] >= 128) return false;
 			return !inWoodBox(x, z) || mask[i + 2] >= 128;
 		},
-		woodsMapped: inWoodBox,
-		dispose: () => {
-			texture.dispose();
-			grain.dispose();
-		}
+		woodsMapped: inWoodBox
 	};
 }

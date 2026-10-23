@@ -18,6 +18,8 @@ import {
 	type Resort
 } from './resort';
 import { Rider, type Input, type Mode } from './rider';
+import { proceduralSky } from './sky';
+import { proceduralSnow } from './snow';
 import { Terrain } from './terrain';
 import { plantForest } from './trees';
 
@@ -72,6 +74,7 @@ export interface Game {
 	/** The three.js scene and camera, for anything built on top of the game. */
 	scene: THREE.Scene;
 	camera: THREE.PerspectiveCamera;
+	renderer: THREE.WebGLRenderer;
 	frame: LocalFrame;
 	resort: Resort;
 	ground: Ground;
@@ -114,7 +117,8 @@ export async function createGame(
 	await tick();
 	const ground = paintGround(frame, resort, options.woods);
 
-	const terrain = new Terrain(frame, provider, ground.texture, ground.grain);
+	const snow = proceduralSnow(frame, resort);
+	const terrain = new Terrain(frame, provider, snow);
 	onProgress({ stage: `fetching ${terrain.cellCount} terrain tiles`, fraction: 0 });
 	await terrain.loadBase((p) =>
 		onProgress({
@@ -166,14 +170,14 @@ export async function createGame(
 	renderer.toneMapping = THREE.ACESFilmicToneMapping;
 	renderer.toneMappingExposure = 1.05;
 	renderer.shadowMap.enabled = true;
-	renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+	renderer.shadowMap.type = THREE.PCFShadowMap;
 
 	const scene = new THREE.Scene();
 	const skyColor = new THREE.Color('#b9d3ea');
 	scene.background = skyColor;
 	scene.fog = new THREE.Fog(skyColor, 700, 5200);
-	const sky = buildSky();
-	scene.add(terrain.group, lifts.group, forest.group, poles, sky);
+	const sky = proceduralSky(SUN);
+	scene.add(terrain.group, lifts.group, forest.group, poles, sky.mesh);
 
 	const hemi = new THREE.HemisphereLight('#cfe3ff', '#ffffff', 1.5);
 	scene.add(hemi);
@@ -189,6 +193,7 @@ export async function createGame(
 	scene.add(sun, sun.target);
 
 	const camera = new THREE.PerspectiveCamera(62, 1, 0.5, 16000);
+	terrain.compile(renderer, camera, scene);
 	const rider = new Rider(terrain, ground, forest);
 	const figure = buildFigure();
 	scene.add(figure.group);
@@ -460,7 +465,7 @@ export async function createGame(
 		}
 		figure.update(rider, dt, input);
 		// The dome rides with the camera so it is never clipped.
-		sky.position.copy(camera.position);
+		sky.update(camera.position, now / 1000);
 		sun.position.copy(rider.position).addScaledVector(SUN, 400);
 		sun.target.position.copy(rider.position);
 		forest.update(camera.position);
@@ -494,6 +499,7 @@ export async function createGame(
 	return {
 		scene,
 		camera,
+		renderer,
 		frame,
 		resort,
 		ground,
@@ -528,9 +534,10 @@ export async function createGame(
 			window.removeEventListener('pointermove', onMove);
 			window.removeEventListener('pointerup', onUp);
 			terrain.dispose();
+			snow.dispose();
+			sky.dispose();
 			forest.dispose();
 			lifts.dispose();
-			ground.dispose();
 			// Whatever is left (sky, poles, figure): geometry and materials go with the scene.
 			scene.traverse((o) => {
 				const mesh = o as THREE.Mesh;
@@ -545,34 +552,6 @@ export async function createGame(
 }
 
 const tick = () => new Promise((r) => setTimeout(r, 0));
-
-/** A gradient dome: pale horizon, deeper blue overhead. */
-function buildSky() {
-	const material = new THREE.ShaderMaterial({
-		side: THREE.BackSide,
-		depthWrite: false,
-		fog: false,
-		uniforms: {
-			top: { value: new THREE.Color('#5d93c9') },
-			horizon: { value: new THREE.Color('#c9dced') }
-		},
-		vertexShader: `
-			varying vec3 vDir;
-			void main() {
-				vDir = normalize(position);
-				gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-			}`,
-		fragmentShader: `
-			uniform vec3 top; uniform vec3 horizon; varying vec3 vDir;
-			void main() {
-				float t = smoothstep(-0.05, 0.6, vDir.y);
-				gl_FragColor = vec4(mix(horizon, top, t), 1.0);
-			}`
-	});
-	const sky = new THREE.Mesh(new THREE.SphereGeometry(12000, 24, 12), material);
-	sky.frustumCulled = false;
-	return sky;
-}
 
 /** Piste markers: a pole every 40 m down both edges of each run, capped in its colour. */
 function buildPoles(resort: Resort, terrain: Terrain) {
