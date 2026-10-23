@@ -13,7 +13,7 @@ From a packed tarball:
 
 ```sh
 cd packages/diorama && pnpm pack        # builds dist/ and writes liquidx-diorama-<version>.tgz
-cd ~/my-app && pnpm add three /path/to/liquidx-diorama-0.7.1.tgz
+cd ~/my-app && pnpm add three /path/to/liquidx-diorama-0.8.0.tgz
 ```
 
 Publishing works as well (`pnpm publish` from this folder): `publishConfig` points the exports at
