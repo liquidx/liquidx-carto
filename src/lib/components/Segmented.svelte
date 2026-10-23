@@ -39,6 +39,7 @@
 	.group {
 		display: grid;
 		grid-template-columns: repeat(var(--cols), 1fr);
+		height: var(--control-height);
 		border: 1px solid var(--color-line-strong);
 	}
 	.cell {
@@ -50,7 +51,7 @@
 		background: none;
 		border: 0;
 		border-right: 1px solid rgba(255, 255, 255, 0.1);
-		padding: 9px 10px;
+		padding: 0 10px;
 		cursor: pointer;
 	}
 	.cell:last-child {

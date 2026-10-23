@@ -61,6 +61,7 @@
 	.box {
 		display: flex;
 		align-items: center;
+		height: var(--control-height);
 		background: var(--color-surface);
 		border: 1px solid var(--color-line-strong);
 	}
@@ -77,7 +78,7 @@
 		background: none;
 		border: 0;
 		outline: none;
-		padding: 9px 12px;
+		padding: 0 12px;
 	}
 	input::-webkit-inner-spin-button,
 	input::-webkit-outer-spin-button {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
 	anchorOf,
+	buildingAt,
 	buildingGeometry,
 	decodeTile,
 	obstruction,
@@ -192,5 +193,33 @@ describe('obstruction', () => {
 		};
 		const t = decodeTile(boxes(tile, TOKYO, [side]), tile);
 		expect(obstruction([t], eye, 250, 1.4, flat)).toBeNull();
+	});
+});
+
+describe('buildingAt', () => {
+	const tile = tileAt(TOKYO.lon, TOKYO.lat, 14);
+	const t = decodeTile(
+		boxes(tile, TOKYO, [
+			{ e: 0, n: 0, size: 40, height: 30 },
+			{ e: 0, n: 0, size: 10, height: 120 },
+			{ e: 200, n: 0, size: 20, height: 60 }
+		]),
+		tile
+	);
+	const at = (e: number, n: number) => {
+		const k = (Math.PI / 180) * 6378137;
+		return {
+			lon: TOKYO.lon + e / (k * Math.cos((TOKYO.lat * Math.PI) / 180)),
+			lat: TOKYO.lat + n / k
+		};
+	};
+	it('finds the tallest building over a point', () => {
+		expect(buildingAt([t], at(0, 0))).toBeCloseTo(120, 0);
+		expect(buildingAt([t], at(15, -15))).toBeCloseTo(30, 0);
+		expect(buildingAt([t], at(205, 5))).toBeCloseTo(60, 0);
+	});
+	it('says null on open ground', () => {
+		expect(buildingAt([t], at(100, 0))).toBeNull();
+		expect(buildingAt([t], at(0, 25))).toBeNull();
 	});
 });

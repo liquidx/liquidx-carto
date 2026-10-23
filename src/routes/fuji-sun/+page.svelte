@@ -19,21 +19,19 @@
 		type Observer
 	} from '$lib/fuji-sun/alignment';
 	import Button from '$lib/components/Button.svelte';
+	import NumberField from '$lib/components/NumberField.svelte';
 	import type * as THREE from 'three';
 	import {
+		buildingAt,
 		buildingGeometry,
 		loadBuildingTile,
-		obstruction,
-		sightlineTiles,
 		tileBounds,
 		tilesAround,
+		tilesUnder,
 		type BuildingTile,
-		type Obstruction,
 		type TileId
 	} from '$lib/fuji-sun/buildings';
 	import { angleDiff, bearing as bearingTo } from '$lib/fuji-sun/geo';
-	import Chip from '$lib/components/Chip.svelte';
-	import { findSpots, type FindResult, type Spot, type SpotKind } from '$lib/fuji-sun/finder';
 	import FujiMap, { type SunRay } from '$lib/fuji-sun/FujiMap.svelte';
 	import FujiScene, { type SunPath } from '$lib/fuji-sun/FujiScene.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
@@ -79,11 +77,54 @@
 	/** A name for a place picked from the search, if that is how it was chosen. */
 	let placeName = $state('');
 
+	/** Counts moves, so a late building lookup can tell it is no longer where you stand. */
+	let moves = 0;
+
 	function goTo(p: LngLat, name = '', height = 1.6) {
+		moves++;
 		point = { lon: p.lon, lat: p.lat };
 		placeName = name;
 		eye = height;
 		spotId = name ? '' : spotId;
+	}
+
+	let locating = $state(false);
+	let locateError = $state('');
+
+	/** Where the browser says you are, standing on the ground. */
+	function goToCurrent() {
+		if (!navigator.geolocation) {
+			locateError = 'this browser cannot tell where you are';
+			return;
+		}
+		locating = true;
+		locateError = '';
+		navigator.geolocation.getCurrentPosition(
+			(pos) => {
+				locating = false;
+				goTo({ lon: pos.coords.longitude, lat: pos.coords.latitude }, 'your location');
+			},
+			(e) => {
+				locating = false;
+				locateError = e.message || 'could not find your location';
+			},
+			{ enableHighAccuracy: true, timeout: 15_000 }
+		);
+	}
+
+	/** A point picked on the map: on the ground, or on the roof of the building there. */
+	async function pickOnMap(p: LngLat) {
+		goTo(p, 'picked on the map');
+		const move = moves;
+		const tiles = await Promise.all(
+			tilesUnder(p).map((t) => loadBuildingTile(t).catch(() => null))
+		);
+		if (move !== moves) return;
+		const top = buildingAt(
+			tiles.filter((t): t is BuildingTile => t !== null),
+			p
+		);
+		if (top !== null) eye = Math.round(top + 1.6);
 	}
 
 	/** Our own spots and the kanto bureau's: the bureau's are picked on the map, not the list. */
@@ -350,113 +391,6 @@
 		return out;
 	});
 
-	// ── spots along the line ────────────────────────────
-
-	/** Kilometres around the observer to look for places on the line. */
-	let searchRadius = $state(8);
-	let finding = $state(false);
-	let findError = $state('');
-	let found = $state.raw<FindResult | null>(null);
-	/** What the search was for, so a change of day can say the results are stale. */
-	let foundFor = $state<{ day: number; phase: Phase } | null>(null);
-	let kindFilter = $state<SpotKind | 'all'>('all');
-	let findController: AbortController | null = null;
-
-	async function find() {
-		findController?.abort();
-		const ctrl = new AbortController();
-		findController = ctrl;
-		finding = true;
-		findError = '';
-		try {
-			const r = await findSpots({
-				day,
-				phase,
-				centre: point,
-				radius: searchRadius * 1000,
-				ground: groundAt ?? (() => 0),
-				signal: ctrl.signal
-			});
-			if (ctrl.signal.aborted) return;
-			found = r;
-			foundFor = { day, phase };
-			kindFilter = 'all';
-		} catch (e) {
-			if (!ctrl.signal.aborted) findError = (e as Error).message;
-		} finally {
-			if (!ctrl.signal.aborted) finding = false;
-		}
-	}
-
-	const stale = $derived(foundFor !== null && (foundFor.day !== day || foundFor.phase !== phase));
-	const KIND_LABELS: Record<SpotKind, string> = {
-		park: 'parks',
-		viewpoint: 'viewpoints',
-		bridge: 'bridges',
-		beach: 'beaches',
-		street: 'streets',
-		path: 'paths'
-	};
-	const kindCounts = $derived.by(() => {
-		// Rebuilt whole each time, so it never needs to be reactive itself.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const counts = new Map<SpotKind, number>();
-		for (const s of found?.spots ?? []) counts.set(s.kind, (counts.get(s.kind) ?? 0) + 1);
-		return (Object.keys(KIND_LABELS) as SpotKind[])
-			.filter((k) => counts.has(k))
-			.map((k) => ({ kind: k, count: counts.get(k)! }));
-	});
-	const shownSpots = $derived(
-		(found?.spots ?? []).filter((s) => kindFilter === 'all' || s.kind === kindFilter)
-	);
-	let showAll = $state(false);
-	const LIST_LIMIT = 40;
-
-	function goToSpot(s: Spot) {
-		goTo(s, `${s.name} · ${KIND_LABELS[s.kind].replace(/s$/, '')}`, 1.6);
-	}
-
-	// ── buildings in the way ────────────────────────────
-
-	/** Per spot id, what the sightline runs into; null when it is clear of buildings. */
-	let obstructions = $state.raw<Map<string, Obstruction | null>>(new Map());
-	let checking = $state<{ done: number; total: number } | null>(null);
-	let checkError = $state('');
-
-	async function checkBuildings() {
-		const spots = shownSpots.slice(0, showAll ? undefined : LIST_LIMIT);
-		const g = groundAt;
-		if (!g) return;
-		checking = { done: 0, total: spots.length };
-		checkError = '';
-		// A working copy, published whole after each spot, so it never needs to be reactive itself.
-		// eslint-disable-next-line svelte/prefer-svelte-reactivity
-		const results = new Map(obstructions);
-		try {
-			for (const s of spots) {
-				const line = sightline({ ...s, elevation: (g(s.lon, s.lat) || 0) + 1.6 });
-				const eye = { lon: s.lon, lat: s.lat, elevation: (g(s.lon, s.lat) || 0) + 1.6 };
-				const tiles = (
-					await Promise.all(sightlineTiles(s, line.bearing).map((t) => loadBuildingTile(t)))
-				).filter((t): t is BuildingTile => t !== null);
-				results.set(s.id, obstruction(tiles, eye, line.bearing, line.summitAngle, g));
-				obstructions = new Map(results);
-				checking = { done: checking!.done + 1, total: spots.length };
-			}
-		} catch (e) {
-			checkError = (e as Error).message;
-		} finally {
-			checking = null;
-		}
-	}
-	// A new search is a new set of places.
-	$effect(() => {
-		void found;
-		obstructions = new Map();
-	});
-
-	const clearOf = (s: Spot) => s.visibility.visible && !obstructions.get(s.id);
-
 	// ── the preview ─────────────────────────────────────
 
 	/** Minutes before or after the crossing. */
@@ -586,8 +520,6 @@
 		{ value: '400', label: '400 mm' }
 	];
 	let showConditions = $state(false);
-	/** Where to stand: places on the day's line, found on request. */
-	let showPlaces = $state(false);
 	/** Snow follows the season until the slider is touched. */
 	let snowTouched = $state(false);
 	let snowLine = $state(SNOW_LINE_BY_MONTH[today.month - 1]);
@@ -654,18 +586,13 @@
 					onselect={(p) => goTo({ lon: p.lon, lat: p.lat }, p.name)}
 				/>
 			</div>
-			<div class="eye">
-				<Slider
-					label="eye above ground"
-					bind:value={eye}
-					min={0}
-					max={450}
-					step={1}
-					unit=" m"
-					format={(v) => v.toFixed(0)}
-				/>
-			</div>
+			<Button onclick={goToCurrent} disabled={locating}>
+				{locating ? 'locating…' : 'current location'}
+			</Button>
 		</div>
+		{#if locateError}
+			<p class="note error">{locateError}</p>
+		{/if}
 		<div class="legend">
 			<span><span class="swatch sight"></span>to the summit</span>
 			<span><span class="swatch ray"></span>the sun</span>
@@ -677,7 +604,7 @@
 				<a href={OFFICIAL_SOURCE} target="_blank" rel="noopener">recommended locations</a>
 			</span>
 			<span>
-				<Toggle label="where fuji shows" bind:checked={showViewshed} />
+				<Toggle label="Fuji visible" bind:checked={showViewshed} />
 				{#if viewshedBusy}<span class="faint">computing…</span>{/if}
 			</span>
 		</div>
@@ -705,28 +632,12 @@
 						clear: true,
 						muted: true
 					}))}
-					onpick={(p) => goTo(p, 'picked on the map')}
+					onpick={pickOnMap}
 					onspot={pickSpot}
 				/>
 			</div>
 			<div class="map">
-				<FujiMap
-					kind="local"
-					observer={point}
-					{locus}
-					{rays}
-					spots={(found?.spots ?? []).map((s) => ({
-						id: s.id,
-						lon: s.lon,
-						lat: s.lat,
-						clear: clearOf(s)
-					}))}
-					onpick={(p) => goTo(p, 'picked on the map')}
-					onspot={(id) => {
-						const s = found?.spots.find((s) => s.id === id);
-						if (s) goToSpot(s);
-					}}
-				/>
+				<FujiMap kind="local" observer={point} {locus} {rays} onpick={pickOnMap} />
 			</div>
 		</div>
 		<div class="view">
@@ -776,10 +687,12 @@
 				value={String(focalLength)}
 				onchange={(v) => (focalLength = Number(v))}
 			/>
+			<div class="eye">
+				<NumberField label="eye above ground" bind:value={eye} min={0} max={1000} unit="m" />
+			</div>
 			<Button size="sm" onclick={aim}>re-aim</Button>
 			<Toggle label="buildings" bind:checked={showBuildings} />
 			<Toggle label="weather" bind:checked={showConditions} />
-			<Toggle label="places to stand" bind:checked={showPlaces} />
 			{#if showBuildings && buildingsStatus.startsWith('loading')}
 				<span class="note faint">{buildingsStatus}</span>
 			{/if}
@@ -830,112 +743,6 @@
 					step={0.05}
 					format={(v) => `${v.toFixed(2)}×`}
 				/>
-			</div>
-		{/if}
-		{#if showPlaces}
-			<div class="places">
-				<div class="places-label">
-					WHERE TO STAND
-					{#if found}<span class="faint">
-							· {fmtDate(foundFor!.day)} · {found.spots.length} places</span
-						>{/if}
-				</div>
-
-				<div class="find-row">
-					<div class="radius">
-						<Slider
-							label="within"
-							bind:value={searchRadius}
-							min={1}
-							max={25}
-							step={1}
-							unit=" km"
-							format={(v) => v.toFixed(0)}
-						/>
-					</div>
-					<Button variant="primary" onclick={find} disabled={finding || !terrain}>
-						{finding ? 'searching…' : found ? 'search again' : 'find places'}
-					</Button>
-					{#if findError}
-						<span class="error">{findError}</span>
-					{/if}
-				</div>
-				{#if found}
-					{#if stale}
-						<p class="note warn">
-							these are for {fmtDate(foundFor!.day)}; search again for {fmtDate(day)}.
-						</p>
-					{/if}
-					{#if found.spots.length}
-						<div class="kinds">
-							<Chip active={kindFilter === 'all'} onclick={() => (kindFilter = 'all')}>
-								all · {found.spots.length}
-							</Chip>
-							{#each kindCounts as k (k.kind)}
-								<Chip active={kindFilter === k.kind} onclick={() => (kindFilter = k.kind)}>
-									{KIND_LABELS[k.kind]} · {k.count}
-								</Chip>
-							{/each}
-						</div>
-						<ul class="spots">
-							{#each showAll ? shownSpots : shownSpots.slice(0, LIST_LIMIT) as s (s.id)}
-								<li>
-									<button
-										class="spot"
-										class:blocked={!s.visibility.visible}
-										onclick={() => goToSpot(s)}
-									>
-										<span class="spot-name">{s.name}</span>
-										<span class="spot-kind">{KIND_LABELS[s.kind].replace(/s$/, '')}</span>
-										<span class="spot-meta">
-											{km(s.fromCentre)} km from you · {fmtTime(s.time)}
-										</span>
-										<span class="spot-sight" class:warn={!s.visibility.visible}>
-											{#if s.visibility.visible}
-												summit in sight
-											{:else}
-												ridge in the way
-											{/if}
-										</span>
-										{#if obstructions.has(s.id)}
-											{@const o = obstructions.get(s.id)}
-											<span class="spot-sight" class:warn={!!o}>
-												{#if o}
-													building {Math.round(o.distance)} m away in the way
-												{:else}
-													no buildings in the way
-												{/if}
-											</span>
-										{/if}
-									</button>
-								</li>
-							{/each}
-						</ul>
-						<div class="find-row">
-							<Button onclick={checkBuildings} disabled={checking !== null}>
-								{#if checking}
-									checking {checking.done} of {checking.total}…
-								{:else if obstructions.size}
-									check buildings again
-								{:else}
-									check buildings
-								{/if}
-							</Button>
-							{#if checkError}
-								<span class="error">{checkError}</span>
-							{/if}
-						</div>
-						{#if shownSpots.length > LIST_LIMIT && !showAll}
-							<Button size="sm" onclick={() => (showAll = true)}>
-								show all {shownSpots.length}
-							</Button>
-						{/if}
-					{:else}
-						<p class="note">
-							nothing on the line within {searchRadius} km.
-						</p>
-					{/if}
-				{/if}
 			</div>
 		{/if}
 		<div class="the-day">
@@ -1163,7 +970,7 @@
 	}
 	.bar {
 		display: grid;
-		grid-template-columns: minmax(0, 320px) minmax(0, 1fr) minmax(0, 260px);
+		grid-template-columns: minmax(0, 320px) minmax(0, 1fr) auto;
 		gap: 16px 32px;
 		align-items: end;
 	}
@@ -1216,16 +1023,6 @@
 		height: 10px;
 		border: 1px solid rgba(208, 162, 76, 0.5);
 		background: rgba(208, 162, 76, 0.1);
-	}
-	.places {
-		display: flex;
-		flex-direction: column;
-		gap: 24px;
-	}
-	.places-label {
-		font-size: var(--text-meta);
-		letter-spacing: 0.14em;
-		color: var(--color-text-label);
 	}
 	.the-day {
 		border: 1px solid var(--color-line);
@@ -1298,6 +1095,9 @@
 		align-items: flex-end;
 		gap: 16px 32px;
 	}
+	.eye {
+		width: 160px;
+	}
 	.time-slider {
 		flex: 1;
 		min-width: 240px;
@@ -1310,68 +1110,6 @@
 		display: grid;
 		grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr));
 		gap: 36px 48px;
-	}
-	.find-row {
-		display: flex;
-		flex-wrap: wrap;
-		align-items: flex-end;
-		gap: 16px 32px;
-	}
-	.radius {
-		width: 280px;
-		max-width: 100%;
-	}
-	.kinds {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 8px;
-	}
-	.spots {
-		list-style: none;
-		margin: 0;
-		padding: 0;
-		display: grid;
-		grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
-		gap: 24px 48px;
-	}
-	.spot {
-		appearance: none;
-		background: none;
-		border: 0;
-		padding: 0;
-		margin: 0;
-		width: 100%;
-		text-align: left;
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-		font-family: inherit;
-		color: inherit;
-		cursor: pointer;
-	}
-	.spot-name {
-		font-size: var(--text-list);
-		color: var(--color-text);
-	}
-	.spot.blocked .spot-name {
-		color: var(--color-text-tertiary);
-	}
-	@media (hover: hover) {
-		.spot:hover .spot-name {
-			color: var(--color-accent);
-		}
-	}
-	.spot-kind {
-		font-size: var(--text-meta);
-		letter-spacing: var(--tracking-label);
-		text-transform: uppercase;
-		color: var(--color-text-label);
-	}
-	.spot-meta,
-	.spot-sight {
-		font-size: var(--text-small);
-		color: var(--color-text-tertiary);
-		line-height: 1.6;
 	}
 	.notes {
 		display: flex;

@@ -210,7 +210,8 @@
 		color: var(--color-text-ui);
 		background: var(--color-surface);
 		border: 1px solid var(--color-line-strong);
-		padding: 9px 12px;
+		height: var(--control-height);
+		padding: 0 12px;
 		cursor: pointer;
 	}
 	.trigger:focus-visible,

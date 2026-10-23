@@ -66,6 +66,8 @@
 	--tracking-title: 0.05em;
 
 	/* ── structure ───────────────────────────────── */
+	/* Every boxed form control, so a row of them lines up. */
+	--control-height: 38px;
 	--radius-*: initial;
 	--shadow-*: initial;
 	--shadow-float: 0 16px 48px rgba(0, 0, 0, 0.7);

@@ -400,6 +400,45 @@ export function buildingGeometry(
 	return geo;
 }
 
+// ── standing on one ─────────────────────────────────
+
+/** The tiles at every zoom that could hold a building standing on a point. */
+export const tilesUnder = (p: LngLat): TileId[] =>
+	[12, 13, 14].flatMap((z) => tilesAround(p, z, 100));
+
+/**
+ * Height above its base of the tallest building whose footprint takes in a point, or null
+ * where the point is open ground. The footprint is the triangles seen from above: walls fall
+ * to nothing, the roof covers the outline.
+ */
+export function buildingAt(tiles: BuildingTile[], p: LngLat): number | null {
+	const frame: LocalFrame = { origin: p };
+	let best: number | null = null;
+	for (const tile of tiles) {
+		const v = (i: number) => toLocal(frame, tile.lon[i], tile.lat[i]);
+		for (const f of tile.features) {
+			if (best !== null && f.height <= best) continue;
+			const c = toLocal(frame, f.lon, f.lat);
+			if (Math.hypot(c.x, c.north) > f.radius) continue;
+			for (const t of f.triangles) {
+				const a = v(tile.index[t]),
+					b = v(tile.index[t + 1]),
+					d = v(tile.index[t + 2]);
+				// The origin is inside when it sits on the same side of all three edges.
+				const s1 = a.x * b.north - a.north * b.x;
+				const s2 = b.x * d.north - b.north * d.x;
+				const s3 = d.x * a.north - d.north * a.x;
+				if (Math.abs(s1 + s2 + s3) < 1e-6) continue;
+				if ((s1 >= 0 && s2 >= 0 && s3 >= 0) || (s1 <= 0 && s2 <= 0 && s3 <= 0)) {
+					best = f.height;
+					break;
+				}
+			}
+		}
+	}
+	return best;
+}
+
 // ── in the way? ─────────────────────────────────────
 
 export interface Obstruction {

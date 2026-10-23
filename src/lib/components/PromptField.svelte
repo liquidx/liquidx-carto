@@ -88,7 +88,8 @@
 		gap: 9px;
 		background: var(--color-surface);
 		border: 1px solid var(--color-line-strong);
-		padding: 12px 14px;
+		height: var(--control-height);
+		padding: 0 14px;
 		font-size: var(--text-body);
 		cursor: text;
 	}

@@ -46,6 +46,11 @@
 		white-space: nowrap;
 		user-select: none;
 	}
+	/* Full size stands as tall as the fields beside it. */
+	.md {
+		height: var(--control-height);
+		padding-block: 0;
+	}
 	.sm {
 		font-size: var(--text-meta);
 		padding: 6px 10px;

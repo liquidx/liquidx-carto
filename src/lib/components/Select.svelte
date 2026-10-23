@@ -49,7 +49,8 @@
 		background: var(--color-surface);
 		border: 1px solid var(--color-line-strong);
 		border-radius: 0;
-		padding: 9px 32px 9px 12px;
+		height: var(--control-height);
+		padding: 0 32px 0 12px;
 		cursor: pointer;
 	}
 	select:focus-visible {
