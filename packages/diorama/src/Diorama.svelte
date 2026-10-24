@@ -9,7 +9,7 @@
 	import { onMount, untrack, type Snippet } from 'svelte';
 	import * as THREE from 'three';
 	import { applyVertical, dioramaMeta, type DioramaData } from './build.js';
-	import { setDioramaContext, type DioramaContext } from './context.js';
+	import { setDioramaContext, type DioramaContext, type LabelVariant } from './context.js';
 	import { createDrapeCompositor } from './drape.js';
 	import {
 		createDioramaMesh,
@@ -83,6 +83,13 @@
 		distance?: number;
 		/** Show `distance` in the top-left corner, to find the zoom at which something should appear. */
 		showDistance?: boolean;
+		/** Show the `Label` children. Each one still decides at which zoom it appears. */
+		labels?: boolean;
+		/**
+		 * How labels stand off the terrain, unless a `Label` gives its own `variant`: white text
+		 * on a translucent black pill, dark text on a white pill, or bare text with a halo.
+		 */
+		labelVariant?: LabelVariant;
 		/** Called when a GLB from `src` has loaded. */
 		onload?: (meta: DioramaMeta | null) => void;
 		onerror?: (error: unknown) => void;
@@ -111,6 +118,8 @@
 		minDistance = 0.8,
 		distance = $bindable(),
 		showDistance = false,
+		labels = true,
+		labelVariant = 'dark',
 		onload,
 		onerror,
 		class: className,
@@ -218,6 +227,27 @@
 		};
 	});
 
+	/** Height the camera keeps above the terrain, in model units: clear of the near plane. */
+	const GROUND_CLEARANCE = 0.015;
+	/**
+	 * Lift `eye` above the terrain under it, and under points a little around it so that the
+	 * near plane does not cut into a slope. Off the model it may go anywhere. True if it moved.
+	 */
+	function keepAboveGround(eye: THREE.Vector3, heightAt: (x: number, z: number) => number) {
+		if (eye.x * eye.x + eye.z * eye.z > 1) return false;
+		let ground = heightAt(eye.x, eye.z);
+		for (let i = 0; i < 6; i++) {
+			const a = (i / 6) * Math.PI * 2;
+			const x = eye.x + Math.cos(a) * GROUND_CLEARANCE;
+			const z = eye.z + Math.sin(a) * GROUND_CLEARANCE;
+			if (x * x + z * z <= 1) ground = Math.max(ground, heightAt(x, z));
+		}
+		const floor = ground + GROUND_CLEARANCE;
+		if (eye.y >= floor) return false;
+		eye.y = floor;
+		return true;
+	}
+
 	// What the children work with. Anything that moves the surface (a new model, or new relief
 	// for a built mesh) makes a new context, and with it new children.
 	$effect(() => {
@@ -247,6 +277,10 @@
 		});
 		const stopFrames = s.onFrame(() => {
 			if (drapes.update()) s.invalidate();
+			if (keepAboveGround(s.camera.position, surface.heightAt)) {
+				s.camera.lookAt(s.controls.target);
+				s.invalidate();
+			}
 		});
 		context = {
 			...surface,
@@ -256,7 +290,15 @@
 			size: (n) => surface.metres(n) * objectScale,
 			group,
 			stage: s,
-			drapes
+			drapes,
+			labels: {
+				get visible() {
+					return labels;
+				},
+				get variant() {
+					return labelVariant;
+				}
+			}
 		};
 		return () => {
 			context = undefined;

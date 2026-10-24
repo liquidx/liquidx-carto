@@ -33,6 +33,7 @@
 		buildDiorama,
 		terrainStyles,
 		type DioramaData,
+		type LabelVariant,
 		type TerrainPreset,
 		type TerrainStyle
 	} from '@liquidx/diorama';
@@ -218,8 +219,6 @@
 	 * is close enough for its pixels to show.
 	 */
 	const drapeResolution = $derived((distance ?? Infinity) < 1.2 ? 4096 : 2048);
-	/** Lift names are shown once the view is close enough to make out the chairs. */
-	const liftsLabelled = $derived((distance ?? Infinity) <= 1);
 	/** Average snowboarding speed by run, in metres a second: a cruise on the greens, faster on the blacks. */
 	const RIDING_SPEED: Record<string, number> = { easy: 8, intermediate: 11, advanced: 14 };
 	const ridingSpeed = (f: Feature) => RIDING_SPEED[f.properties?.difficulty] ?? 10;
@@ -301,6 +300,7 @@
 	let showRoads = $state(true);
 	let showWater = $state(true);
 	let showLabels = $state(true);
+	let labelVariant = $state<LabelVariant>('dark');
 	let sunAzimuth = $state(231);
 	let sunElevation = $state(48);
 	let background = $state('#24344d');
@@ -454,6 +454,8 @@
 			{drapeResolution}
 			rotateButton
 			minDistance={0.1}
+			labels={showLabels}
+			{labelVariant}
 			onload={() => (glbLoaded = true)}
 			onerror={(e) => (message = e instanceof Error ? e.message : String(e))}
 		>
@@ -515,14 +517,11 @@
 				<Building data={scene} filter={isBuilding} height={buildingHeight} roofColor="#5c6670" />
 			{/if}
 			<Marker data={features} filter={kind('locationPeak')} height={pinHeight} />
-			{#if showLabels}
-				{#if liftsLabelled}
-					<Label data={features} filter={isLift} text={liftName} class="lift-label" />
-				{/if}
-				<Label data={features} filter={kind('locationPeak')} altitude={pinHeight + 25}>
-					{#snippet children(f)}<strong>{f.properties?.maxElevation} m</strong>{/snippet}
-				</Label>
-			{/if}
+			<!-- Lift names once the view is close enough to make out the chairs. -->
+			<Label data={features} filter={isLift} text={liftName} maxDistance={1} />
+			<Label data={features} filter={kind('locationPeak')} altitude={pinHeight + 25}>
+				{#snippet children(f)}<strong>{f.properties?.maxElevation} m</strong>{/snippet}
+			</Label>
 		</Diorama>
 		{#if hint && !message}<div class="hint">{hint}</div>{/if}
 	</div>
@@ -542,6 +541,14 @@
 				label="tree cover"
 				options={[{ value: 'none' }, { value: 'woods' }, { value: 'all' }]}
 				bind:value={trees}
+			/>
+		</div>
+		<div class="control">
+			<span class="label">labels</span>
+			<Segmented
+				label="label style"
+				options={[{ value: 'light' }, { value: 'dark' }, { value: 'halo' }]}
+				bind:value={labelVariant}
 			/>
 		</div>
 		<Slider
@@ -668,13 +675,6 @@
 		position: relative;
 		height: 640px;
 		--diorama-background: var(--color-surface);
-	}
-	/* Lift names sit on a white tag so they read over busy terrain. */
-	.stage :global(.lift-label) {
-		padding: 2px 7px;
-		border-radius: 999px;
-		background: #fff;
-		text-shadow: none;
 	}
 	.hint {
 		position: absolute;

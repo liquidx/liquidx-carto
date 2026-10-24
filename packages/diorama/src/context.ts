@@ -5,6 +5,9 @@ import type { DioramaMeta } from './format.js';
 import type { Stage } from './stage.js';
 import type { DioramaSurface } from './surface.js';
 
+/** How a `Label` stands off the terrain. */
+export type LabelVariant = 'light' | 'dark' | 'halo';
+
 /**
  * What a component inside `<Diorama>` works with: the loaded terrain's settings, lookups by
  * longitude and latitude, and places to add things. Children only exist while a terrain is
@@ -23,6 +26,8 @@ export interface DioramaContext extends DioramaSurface {
 	stage: Stage;
 	/** The overlays drawn on the terrain surface. */
 	drapes: DrapeCompositor;
+	/** Whether `Label` children are shown, and how they look unless they say otherwise. */
+	labels: { readonly visible: boolean; readonly variant: LabelVariant };
 }
 
 const KEY = Symbol('diorama');

@@ -9,7 +9,7 @@ export { default as Carpet } from './objects/Carpet.svelte';
 export { default as Riders } from './objects/Riders.svelte';
 export { default as Marker } from './objects/Marker.svelte';
 export { default as Building } from './objects/Building.svelte';
-export { getDiorama, type DioramaContext } from './context.js';
+export { getDiorama, type DioramaContext, type LabelVariant } from './context.js';
 export {
 	terrainStyles,
 	type RampStop,

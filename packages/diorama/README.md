@@ -39,35 +39,40 @@ no build step during development.
 The component fills its parent, so give the parent a height. It uses WebGL, so it only renders
 in the browser. It renders nothing during SSR and needs no `ssr = false`.
 
-| Prop                 | Type                                    | Default         |
-| -------------------- | --------------------------------------- | --------------- |
-| `src`                | `string \| Blob \| ArrayBuffer \| null` |                 |
-| `data`               | a mesh from `buildDiorama`              |                 |
-| `exaggeration`       | relief of `data`                        | `1`             |
-| `baseDepth`          | base thickness of `data`, in radii      | `0.25`          |
-| `terrain`            | `'topo' \| 'snow' \| TerrainStyle`      | `'topo'`        |
-| `contourInterval`    | metres, 0 disables                      | value from file |
-| `majorEvery`         | every nth contour heavier, 0 disables   | value from file |
-| `drapeResolution`    | pixels across the overlay texture       | `2048`          |
-| `objectScale`        | enlarges objects placed on the terrain  | `1`             |
-| `sun`                | `{ azimuth, elevation, intensity }`     | south-west, 48° |
-| `background`         | CSS colour behind the model             | transparent     |
-| `backgroundGradient` | backdrop shading, 0 to 1                | `0.5`           |
-| `autoRotate`         | `boolean`, bindable                     | `true`          |
-| `rotateSpeed`        | `number`, negative turns clockwise      | `1.2`           |
-| `rotateButton`       | play/pause overlay for `autoRotate`     | `false`         |
-| `minDistance`        | closest zoom, in radii of the model     | `0.8`           |
-| `distance`           | how far the view is, in radii; bindable |                 |
-| `showDistance`       | shows `distance` in the top-left corner | `false`         |
-| `onload`             | `(meta: DioramaMeta \| null) => void`   |                 |
-| `onerror`            | `(error: unknown) => void`              |                 |
-| `class`              | `string`                                |                 |
+| Prop                 | Type                                       | Default         |
+| -------------------- | ------------------------------------------ | --------------- |
+| `src`                | `string \| Blob \| ArrayBuffer \| null`    |                 |
+| `data`               | a mesh from `buildDiorama`                 |                 |
+| `exaggeration`       | relief of `data`                           | `1`             |
+| `baseDepth`          | base thickness of `data`, in radii         | `0.25`          |
+| `terrain`            | `'topo' \| 'snow' \| TerrainStyle`         | `'topo'`        |
+| `contourInterval`    | metres, 0 disables                         | value from file |
+| `majorEvery`         | every nth contour heavier, 0 disables      | value from file |
+| `drapeResolution`    | pixels across the overlay texture          | `2048`          |
+| `objectScale`        | enlarges objects placed on the terrain     | `1`             |
+| `sun`                | `{ azimuth, elevation, intensity }`        | south-west, 48° |
+| `background`         | CSS colour behind the model                | transparent     |
+| `backgroundGradient` | backdrop shading, 0 to 1                   | `0.5`           |
+| `autoRotate`         | `boolean`, bindable                        | `true`          |
+| `rotateSpeed`        | `number`, negative turns clockwise         | `1.2`           |
+| `rotateButton`       | play/pause overlay for `autoRotate`        | `false`         |
+| `minDistance`        | closest zoom, in radii of the model        | `0.8`           |
+| `distance`           | how far the view is, in radii; bindable    |                 |
+| `showDistance`       | shows `distance` in the top-left corner    | `false`         |
+| `labels`             | shows the `Label` children                 | `true`          |
+| `labelVariant`       | `'dark'`, `'light'` or `'halo'` for labels | `'dark'`        |
+| `onload`             | `(meta: DioramaMeta \| null) => void`      |                 |
+| `onerror`            | `(error: unknown) => void`                 |                 |
+| `class`              | `string`                                   |                 |
 
 The background is transparent unless you set it. Pass `background` (any CSS colour) for a
 backdrop shaded like a studio: brighter behind the model, darker towards the corners.
 `backgroundGradient` sets how strong that shading is, from 0 (flat) to 1; it defaults to 0.5.
 For anything else, such as an image, set the `--diorama-background` CSS custom property to any
 CSS background instead.
+
+Over the model the camera stays a little above the terrain, so a low view rides up over the
+slopes instead of passing through them. Beyond the model's edge it is free.
 
 `rotateButton` puts a play/pause button in the bottom-right corner, a translucent dark circle
 that stops and starts the rotation. Bind `autoRotate` to keep your own controls in step with
@@ -313,22 +318,38 @@ is +x and up is +y.
 </Label>
 ```
 
-| Prop        | Type                                  | Default |
-| ----------- | ------------------------------------- | ------- |
-| `data`      | GeoJSON, an array of GeoJSON, or URL  |         |
-| `at`        | `[lon, lat]`, instead of `data`       |         |
-| `filter`    | `(feature) => boolean`                |         |
-| `text`      | `(feature) => string`                 |         |
-| `children`  | snippet given the feature             |         |
-| `altitude`  | metres above ground, × `objectScale`  | `30`    |
-| `declutter` | hide labels that overlap earlier ones | `true`  |
-| `class`     | `string`                              |         |
+| Prop          | Type                                             | Default                      |
+| ------------- | ------------------------------------------------ | ---------------------------- |
+| `data`        | GeoJSON, an array of GeoJSON, or URL             |                              |
+| `at`          | `[lon, lat]`, instead of `data`                  |                              |
+| `filter`      | `(feature) => boolean`                           |                              |
+| `text`        | `(feature) => string`                            |                              |
+| `children`    | snippet given the feature                        |                              |
+| `altitude`    | metres above ground, × `objectScale`             | `30`                         |
+| `declutter`   | hide labels that overlap earlier ones            | `true`                       |
+| `maxDistance` | show only while the view is this close, in radii |                              |
+| `variant`     | `'light'`, `'dark'` or `'halo'`                  | the diorama's `labelVariant` |
+| `class`       | `string`                                         |                              |
 
 A point is labelled where it is, a line at its midpoint and a polygon at its centre. A label
-fades out while the terrain is in front of it. Objects such as trees do not hide labels, and
+fades out while the terrain is in front of it, and while the view is further from what it looks
+at than `maxDistance`, the same measure as the diorama's `distance` (turn on `showDistance` to
+find a good value). Objects such as trees do not hide labels, and
 decluttering only compares labels from the same `<Label>`.
 
-Style labels with `class`, or with the custom properties `--diorama-label-color`,
+Define every label you want and let the diorama decide what shows: `labels={false}` on
+`<Diorama>` hides them all, and its `labelVariant` (default `'dark'`) sets how they look. A
+`dark` label is white text on a translucent black pill, a `light` one dark text on a white
+pill, and a `halo` one bare text with a white glow.
+
+```svelte
+<Diorama src={glb} labels={showLabels} labelVariant="dark">
+	<Label data={lifts} text={(f) => f.properties?.name} maxDistance={1} />
+</Diorama>
+```
+
+Style labels with `class`, or with the
+custom properties `--diorama-label-color`, `--diorama-label-background` (the pill),
 `--diorama-label-halo` and `--diorama-label-size`.
 
 ## Your own layers

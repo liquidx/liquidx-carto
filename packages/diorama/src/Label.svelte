@@ -1,13 +1,14 @@
 <!--
 	Text (or any markup) that floats over a place on the terrain and follows it as the view
-	turns. Labels fade out while the terrain is in front of them. Give `at` with content, or
+	turns. Labels fade out while the terrain is in front of them, or while the view is further
+	than `maxDistance`; the enclosing `<Diorama>` can hide them all with `labels`. Give `at` with content, or
 	`data` with `text`: a line is labelled at its midpoint and a polygon at its centre.
 -->
 <script lang="ts">
 	import type { Feature } from 'geojson';
 	import type { Snippet } from 'svelte';
 	import * as THREE from 'three';
-	import { getDiorama } from './context.js';
+	import { getDiorama, type LabelVariant } from './context.js';
 	import { featureShapes, type GeoJSONSource } from './geojson.svelte.js';
 	import type { LonLat } from './surface.js';
 
@@ -26,6 +27,13 @@
 		altitude?: number;
 		/** Hide a label that would overlap one earlier in the same `data`. */
 		declutter?: boolean;
+		/**
+		 * Show the labels only while the view is at most this far from what it looks at, in
+		 * radii of the model, like the diorama's `distance`. Without it they show at any zoom.
+		 */
+		maxDistance?: number;
+		/** How the label stands off the terrain. Defaults to the diorama's `labelVariant`. */
+		variant?: LabelVariant;
 		class?: string;
 		/** Content of each label, in place of `text`. */
 		children?: Snippet<[feature: Feature]>;
@@ -38,6 +46,8 @@
 		text,
 		altitude = 30,
 		declutter = true,
+		maxDistance = Infinity,
+		variant,
 		class: className,
 		children
 	}: Props = $props();
@@ -116,7 +126,7 @@
 	const screen = new THREE.Vector3();
 	$effect(() => {
 		const current = labels;
-		const { camera, renderer } = diorama.stage;
+		const { camera, controls, renderer } = diorama.stage;
 		// Measured once here, so that frames only write styles.
 		const sizes = current.map((_, i) => [
 			elements[i]?.offsetWidth ?? 0,
@@ -127,13 +137,14 @@
 			camera.updateMatrixWorld();
 			const { clientWidth: w, clientHeight: h } = renderer.domElement;
 			taken.length = 0;
+			const near = camera.position.distanceTo(controls.target) <= maxDistance;
 			current.forEach((label, i) => {
 				const element = elements[i];
 				if (!element) return;
 				screen.copy(label.position).project(camera);
 				const x = ((screen.x + 1) / 2) * w;
 				const y = ((1 - screen.y) / 2) * h;
-				let visible = screen.z < 1 && !hidden(label.position, camera.position);
+				let visible = near && screen.z < 1 && !hidden(label.position, camera.position);
 				if (visible && declutter) {
 					// The label sits centred above its anchor.
 					const box = [x - sizes[i][0] / 2, y - sizes[i][1], x + sizes[i][0] / 2, y];
@@ -149,31 +160,53 @@
 	});
 </script>
 
-{#each labels as label, i (i)}
-	<div class={['diorama-label', className]} bind:this={elements[i]}>
-		{#if children}{@render children(label.feature)}{:else}{label.caption}{/if}
-	</div>
-{/each}
+{#if diorama.labels.visible}
+	{#each labels as label, i (i)}
+		<div
+			class={['diorama-label', variant ?? diorama.labels.variant, className]}
+			bind:this={elements[i]}
+		>
+			{#if children}{@render children(label.feature)}{:else}{label.caption}{/if}
+		</div>
+	{/each}
+{/if}
 
 <style>
 	.diorama-label {
 		position: absolute;
 		top: 0;
 		left: 0;
-		padding-bottom: 2px;
 		font-size: var(--diorama-label-size, 11px);
 		line-height: 1.2;
 		white-space: nowrap;
+		/* Shown once placed. */
+		opacity: 0;
+		pointer-events: none;
+		will-change: transform;
+		transition: opacity 0.2s;
+	}
+	.light,
+	.dark {
+		/* Lifted off the anchor so the pill does not sit on the point it names. */
+		margin-top: -3px;
+		padding: 2px 7px;
+		border-radius: 999px;
+	}
+	.light {
+		color: var(--diorama-label-color, #16191d);
+		background: var(--diorama-label-background, #fff);
+	}
+	.dark {
+		color: var(--diorama-label-color, #fff);
+		background: var(--diorama-label-background, rgb(0 0 0 / 0.6));
+	}
+	.halo {
+		padding-bottom: 2px;
 		color: var(--diorama-label-color, #16191d);
 		/* A halo keeps the text readable over any terrain. */
 		text-shadow:
 			0 0 2px var(--diorama-label-halo, #fff),
 			0 0 2px var(--diorama-label-halo, #fff),
 			0 0 4px var(--diorama-label-halo, #fff);
-		/* Shown once placed. */
-		opacity: 0;
-		pointer-events: none;
-		will-change: transform;
-		transition: opacity 0.2s;
 	}
 </style>
