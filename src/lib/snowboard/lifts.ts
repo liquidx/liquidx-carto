@@ -13,16 +13,21 @@ const TOWER_EVERY = { gondola: 90, chair: 45, cableCar: 90, ropeTow: 90 };
  * Height of the cable at each tower: a cable car's cabin hangs far lower than a chair, and
  * the rope of a rope tow is at arm's height.
  */
-const CABLE_HEIGHT = { gondola: 11, chair: 5.5, cableCar: 17, ropeTow: 1.1 };
-/** The least a chairlift's cable is above the snow anywhere: a chair, a rider's legs and a little. */
-const CHAIR_CLEARANCE = 4.2;
+const CABLE_HEIGHT = { gondola: 11, chair: 8, cableCar: 17, ropeTow: 1.1 };
+/**
+ * The least a chairlift's cable is above the snow anywhere: a chair hangs 3.3 m below it, a
+ * rider's boots a little lower, and they stay about 2.5 m above the snow.
+ */
+const CHAIR_CLEARANCE = 6;
 const GAUGE = 5;
 /**
  * Carrier spacing and speed, metres and metres a second. A cable car has no spacing: just two
  * cabins, one on each side, going up and down their own side in turn.
  */
-const CARRIER_EVERY = { gondola: 70, chair: 26, ropeTow: 12 };
 export const LIFT_SPEED = { gondola: 6, chair: 3.2, cableCar: 8, ropeTow: 2.2 };
+/** Seconds between chairs arriving at a station, which spaces them by their speed. */
+const CHAIR_INTERVAL = 10;
+const CARRIER_EVERY = { gondola: 70, chair: LIFT_SPEED.chair * CHAIR_INTERVAL, ropeTow: 12 };
 /**
  * Where a rider's feet go on each carrier, below the cable, ahead of its hanger and across
  * from its middle, to the right as it travels: on a chair the seat top is 2.5 m down and the

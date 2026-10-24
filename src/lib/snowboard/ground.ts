@@ -8,8 +8,10 @@ import type { Resort } from './resort';
 
 /** Groomed width of a run in metres. */
 export const RUN_WIDTH = 36;
+/** How far past the groomed snow the trees stay. */
+const TREE_MARGIN = 14;
 /** Trees stay this far from a run's centre line, and lifts clear a narrow strip. */
-const TREE_CLEARANCE = RUN_WIDTH / 2 + 14;
+const TREE_CLEARANCE = RUN_WIDTH / 2 + TREE_MARGIN;
 export const LIFT_CLEARANCE = 10;
 /** The mask need only tell a run from the woods... */
 const MASK_METRES_PER_PIXEL = 4;
@@ -56,11 +58,20 @@ export function paintGround(
 			path.map(toPx).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
 			ctx.stroke();
 		};
-		return { w, h, toPx, stroke };
+		/** Fill the polygon of `rings`, the outline and then its holes. */
+		const fill = (ctx: CanvasRenderingContext2D, rings: [number, number][][]) => {
+			ctx.beginPath();
+			for (const ring of rings) {
+				ring.map(toPx).forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+				ctx.closePath();
+			}
+			ctx.fill('evenodd');
+		};
+		return { w, h, toPx, stroke, fill };
 	};
 
 	// Mask: red where trees must stay away, green on groomed snow.
-	const { w: mw, h: mh, toPx: maskPx, stroke: maskStroke } = scaled(maskMpp);
+	const { w: mw, h: mh, toPx: maskPx, stroke: maskStroke, fill: maskFill } = scaled(maskMpp);
 	const maskCanvas = document.createElement('canvas');
 	maskCanvas.width = mw;
 	maskCanvas.height = mh;
@@ -72,6 +83,12 @@ export function paintGround(
 	m.strokeStyle = '#f00';
 	for (const run of resort.runs) maskStroke(m, run.path, TREE_CLEARANCE * 2);
 	for (const lift of resort.lifts) maskStroke(m, lift.path, LIFT_CLEARANCE * 2);
+	// A run mapped as an area: no trees inside it, nor within the margin of its edge.
+	m.fillStyle = '#f00';
+	for (const area of resort.runAreas) {
+		maskFill(m, area.rings);
+		for (const ring of area.rings) maskStroke(m, ring, TREE_MARGIN * 2);
+	}
 	// Yellow keeps the red: the groomed corridor is still no place for a tree.
 	m.strokeStyle = '#ff0';
 	for (const run of resort.runs) maskStroke(m, run.path, RUN_WIDTH);

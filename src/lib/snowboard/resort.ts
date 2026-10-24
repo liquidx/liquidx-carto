@@ -25,6 +25,14 @@ export interface Run {
 	path: [number, number][];
 }
 
+/** A run mapped as an area rather than a line: an open slope or a wide piste. */
+export interface RunArea {
+	id: string;
+	difficulty: Difficulty;
+	/** World x, z of the outline and then any holes, each ring closed. */
+	rings: [number, number][][];
+}
+
 export interface Lift {
 	id: string;
 	name: string;
@@ -44,6 +52,8 @@ export interface Resort {
 	name: string;
 	nameJa?: string;
 	runs: Run[];
+	/** Runs mapped as areas. Trees keep out of them. */
+	runAreas: RunArea[];
 	lifts: Lift[];
 	/** World x, z of the base and the peak, where the data has them. */
 	base?: [number, number];
@@ -104,11 +114,13 @@ const LIFT_KIND: Record<string, Lift['kind']> = {
 
 export function parseResort(features: FeaturesFile, frame: LocalFrame): Resort {
 	const runs: Run[] = [];
+	const runAreas: RunArea[] = [];
 	const lifts: Lift[] = [];
 	const resort: Resort = {
 		name: features.metadata?.name ?? 'Ski resort',
 		nameJa: features.metadata?.nameJa,
 		runs,
+		runAreas,
 		lifts
 	};
 	for (const f of features.features) {
@@ -122,6 +134,13 @@ export function parseResort(features: FeaturesFile, frame: LocalFrame): Resort {
 				difficulty: difficultyOf(f),
 				path: g.coordinates.map(frame.toWorld)
 			});
+		} else if (p.kind === 'runSegment' && (g.type === 'Polygon' || g.type === 'MultiPolygon')) {
+			for (const rings of g.type === 'Polygon' ? [g.coordinates] : g.coordinates)
+				runAreas.push({
+					id: p.id,
+					difficulty: difficultyOf(f),
+					rings: rings.map((ring) => ring.map(frame.toWorld))
+				});
 		} else if (p.kind === 'lift' && g.type === 'LineString') {
 			lifts.push({
 				id: p.id,
