@@ -9,6 +9,13 @@ export type Tool = {
 /** Every tool/experiment listed on the index, in display order. */
 export const tools: Tool[] = [
 	{
+		slug: 'tessera-classifier',
+		title: 'Tessera Classifier',
+		date: '2026-10-24',
+		summary:
+			'mark woods and open ground around a ski resort, and train a classifier of tessera embeddings that maps the rest.'
+	},
+	{
 		slug: 'fuji-sun',
 		title: 'Fuji Sun',
 		date: '2026-10-20',

@@ -33,6 +33,7 @@
 		type TerrainPreset,
 		type TerrainStyle
 	} from '@liquidx/diorama';
+	import Button from '$lib/components/Button.svelte';
 	import Combobox from '$lib/components/Combobox.svelte';
 	import DataCredits from '$lib/components/DataCredits.svelte';
 	import Segmented from '$lib/components/Segmented.svelte';
@@ -49,6 +50,7 @@
 	} from '$lib/diorama/location';
 	import { locationOptions } from '$lib/diorama/locations';
 	import { circleSampler } from '$lib/diorama/sampler';
+	import { readDropped, type Prediction } from '$lib/tessera/labels';
 
 	let { data } = $props();
 
@@ -132,9 +134,54 @@
 	const isBuilding = kind('building');
 	const isRoad = kind('road');
 	const isCarpark = kind('carpark');
+	/**
+	 * Woods to plant instead of the scene's: a prediction from the Tessera Classifier or `pnpm
+	 * tessera-classifier predict`, loaded from disk. It belongs to the resort it was loaded for.
+	 */
+	let woodsOverride = $state.raw<(Prediction & { name: string }) | null>(null);
+	let woodsFrom = $state<'osm' | 'tessera'>('osm');
+	let woodsInput = $state<HTMLInputElement>();
+	let woodsMessage = $state('');
+	$effect(() => {
+		void locationId;
+		untrack(() => {
+			woodsOverride = null;
+			woodsFrom = 'osm';
+			woodsMessage = '';
+		});
+	});
+	async function loadWoods(file: File | undefined) {
+		if (!file) return;
+		let result: ReturnType<typeof readDropped>;
+		try {
+			result = readDropped(JSON.parse(await file.text()));
+		} catch {
+			result = { type: 'unknown' };
+		}
+		if (result.type !== 'prediction') {
+			woodsMessage = `${file.name} is not a tessera prediction`;
+			return;
+		}
+		woodsOverride = { ...result.prediction, name: file.name };
+		woodsFrom = 'tessera';
+		woodsMessage = '';
+	}
+	function removeWoods() {
+		woodsOverride = null;
+		woodsFrom = 'osm';
+	}
+	/** Whether the override was predicted over another square than this scene's. */
+	const woodsElsewhere = $derived.by(() => {
+		const a = woodsOverride?.bounds;
+		const b = (scene as { metadata?: { bounds?: number[] } }).metadata?.bounds;
+		return !!a && !!b && a.some((v, i) => Math.abs(v - b[i]) > 1e-4);
+	});
 	const woods = $derived<FeatureCollection>({
 		type: 'FeatureCollection',
-		features: scene.features.filter(isWood)
+		features: (woodsFrom === 'tessera' && woodsOverride
+			? woodsOverride.features
+			: scene
+		).features.filter(isWood)
 	});
 	/** A lift's name for its label, marked ⛔ when it no longer runs. */
 	function liftName(f: Feature) {
@@ -449,6 +496,37 @@
 			/>
 		</div>
 		<div class="control">
+			<span class="label">woods</span>
+			{#if woodsOverride}
+				<Segmented
+					label="woods from"
+					options={[{ value: 'osm', label: 'openstreetmap' }, { value: 'tessera' }]}
+					bind:value={woodsFrom}
+				/>
+			{:else}
+				<Button size="sm" onclick={() => woodsInput?.click()}>load tessera woods</Button>
+			{/if}
+			<input
+				bind:this={woodsInput}
+				type="file"
+				accept=".geojson,.json"
+				hidden
+				onchange={(e) => {
+					loadWoods(e.currentTarget.files?.[0]);
+					e.currentTarget.value = '';
+				}}
+			/>
+			{#if woodsMessage}
+				<span class="error">{woodsMessage}</span>
+			{:else if woodsOverride}
+				<span class="note">
+					{woodsOverride.name}{#if woodsElsewhere}: <span class="warn">made for another square</span
+						>{/if} ·
+					<button class="link" type="button" onclick={removeWoods}>remove</button>
+				</span>
+			{/if}
+		</div>
+		<div class="control">
 			<span class="label">labels</span>
 			<Segmented
 				label="label style"
@@ -625,6 +703,19 @@
 	.error {
 		font-size: var(--text-small);
 		color: var(--color-danger);
+	}
+	.warn {
+		color: var(--color-warn);
+	}
+	.link {
+		padding: 0;
+		font: inherit;
+		color: var(--color-text-secondary);
+		background: none;
+		border: 0;
+		text-decoration: underline;
+		text-underline-offset: 3px;
+		cursor: pointer;
 	}
 	@media (max-width: 640px) {
 		.stage {

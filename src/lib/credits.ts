@@ -135,6 +135,12 @@ export const CREDITS = {
 		use: 'resorts, their runs and lifts, scene and terrain models',
 		url: 'https://snowline.jp'
 	},
+	tessera: {
+		name: 'tessera',
+		by: 'university of cambridge eeg and dclimate · cc by-sa',
+		use: 'embeddings the classifier is trained on',
+		url: 'https://geotessera.org'
+	},
 	openSkiData: {
 		name: 'openskidata',
 		by: 'openskidata.org · © openstreetmap contributors, odbl',

@@ -20,7 +20,12 @@ export default defineConfig({
 			'three/addons/exporters/GLTFExporter.js',
 			'three/addons/objects/Sky.js',
 			'three/addons/loaders/GLTFLoader.js',
-			'three/addons/libs/meshopt_decoder.module.js'
+			'three/addons/libs/meshopt_decoder.module.js',
+			'three/addons/utils/BufferGeometryUtils.js',
+			'proj4',
+			'zarrita',
+			// zarrita loads its codecs when an array first needs one.
+			'zarrita > numcodecs/blosc'
 		]
 	},
 	worker: { format: 'es' },

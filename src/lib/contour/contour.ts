@@ -185,6 +185,26 @@ export function traceContours(grid: Grid, opts: ContourOptions): ContourLevel[] 
 	return levels;
 }
 
+/**
+ * The lines where the grid crosses `t`, in grid coordinates (point (i, j) at (i, j)), with the
+ * side at or above `t` counted as inside. They close unless they reach the edge or nodata.
+ */
+export function traceLevelLines(grid: Grid, t: number): Float32Array[] {
+	const { width: w, height: h, data } = grid;
+	const cells: number[] = [];
+	for (let j = 0; j < h - 1; j++) {
+		for (let i = 0; i < w - 1; i++) {
+			const a = data[j * w + i];
+			const b = data[j * w + i + 1];
+			const c = data[(j + 1) * w + i + 1];
+			const d = data[(j + 1) * w + i];
+			if (Number.isNaN(a) || Number.isNaN(b) || Number.isNaN(c) || Number.isNaN(d)) continue;
+			if (Math.min(a, b, c, d) < t && t <= Math.max(a, b, c, d)) cells.push(j * (w - 1) + i);
+		}
+	}
+	return traceLevel(data, w, Uint32Array.from(cells), t, 1, 1);
+}
+
 // Edge ids: horizontal edge from (i, j) to (i+1, j) is 2*(j*w+i); vertical edge from (i, j) to
 // (i, j+1) is 2*(j*w+i)+1. Every crossing point lives on exactly one edge, shared by ≤ 2 cells.
 

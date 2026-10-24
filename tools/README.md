@@ -4,16 +4,17 @@ Command-line tools that fetch, build and explore the data behind the prototypes.
 TypeScript run directly by Node's type stripping, so shared code in `src/lib` uses relative
 imports with `.ts` extensions. They're type-checked with the app by `pnpm check`.
 
-| Command                    | Prototype         | What it does                                                           |
-| -------------------------- | ----------------- | ---------------------------------------------------------------------- |
-| `pnpm ev-jp`               | EV Charging Japan | builds charger, distance-grid and route data from the source           |
-| `pnpm japan-train-lines`   | Japan Train Lines | downloads railway data, builds region polygons and line index          |
-| `pnpm tokyo-outline`       | Tokyo Outline     | builds tokyo's coastline, borders and municipal shapes from the source |
-| `pnpm diorama-scene`       | Snow Diorama      | fetches woods, water, buildings, roads and car parks for a ski resort  |
-| `pnpm diorama-glb`         | Mountain Diorama  | exports the diorama GLB for a features file, without a browser         |
-| `pnpm snowboard-locations` | Snowboard Sim     | lists the ids of the locations with terrain data, for the sim's picker |
-| `pnpm odpt`                | transit           | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                        |
-| `pnpm ekispert`            | transit           | 駅すぱあと API (see `docs/TRANSIT.md`)                                 |
+| Command                    | Prototype          | What it does                                                           |
+| -------------------------- | ------------------ | ---------------------------------------------------------------------- |
+| `pnpm ev-jp`               | EV Charging Japan  | builds charger, distance-grid and route data from the source           |
+| `pnpm japan-train-lines`   | Japan Train Lines  | downloads railway data, builds region polygons and line index          |
+| `pnpm tokyo-outline`       | Tokyo Outline      | builds tokyo's coastline, borders and municipal shapes from the source |
+| `pnpm diorama-scene`       | Snow Diorama       | fetches woods, water, buildings, roads and car parks for a ski resort  |
+| `pnpm diorama-glb`         | Mountain Diorama   | exports the diorama GLB for a features file, without a browser         |
+| `pnpm tessera-classifier`  | Tessera Classifier | trains a classifier of tessera embeddings, maps a scene's woods        |
+| `pnpm snowboard-locations` | Snowboard Sim      | lists the ids of the locations with terrain data, for the sim's picker |
+| `pnpm odpt`                | transit            | ODPT GTFS feeds and API (see `docs/TRANSIT.md`)                        |
+| `pnpm ekispert`            | transit            | 駅すぱあと API (see `docs/TRANSIT.md`)                                 |
 
 Run any of them with `help` for their subcommands.
 
@@ -90,6 +91,66 @@ newer mapping.
 
 Source: © OpenStreetMap contributors, ODbL, via Overture Maps. Some building footprints are
 Overture's own (Microsoft and Google), with no OpenStreetMap id.
+
+## tessera-classifier
+
+```sh
+pnpm tessera-classifier train ~/Downloads/appi-kogen-tessera-labels.geojson [more.geojson …]
+pnpm tessera-classifier predict static/diorama/appi-kogen-scene.geojson
+pnpm tessera-classifier predict https://content.snowline.jp/terrain/niseko-scene.geojson \
+  --scene-out data/tessera-classifier/niseko-scene.geojson
+```
+
+[Tessera](https://geotessera.org) publishes a 128-number embedding for every 10 m pixel of land
+each year, from a year of Sentinel-1 and -2 imagery; pixels that look and change alike through the
+year sit close together, so a simple classifier trained on a few labelled areas tells kinds of
+ground apart well. The tool runs `src/lib/tessera`, the code the /tessera-classifier page trains
+and predicts with in the browser, so a model or prediction from either works in the other.
+
+The classes are defined on the /tessera-classifier page (**edit classes**): `woods` and `open`
+ground to start, with a name, a colour and, for one to be mapped, the scene `kind` its areas
+become (`woods` as `kind: wood`, which the dioramas plant trees in); one without is there to be
+told apart from the rest. The list is kept in the browser and written into every labels file
+exported, as `metadata.classes`, which is where `train` reads it from; a label naming a class no
+file defines gets one of its own, unmapped. Labels from before the rename, `trees`, are read as
+`woods`.
+
+1. Label on the /tessera-classifier page: areas (or points) of each class, at least two of each
+   and spread over the scene, and export them. The labels file is GeoJSON with a `label` on each
+   feature, which the geotessera `classify` examples read too.
+2. `train` reads the embedding of every pixel under each area (up to 400 an area, `--per-area`)
+   and at each point, and fits logistic regression on them scaled to unit length, a class against
+   the rest, for every class with labels. Its L2 penalty is picked from five by how well it does
+   on labels held out a whole label at a time: the honest number, as pixels of one area are too
+   alike to test each other. The model is a JSON file of 128 weights and a bias a class, with the
+   classes it learned, `data/tessera-classifier/model.json` unless `-o` says otherwise; train on
+   the labels of several resorts at once to generalise.
+3. `predict` maps the chance of each class over the scene's square (its `metadata.bounds`),
+   traces where a mapped class's crosses 0.5 (`--threshold`) with marching squares, drops areas
+   and holes under 600 m² (`--min-area`), and writes the rest beside the scene as
+   `<name>-tessera.geojson` (under `data/tessera-classifier/` for a URL): polygons of the class's
+   `kind` with `source: "tessera"`, its `class`, an `areaM2` and a `confidence`, the chances as an
+   image in the metadata, and how they compare with the scene's own features of that kind.
+   `--scene-out` writes the scene with its features of the mapped kinds swapped for these, which
+   the dioramas read unchanged.
+4. To see the woods planted, use **load tessera woods** on the Snow Diorama page: it switches the
+   resort's trees between the OpenStreetMap woods and the file's, and warns when the file was
+   predicted over another resort's square. Nothing is uploaded; reload or change resort to drop it.
+5. Drop the prediction on the /tessera-classifier page to see where it went wrong, label more
+   there, and train again.
+
+Embeddings are read with [zarrita](https://github.com/manzt/zarrita.js) straight from the public
+Zarr stores geotessera's `GeoTesseraZarr` reads: Tessera 1.1 (`v1.1-dclimate`, the one it
+recommends) for 2025 unless `train --version v1|v1.1|v2 --year …` says otherwise. Each release
+is filled in a year at a time, so a place can have only a few years in one (Appi has 2018–2025
+in 1.1, 2020–2024 in 1.0, 2017 and 2024 in the 2 beta); the page offers only the years at the
+square, and keeps a model for each release and year to compare. A model remembers its release
+and year and `predict` reads the same, as releases are not comparable. A scene's square is about
+50 MB, kept in `data/tessera-classifier/zarr-cache` (safe to delete) and, on the page, by the
+browser's Cache API. The scales that turn the int8 embeddings back into floats are only read for
+where there is data, as a unit-length embedding doesn't change with them.
+
+Source: Tessera, University of Cambridge EEG and dClimate, CC BY-SA.
 
 ## diorama-glb
 

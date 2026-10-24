@@ -21,6 +21,7 @@
 		"diorama-glb": "node --import ./tools/node-env.ts tools/diorama-glb.ts",
 		"diorama-scene": "node tools/diorama-scene.ts",
 		"snowboard-locations": "node tools/snowboard-locations.ts",
+		"tessera-classifier": "node tools/tessera-classifier.ts",
 		"japan-train-lines": "node tools/japan-train-lines.ts",
 		"tokyo-outline": "node --import ./tools/node-env.ts tools/tokyo-outline.ts"
 	},
@@ -61,6 +62,8 @@
 		"@lucide/svelte": "^1.48.0",
 		"fflate": "^0.8.3",
 		"maplibre-gl": "^6.11.1",
-		"three": "^0.186.0"
+		"proj4": "^2.22.0",
+		"three": "^0.186.0",
+		"zarrita": "^0.7.5"
 	}
 }
