@@ -481,6 +481,8 @@
 					clearance={treeClearance}
 					density={6000}
 					height={16}
+					snow={terrain === 'snow' ? undefined : 0.15}
+					bare={terrain === 'snow' ? undefined : 0}
 					limit={400_000}
 				/>
 			{/if}

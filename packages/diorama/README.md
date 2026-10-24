@@ -206,19 +206,23 @@ own.
 </Diorama>
 ```
 
-| Component  | Reads               | Draws                                                  | Main props                                                                           |
-| ---------- | ------------------- | ------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `avoid`, `clearance`, `minSize` |
-| `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`                  |
-| `Carpet`   | lines               | a magic carpet: a moving belt on the ground, railed    | `width`, `color`, `railColor`, `speed`                                               |
-| `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                                        |
-| `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor`            |
-| `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                                  |
-| `Marker`   | points              | a pin                                                  | `height`, `head` (width of the ball), `color`                                        |
+| Component  | Reads               | Draws                                                  | Main props                                                                                                        |
+| ---------- | ------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+| `Trees`    | polygons            | conifers scattered over each area                      | `density` (per km²), `height`, `variation`, `color`, `snow`, `bare`, `bareColor`, `avoid`, `clearance`, `minSize` |
+| `Lift`     | lines               | towers, cables, end stations and moving carriers       | `towerEvery`, `height`, `color`, `carrier`, `carrierEvery`, `speed`                                               |
+| `Carpet`   | lines               | a magic carpet: a moving belt on the ground, railed    | `width`, `color`, `railColor`, `speed`                                                                            |
+| `Riders`   | lines               | snowboarders carving down each run                     | `every`, `speed`, `height`, `carve`, `colors`                                                                     |
+| `Building` | polygons and points | a footprint extruded with a flat roof, or a gabled box | `height`, `footprint` (`[width, depth]`), `heading`, `color`, `roofColor`                                         |
+| `Model`    | points              | copies of your own glTF, GLB or three.js object        | `src`, `size` (longest side), `heading`, `altitude`                                                               |
+| `Marker`   | points              | a pin                                                  | `height`, `head` (width of the ball), `color`                                                                     |
 
 They all take `data` and `filter` like `Drape`, so several can read the same file. `Building`,
 `Model` and `Marker` also take `at={[lon, lat]}` for a single position. Sizes are in metres.
 A `Building` that would reach past the rim of the diorama is left out.
+`Trees` are winter woods unless you say otherwise: `snow` (0 to 1, default 0.7) whitens the
+tree tops and the ground at the edge of the woods, and `bare` (default 0.35) is the share of
+trees that are leafless, drawn in `bareColor`. For summer woods set `snow={0.15}` and
+`bare={0}`.
 Props typed as `PerFeature` (colours, sizes, headings, the carrier props, the `clearance` of
 `Trees` from each thing it avoids) accept a value or a function of the feature.
 

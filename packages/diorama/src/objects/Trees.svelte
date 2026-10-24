@@ -29,6 +29,15 @@
 		/** How much heights vary, as a fraction of `height`. */
 		variation?: number;
 		color?: THREE.ColorRepresentation;
+		/**
+		 * How much snow lies on the trees, 0 to 1: their tops and the ground at the edge of the
+		 * woods turn that far towards white.
+		 */
+		snow?: number;
+		/** The share of trees that are leafless, 0 to 1, such as beech and birch in winter. */
+		bare?: number;
+		/** Colour of the leafless trees. */
+		bareColor?: THREE.ColorRepresentation;
 		/** Lines and polygon outlines to keep trees away from. */
 		avoid?: GeoJSONSource;
 		/** Distance in metres to keep from `avoid`: one for everything, or by feature. */
@@ -53,6 +62,9 @@
 		height = 14,
 		variation = 0.35,
 		color = '#56a65d',
+		snow = 0.7,
+		bare = 0.35,
+		bareColor = '#7a6656',
 		avoid,
 		clearance = 20,
 		seed = 1,
@@ -111,8 +123,6 @@
 	const SIDES = 7;
 	/** How high a clump is in the middle, under the tree tops, as a fraction of their height. */
 	const UNDER = 0.5;
-	/** How far towards white the clumps are from the colour of the trees, as if under some snow. */
-	const SNOWED = 0.15;
 	/** How far past a level's range the view goes before the level changes, in levels. */
 	const STICK = 0.15;
 
@@ -315,9 +325,29 @@
 			);
 		};
 		if (!room(0, 0, across, across)) return;
-		// A cone standing on its base, one unit tall. The base is in the ground, so it has none.
-		const geometry = new THREE.ConeGeometry(0.5, 1, 6, 1, true).translate(0, 0.5, 0);
-		const material = new THREE.MeshStandardMaterial({ roughness: 0.95, flatShading: true });
+		const white = new THREE.Color('#ffffff');
+		const evergreen = new THREE.Color(color);
+		const leafless = new THREE.Color(bareColor);
+		/** The colour `height` of the way up a tree, 0 to 1, snowed on towards the top. */
+		const snowed = (leaves: THREE.Color, height: number, target = new THREE.Color()) =>
+			target.copy(leaves).lerp(white, Math.min(1, snow * height * height));
+		// A cone standing on its base, one unit tall, white towards the tip as snow allows. The
+		// base is in the ground, so it has none. One for each kind of tree.
+		const cone = (leaves: THREE.Color) => {
+			const shape = new THREE.ConeGeometry(0.5, 1, 6, 2, true).translate(0, 0.5, 0);
+			const heights = shape.getAttribute('position');
+			const colours = new Float32Array(heights.count * 3);
+			for (let n = 0; n < heights.count; n++)
+				snowed(leaves, heights.getY(n)).toArray(colours, n * 3);
+			shape.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
+			return shape;
+		};
+		const cones = [cone(evergreen), cone(leafless)];
+		const material = new THREE.MeshStandardMaterial({
+			roughness: 0.95,
+			flatShading: true,
+			vertexColors: true
+		});
 		const clumpMaterial = new THREE.MeshStandardMaterial({
 			roughness: 0.95,
 			flatShading: true,
@@ -328,24 +358,36 @@
 		const turn = new THREE.Quaternion();
 		const scale = new THREE.Vector3();
 		const up = new THREE.Vector3(0, 1, 0);
-		const base = new THREE.Color(color);
-		const pale = base.clone().lerp(new THREE.Color('#ffffff'), SNOWED);
 		const tint = new THREE.Color();
+		const shade = new THREE.Color();
+		/** Whether the tree of a cell of the scatter is leafless. */
+		const isBare = (ix: number, iz: number) => hash(ix, iz, 6) < bare;
 
-		/** A square's trees, one by one. */
+		/** A square's trees, one by one: the evergreen ones and the leafless ones. */
 		const stand = (members: Spot[]) => {
-			if (!members.length) return null;
-			const trees = new THREE.InstancedMesh(geometry, material, members.length);
-			members.forEach(([x, y, z, a, b], i) => {
-				const h = treeHeight * (1 + (a * 2 - 1) * variation);
-				// Sit slightly into the ground so no gap shows on a slope.
-				position.set(x, y - h * 0.04, z);
-				turn.setFromAxisAngle(up, b * Math.PI * 2);
-				scale.set(h * 0.34, h, h * 0.34);
-				trees.setMatrixAt(i, matrix.compose(position, turn, scale));
-				trees.setColorAt(i, tint.copy(base).offsetHSL(0, 0, (b - 0.5) * 0.08));
+			const kinds = [
+				members.filter((m) => !isBare(m[6], m[7])),
+				members.filter((m) => isBare(m[6], m[7]))
+			];
+			const meshes = kinds.flatMap((kind, k) => {
+				if (!kind.length) return [];
+				const trees = new THREE.InstancedMesh(cones[k], material, kind.length);
+				kind.forEach(([x, y, z, a, b], i) => {
+					const h = treeHeight * (1 + (a * 2 - 1) * variation);
+					// Sit slightly into the ground so no gap shows on a slope.
+					position.set(x, y - h * 0.04, z);
+					turn.setFromAxisAngle(up, b * Math.PI * 2);
+					scale.set(h * 0.34, h, h * 0.34);
+					trees.setMatrixAt(i, matrix.compose(position, turn, scale));
+					// A little lighter or darker, over the colours of the cone.
+					trees.setColorAt(i, tint.setScalar(0.92 + b * 0.16));
+				});
+				return [trees];
 			});
-			return trees;
+			if (!meshes.length) return null;
+			const group = new THREE.Group();
+			group.add(...meshes);
+			return group;
 		};
 
 		/**
@@ -359,7 +401,13 @@
 			const mound = (i: number, j: number, k: number) => {
 				const a = hash(i, j, 7 + k);
 				const b = hash(i, j, 8 + k);
-				tint.copy(pale).offsetHSL(0, 0, (b - 0.5) * 0.08);
+				// The cover is the trees' colours mixed in about the share of each, a little
+				// lighter or darker.
+				const mixed = Math.min(1, bare * (0.5 + hash(i, j, 13 + k)));
+				const leaves = new THREE.Color()
+					.copy(evergreen)
+					.lerp(leafless, mixed)
+					.offsetHSL(0, 0, (b - 0.5) * 0.08);
 				const h = treeHeight * (1 + (a * 2 - 1) * variation);
 				// Whether it is in the middle of the woods, with trees all round its block.
 				const within = room(i - k / 2, j - k / 2, k * 2, k * 2) === k * k * 4;
@@ -375,11 +423,13 @@
 				const wander = within ? k * 0.3 : (k * (1 - spread)) / 2 + 0.25;
 				const x = (i - half + k / 2 + (a * 2 - 1) * wander) * cell;
 				const z = (j - half + k / 2 + (b * 2 - 1) * wander) * cell;
-				const face = (...corners: number[][]) => {
-					for (const corner of corners) {
+				/** A triangle, coloured at each corner by how far up a tree it is, 0 to 1. */
+				const face = (corners: number[][], heights: number[], colour: THREE.Color) => {
+					corners.forEach((corner, n) => {
 						points.push(...corner);
-						colours.push(tint.r, tint.g, tint.b);
-					}
+						snowed(colour, heights[n], shade);
+						colours.push(shade.r, shade.g, shade.b);
+					});
 				};
 				/** A point `out` from (cx, cz) at a turn of `at`, `y` above the ground there. */
 				const around = (cx: number, cz: number, at: number, out: number, y: number) => {
@@ -396,7 +446,13 @@
 				const rim = Array.from({ length: SIDES }, (_, n) =>
 					around(x, z, a + n / SIDES, reach * (0.85 + hash(i + n, j, 9 + k) * 0.35), -h * 0.04)
 				);
-				rim.forEach((corner, n) => face(corner, rim[(n + 1) % SIDES], middle));
+				// The rim is where the snow on the ground meets the woods; the middle is under the
+				// canopy's snow, as high as the tree tops when it is the one tree.
+				const rimSnow = 1;
+				const middleSnow = tips ? 0.75 : 1;
+				rim.forEach((corner, n) =>
+					face([corner, rim[(n + 1) % SIDES], middle], [rimSnow, rimSnow, middleSnow], leaves)
+				);
 				for (let n = 0; n < tips; n++) {
 					const c = hash(i + n, j - n, 11 + k);
 					const d = hash(i - n, j + n, 12 + k);
@@ -408,9 +464,10 @@
 					const foot = h * (UNDER * (1 - out) - 0.2);
 					const width = Math.max(reach * (0.2 + c * 0.12), cell * 0.25);
 					const base = [0, 1, 2].map((m) => around(tx, tz, c + m / 3, width, foot));
-					tint.offsetHSL(0, 0, (d - 0.5) * 0.04);
-					base.forEach((corner, m) => face(corner, base[(m + 1) % 3], tip));
-					tint.offsetHSL(0, 0, (0.5 - d) * 0.04);
+					tint
+						.copy(hash(i + n, j + n, 14 + k) < bare ? leafless : evergreen)
+						.offsetHSL(0, 0, (b - 0.5) * 0.08 + (d - 0.5) * 0.04);
+					base.forEach((corner, m) => face([corner, base[(m + 1) % 3], tip], [0.4, 0.4, 1], tint));
 				}
 			};
 			const fill = (i: number, j: number, k: number) => {
@@ -445,7 +502,7 @@
 			spots: Spot[];
 			bounds: THREE.Sphere;
 			/** Trees first, then each of `CLUMPS`; null where there is nothing to draw. */
-			levels: (THREE.Mesh | null | undefined)[];
+			levels: (THREE.Object3D | null | undefined)[];
 			level: number;
 		};
 		const squares: Square[] = [];
@@ -483,13 +540,13 @@
 			const j = Math.floor((spot[7] + half) / side);
 			byPlace[j * columns + i]?.spots.push(spot);
 		}
-		const made: THREE.Mesh[] = [];
+		const made: THREE.Object3D[] = [];
 		const make = (square: Square, level: number) => {
 			const mesh = level
 				? clumps(square.i, square.j, side, CLUMPS[level - 1])
 				: stand(square.spots);
 			if (!mesh) return null;
-			mesh.castShadow = mesh.receiveShadow = true;
+			mesh.traverse((part) => (part.castShadow = part.receiveShadow = true));
 			mesh.visible = false;
 			made.push(mesh);
 			diorama.group.add(mesh);
@@ -537,11 +594,13 @@
 		return () => {
 			stopFrames();
 			diorama.group.remove(...made);
-			for (const mesh of made) {
-				if (mesh instanceof THREE.InstancedMesh) mesh.dispose();
-				else mesh.geometry.dispose();
+			for (const object of made) {
+				object.traverse((part) => {
+					if (part instanceof THREE.InstancedMesh) part.dispose();
+					else if (part instanceof THREE.Mesh) part.geometry.dispose();
+				});
 			}
-			geometry.dispose();
+			for (const shape of cones) shape.dispose();
 			material.dispose();
 			clumpMaterial.dispose();
 		};
