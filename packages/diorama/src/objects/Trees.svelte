@@ -1,7 +1,8 @@
 <!--
 	Placeholder tree cover: low-poly conifers scattered over the polygons in `data`, standing on
 	the terrain. The scatter is the same every time for a given `seed`. Give `avoid` the lines
-	or areas to keep clear, such as ski runs.
+	or areas to keep clear, such as ski runs: no tree stands inside an area, or nearer its
+	outline or a line than the clearance.
 
 	From afar, where a tree would be a speck, each clump of trees is one low mound with a few
 	tree tops standing out of it, as tall as they are, and the clumps are larger the further away they are, until the woods are a cover
@@ -38,7 +39,7 @@
 		bare?: number;
 		/** Colour of the leafless trees. */
 		bareColor?: THREE.ColorRepresentation;
-		/** Lines and polygon outlines to keep trees away from. */
+		/** Lines and polygons to keep trees away from: off the lines, and out of the polygons. */
 		avoid?: GeoJSONSource;
 		/** Distance in metres to keep from `avoid`: one for everything, or by feature. */
 		clearance?: PerFeature<number>;
@@ -189,6 +190,34 @@
 				}
 			}
 		}
+		// The polygons to avoid by the squares their bounds cover, each as its edges: x0, z0, x1,
+		// z1 one after another, holes included.
+		const areasNear: number[][][] = [];
+		for (const shape of obstacles.current) {
+			if (shape.kind !== 'polygon') continue;
+			const edges: number[] = [];
+			let x0 = Infinity,
+				x1 = -Infinity,
+				z0 = Infinity,
+				z1 = -Infinity;
+			for (const ring of shape.coords) {
+				const p = ring.map(diorama.toModel);
+				for (let i = 0, j = p.length - 1; i < p.length; j = i++) {
+					edges.push(...p[j], ...p[i]);
+					x0 = Math.min(x0, p[i][0]);
+					x1 = Math.max(x1, p[i][0]);
+					z0 = Math.min(z0, p[i][1]);
+					z1 = Math.max(z1, p[i][1]);
+				}
+			}
+			if (!edges.length) continue;
+			for (let j = square(z0); j <= square(z1); j++)
+				for (let i = square(x0); i <= square(x1); i++)
+					(areasNear[j * across + i] ??= []).push(edges);
+		}
+		/** Whether (x, z) is inside any of the polygons to avoid. */
+		const inArea = (x: number, z: number) =>
+			areasNear[square(z) * across + square(x)]?.some((edges) => inside(x, z, edges)) ?? false;
 		/** The least slack to any segment, measured no further than `reach` past its clearance. */
 		const slackAt = (x: number, z: number) => {
 			let slack = reach;
@@ -251,8 +280,8 @@
 					const z = (iz + hash(ix, iz, 2)) * cell;
 					if (x * x + z * z > 0.97 || !inside(x, z, edges)) continue;
 					const slack = slackAt(x, z);
-					// Too close whatever the size of the trees.
-					if (slack < 0) continue;
+					// Too close whatever the size of the trees, or in an area to keep clear.
+					if (slack < 0 || inArea(x, z)) continue;
 					seen.add(key);
 					found.push([x, z, ix, iz, slack]);
 				}

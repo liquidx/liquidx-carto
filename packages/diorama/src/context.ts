@@ -26,6 +26,11 @@ export interface DioramaContext extends DioramaSurface {
 	stage: Stage;
 	/** The overlays drawn on the terrain surface. */
 	drapes: DrapeCompositor;
+	/**
+	 * How far the view is from what it looks at, in radii of the model, as the diorama's
+	 * `distance`. Read it inside an effect or derived to follow the zoom.
+	 */
+	readonly distance: number;
 	/** Whether `Label` children are shown, and how they look unless they say otherwise. */
 	labels: { readonly visible: boolean; readonly variant: LabelVariant };
 }

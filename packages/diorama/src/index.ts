@@ -7,8 +7,28 @@ export { default as Trees } from './objects/Trees.svelte';
 export { default as Lift } from './objects/Lift.svelte';
 export { default as Carpet } from './objects/Carpet.svelte';
 export { default as Riders } from './objects/Riders.svelte';
+export { default as SkiRuns } from './objects/SkiRuns.svelte';
+export { default as SkiLifts } from './objects/SkiLifts.svelte';
 export { default as Marker } from './objects/Marker.svelte';
 export { default as Building } from './objects/Building.svelte';
+export {
+	carrierSpacing,
+	carrierWidth,
+	difficultyOf,
+	isArea,
+	isLift,
+	isOutOfService,
+	isRun,
+	LIFT_METRICS,
+	LIFT_MODELS,
+	liftKind,
+	liftSpeed,
+	paler,
+	RUN_COLORS,
+	seats,
+	type Difficulty,
+	type LiftKind
+} from './ski.js';
 export { getDiorama, type DioramaContext, type LabelVariant } from './context.js';
 export {
 	terrainStyles,

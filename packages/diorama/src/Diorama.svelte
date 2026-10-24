@@ -291,6 +291,9 @@
 			group,
 			stage: s,
 			drapes,
+			get distance() {
+				return distance ?? Infinity;
+			},
 			labels: {
 				get visible() {
 					return labels;

@@ -222,7 +222,8 @@ A `Building` that would reach past the rim of the diorama is left out.
 `Trees` are winter woods unless you say otherwise: `snow` (0 to 1, default 0.7) whitens the
 tree tops and the ground at the edge of the woods, and `bare` (default 0.35) is the share of
 trees that are leafless, drawn in `bareColor`. For summer woods set `snow={0.15}` and
-`bare={0}`.
+`bare={0}`. Trees keep `clearance` metres off the lines in `avoid`, and out of its polygons
+altogether.
 Props typed as `PerFeature` (colours, sizes, headings, the carrier props, the `clearance` of
 `Trees` from each thing it avoids) accept a value or a function of the feature.
 
@@ -355,6 +356,53 @@ pill, and a `halo` one bare text with a white glow.
 Style labels with `class`, or with the
 custom properties `--diorama-label-color`, `--diorama-label-background` (the pill),
 `--diorama-label-halo` and `--diorama-label-size`.
+
+## Ski resorts
+
+`SkiRuns` and `SkiLifts` draw a resort's runs and lifts straight from its features, read as
+OpenSkiData has them (as snowline serves them): runs are `kind: 'runSegment'` with a
+`difficulty`, lifts `kind: 'lift'` with a `liftType`, `occupancy`, `bubble`, `status`, and a
+`lengthMeters` and `durationSecs` where known. Give them the whole file; each picks out its own.
+
+```svelte
+<Diorama src={glb} terrain="snow">
+	<SkiRuns data={features} />
+	<SkiLifts data={features} />
+</Diorama>
+```
+
+`SkiRuns` drapes a run mapped as a line in its difficulty's colour, and washes a run mapped as an
+area with it. The colours pale as the view closes in, where a run is wide on screen.
+
+| Prop          | Meaning                                                | Default                 |
+| ------------- | ------------------------------------------------------ | ----------------------- |
+| `colors`      | `{ easy, intermediate, advanced, other }` as #rrggbb   | green, red, black, grey |
+| `width`       | line width, in pixels of the diorama 1024 across       | `3`                     |
+| `areaOpacity` | opacity of a run mapped as an area                     | `0.65`                  |
+| `areaOutline` | outline width of an area in its own colour, 0 for none | `0.5`                   |
+| `paleness`    | 0 to 1 towards white; without it, follows the zoom     |                         |
+| `filter`      | which features are runs                                | `kind: 'runSegment'`    |
+
+`SkiLifts` puts chair lifts, gondolas, cable cars and rope tows on `Lift`, and magic carpets on
+`Carpet`, with the built-in models: a chair for the seats it has, with its bubble hood if it has
+one, a gondola cabin or a cable car, and a station at each end of a chair lift. A lift that no
+longer runs keeps its towers and cable but has no carriers.
+
+| Kind      | Cable at towers | Least cable height | Speed with no ride time | Carriers       |
+| --------- | --------------- | ------------------ | ----------------------- | -------------- |
+| chair     | 8 m             | 6 m                | 2 m/s, a quad 4 m/s     | one every 10 s |
+| gondola   | 14 m            |                    | 5 m/s                   | every 45 m     |
+| cable car | 20 m            |                    | 8 m/s                   | two, shuttling |
+| rope tow  | 1.1 m           |                    | 2 m/s                   | every 12 m     |
+| carpet    |                 |                    | 0.7 m/s                 |                |
+
+Chairs hang 3.3 m below the cable, so a chair lift's keeps them about 2.5 m off the snow, and
+spacing chairs by time puts a slow double's close together and a fast quad's far apart. Pass
+`moving={false}` to stop everything, `chairColor` and `cabinColor` for carriers without a
+model, and any other prop of `Lift` (`height`, `carrierEvery`, `speed`, `carrierModel`…) to
+override its default for every lift. The numbers are `LIFT_METRICS`, and the functions behind
+them (`liftKind`, `liftSpeed`, `carrierSpacing`, `carrierWidth`, `isOutOfService`) are exported
+to build your own overrides from.
 
 ## Your own layers
 

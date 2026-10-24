@@ -10,27 +10,23 @@
 <script lang="ts">
 	import type { Feature, FeatureCollection, Polygon } from 'geojson';
 	import { untrack } from 'svelte';
-	import chairlift1 from '@liquidx/diorama/models/chairlift-1.glb?url';
-	import chairlift2 from '@liquidx/diorama/models/chairlift-2.glb?url';
-	import chairlift3 from '@liquidx/diorama/models/chairlift-3.glb?url';
-	import chairlift4 from '@liquidx/diorama/models/chairlift-4.glb?url';
-	import gondola from '@liquidx/diorama/models/gondola.glb?url';
-	import liftStation from '@liquidx/diorama/models/lift-station.glb?url';
-	import ropeway from '@liquidx/diorama/models/ropeway.glb?url';
 	import { replaceState } from '$app/navigation';
 	import { asset, resolve } from '$app/paths';
 	import {
 		Building,
-		Carpet,
 		Compass,
 		Diorama,
 		Drape,
 		Label,
-		Lift,
 		Marker,
 		Riders,
+		SkiLifts,
+		SkiRuns,
 		Trees,
 		buildDiorama,
+		isOutOfService,
+		type Difficulty,
+		RUN_COLORS,
 		terrainStyles,
 		type DioramaData,
 		type LabelVariant,
@@ -140,80 +136,15 @@
 		type: 'FeatureCollection',
 		features: scene.features.filter(isWood)
 	});
-	const isGondola = (f: Feature) => f.properties?.liftType === 'gondola';
-	/** An aerial tramway: two big cabins that shuttle up and down, one on each side. */
-	const isCableCar = (f: Feature) => f.properties?.liftType === 'cable_car';
-	const isCabin = (f: Feature) => isGondola(f) || isCableCar(f);
-	/** A rope at arm's height with balls to hold on to, and no stations. */
-	const isRopeTow = (f: Feature) => f.properties?.liftType === 'rope_tow';
-	/** A magic carpet is a belt on the snow, not a cable in the air. */
-	const isCarpet = (f: Feature) => f.properties?.liftType === 'magic_carpet';
-	const isAerial = (f: Feature) => isLift(f) && !isCarpet(f);
-	const isMagicCarpet = (f: Feature) => isLift(f) && isCarpet(f);
-	const seats = (f: Feature): number => f.properties?.occupancy ?? 2;
-	/** The chair models there are, by how many they seat. */
-	const chairlifts: Record<number, string> = {
-		1: chairlift1,
-		2: chairlift2,
-		3: chairlift3,
-		4: chairlift4
-	};
-	/** Width of a carrier in metres: a seat's worth each for a chair, a cabin by how many it holds. */
-	function carrierWidth(f: Feature) {
-		const n = seats(f);
-		if (isCableCar(f)) return 2.8;
-		if (isRopeTow(f)) return 0.3;
-		if (!isGondola(f)) return n * 0.55 + 0.2;
-		return n >= 8 ? 2.4 : n >= 6 ? 2.1 : 1.8;
-	}
-	/** A lift that no longer runs: its towers and cable stand, with nothing on them. */
-	const isOutOfService = (f: Feature) =>
-		f.properties?.status === 'disused' || f.properties?.status === 'abandoned';
 	/** A lift's name for its label, marked ⛔ when it no longer runs. */
 	function liftName(f: Feature) {
 		const name = f.properties?.nameEn;
 		return name && isOutOfService(f) ? `⛔ ${name}` : name;
 	}
-	/** Metres a second: from the ride time where the lift has one, else typical for its kind. */
-	function liftSpeed(f: Feature) {
-		if (isOutOfService(f)) return 0;
-		const { lengthMeters, durationSecs } = f.properties ?? {};
-		if (lengthMeters && durationSecs) return lengthMeters / durationSecs;
-		if (isCarpet(f)) return 0.7;
-		return isCableCar(f) ? 8 : isGondola(f) ? 5 : seats(f) >= 4 && !isRopeTow(f) ? 4 : 2;
-	}
-
-	/** The colour of a run by its difficulty, with `other` for one that has none of these. */
-	let runColors = $state({
-		easy: '#2f9e44',
-		intermediate: '#d6336c',
-		advanced: '#212529',
-		other: '#868e96'
-	});
+	/** The colour of a run by its difficulty, which the colour pickers below change. */
+	let runColors = $state<Record<Difficulty, string>>({ ...RUN_COLORS });
 	// How far the view is from what it looks at, in radii of the diorama.
 	let distance = $state<number>();
-	/**
-	 * How far towards white the runs are drawn: their own colour from afar, and paler as the view
-	 * closes in, where a run is wide on screen and would weigh on the snow. It moves in steps,
-	 * so that the runs are not drawn again on every frame of a zoom.
-	 */
-	const runPaleness = $derived.by(() => {
-		const near = Math.min(1, Math.max(0, (1.5 - (distance ?? Infinity)) / 1.2));
-		return Math.round(near * 5) / 10;
-	});
-	/** `hex` mixed `amount` of the way to white. */
-	function paler(hex: string, amount: number) {
-		const mixed = [1, 3, 5].map((at) => {
-			const channel = parseInt(hex.slice(at, at + 2), 16);
-			return Math.round(channel + (255 - channel) * amount);
-		});
-		return `rgb(${mixed.join(' ')})`;
-	}
-	const runColor = (f: Feature) =>
-		paler(
-			runColors[f.properties?.difficulty as keyof typeof runColors] ?? runColors.other,
-			runPaleness
-		);
 	/**
 	 * Size of the texture the runs, roads and water are drawn into: twice as fine once the view
 	 * is close enough for its pixels to show.
@@ -466,7 +397,7 @@
 			{#if showBuildings}
 				<Drape data={scene} filter={isCarpark} paint={CARPARK_PAINT} />
 			{/if}
-			<Drape data={features} filter={isRun} paint={(f) => ({ stroke: runColor(f), width: 3 })} />
+			<SkiRuns data={features} colors={runColors} />
 			{#if showWater}
 				<!-- Over the contour lines: a hazard should never be hidden by them. -->
 				<Drape data={scene} filter={(f) => isWater(f) || isWaterway(f)} paint={waterPaint} above />
@@ -486,35 +417,7 @@
 					limit={400_000}
 				/>
 			{/if}
-			<Carpet
-				data={features}
-				filter={isMagicCarpet}
-				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
-			/>
-			<Lift
-				data={features}
-				filter={isAerial}
-				height={(f) => (isCableCar(f) ? 20 : isGondola(f) ? 14 : isRopeTow(f) ? 1.1 : 4.5)}
-				clearance={(f) => (isCabin(f) || isRopeTow(f) ? 0 : 4.2)}
-				stations={(f) => !isRopeTow(f)}
-				stationModel={(f) => (isCabin(f) ? null : liftStation)}
-				carrier={(f) => (isCabin(f) ? 'cabin' : isRopeTow(f) ? 'ball' : 'chair')}
-				shuttle={isCableCar}
-				carrierEvery={(f) =>
-					isOutOfService(f) ? 0 : isGondola(f) ? 45 : isRopeTow(f) ? 12 : seats(f) >= 4 ? 28 : 14}
-				carrierSize={carrierWidth}
-				speed={(f) => (liftsMoving ? liftSpeed(f) : 0)}
-				carrierColor={(f) => (isCabin(f) ? '#f08c00' : '#e03131')}
-				carrierModel={(f) =>
-					isCableCar(f)
-						? ropeway
-						: isGondola(f)
-							? gondola
-							: isRopeTow(f)
-								? null
-								: chairlifts[seats(f)]}
-				carrierParts={(f) => ({ Hood: f.properties?.bubble ? 0 : false })}
-			/>
+			<SkiLifts data={features} moving={liftsMoving} />
 			{#if showBuildings}
 				<Building data={scene} filter={isBuilding} height={buildingHeight} roofColor="#5c6670" />
 			{/if}
