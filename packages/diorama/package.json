@@ -1,6 +1,6 @@
 {
 	"name": "@liquidx/diorama",
-	"version": "0.8.0",
+	"version": "0.9.0",
 	"description": "Svelte viewer for terrain diorama GLBs exported from liquidx-carto, with the contour and soil shader.",
 	"type": "module",
 	"license": "MIT",
