@@ -373,10 +373,10 @@
 				const rest = result.labels.filter(
 					(f) => !f.properties.locationId || f.properties.locationId === locationId
 				);
-				// Labels for another resort switch to it; for this one they are added.
+				// Labels for another resort switch to it; either way they join those kept there.
 				if (result.locationId && result.locationId !== locationId) {
 					go(result.locationId);
-					setLabels(rest);
+					setLabels(merged(loadStored(result.locationId), rest));
 				} else if (rest.length || !elsewhere.size) setLabels(merged(labels, rest));
 				else labels = loadStored(locationId);
 			} else if (result.type === 'prediction') {
