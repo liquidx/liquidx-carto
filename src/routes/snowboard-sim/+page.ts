@@ -1,7 +1,7 @@
 import { error } from '@sveltejs/kit';
 import type { FeatureCollection } from 'geojson';
 import type { FeaturesFile } from '$lib/snowboard/resort';
-import { isLocationId, locationUrls } from '$lib/diorama/location';
+import { isLocationId, locationUrls, woodsOf } from '$lib/diorama/location';
 import { loadLocations } from '$lib/diorama/locations';
 import { findTool } from '$lib/tools';
 import type { PageLoad } from './$types';
@@ -23,13 +23,19 @@ export const load: PageLoad = async ({ fetch, url }) => {
 		return { ...page, locationId: '', features: null, woods: null, water: null };
 	const locationId = requested;
 	const urls = locationUrls(locationId);
-	const [features, scene] = await Promise.all([
+	const collection = (url: string) =>
+		fetch(url)
+			.then((r) => (r.ok ? (r.json() as Promise<FeatureCollection>) : null))
+			.catch(() => null);
+	const [features, scene, woods] = await Promise.all([
 		fetch(urls.features).then((r) => (r.ok ? r.json() : null)),
 		// The scene from OpenStreetMap, written by `pnpm diorama-scene build`; optional.
-		fetch(urls.scene).then((r) => (r.ok ? (r.json() as Promise<FeatureCollection>) : null))
+		collection(urls.scene),
+		// Woods planted in place of the scene's, as the Snow Diorama does; optional.
+		collection(urls.woods)
 	]);
 	if (!features) error(404, `no data for location "${locationId}"`);
-	// The sim plants trees in the scene's woods; its map shows them and the water.
+	// The sim plants trees in the woods file's woods, else the scene's; its map shows them and the water.
 	const only = (...kinds: string[]): FeatureCollection | null =>
 		scene && {
 			type: 'FeatureCollection',
@@ -39,7 +45,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
 		...page,
 		locationId,
 		features: features as FeaturesFile,
-		woods: only('wood'),
+		woods: scene || woods ? woodsOf(scene, woods) : null,
 		water: only('water', 'waterway')
 	};
 };

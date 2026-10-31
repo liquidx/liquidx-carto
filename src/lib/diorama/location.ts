@@ -22,7 +22,10 @@ export function locationUrls(locationId: string, baseUrl = LOCATION_BASE_URL) {
 		 * `pnpm diorama-scene build`; each feature has a `kind`.
 		 */
 		scene: `${base}-scene.geojson`,
-		/** What the scene file replaced: only its woods. Read when a location has no scene file yet. */
+		/**
+		 * Woods to plant in place of the scene's, such as those `pnpm tessera-classifier
+		 * predict-all` maps; only its `kind: wood` features are read.
+		 */
 		woods: `${base}-woods.geojson`,
 		/** The terrain as a diorama GLB, exported from the Mountain Diorama tool. */
 		glb: `${base}.glb`
@@ -38,9 +41,11 @@ export interface LocationData {
 	features: LocationFeatures;
 	/**
 	 * The scene features (`kind` of `wood`, `water`, `waterway`, `building`, `road` or
-	 * `carpark`). Only woods when the location has the older woods file, empty when it has neither.
+	 * `carpark`), empty when the location has none.
 	 */
 	scene: FeatureCollection;
+	/** The woods file, which overrides the scene's woods, or null when the location has none. */
+	woods: (FeatureCollection & { metadata?: { source?: string; bounds?: number[] } }) | null;
 	/** The terrain GLB, or null when the location has none and the terrain has to be built. */
 	glb: ArrayBuffer | null;
 	/** Files that were not there, by name, so the page can say so. */
@@ -62,9 +67,21 @@ async function optional<T>(
 	return read(response);
 }
 
+/** The woods to plant: the woods file's when the location has one, else the scene's. */
+export function woodsOf(scene: FeatureCollection | null, woods: FeatureCollection | null) {
+	return {
+		type: 'FeatureCollection' as const,
+		features: (woods ?? scene ?? EMPTY).features.filter((f) => f.properties?.kind === 'wood')
+	};
+}
+
+const isCollection = (data: unknown): data is FeatureCollection =>
+	(data as FeatureCollection)?.type === 'FeatureCollection' &&
+	Array.isArray((data as FeatureCollection).features);
+
 /**
- * Fetch everything for a location. The features are required; the scene and the GLB are
- * optional, so a location can be shown before all of its files are uploaded.
+ * Fetch everything for a location. The features are required; the scene, the woods file and
+ * the GLB are optional, so a location can be shown before all of its files are uploaded.
  */
 export async function fetchLocation(
 	locationId: string,
@@ -78,12 +95,14 @@ export async function fetchLocation(
 		throw new Error(`Not a location id: ${JSON.stringify(locationId)}`);
 	const urls = locationUrls(locationId, base);
 	const collection = (r: Response) => r.json() as Promise<FeatureCollection>;
-	const [features, scene, glb] = await Promise.all([
+	const [features, scene, woods, glb] = await Promise.all([
 		optional(fetch, urls.features, (r) => r.json() as Promise<LocationFeatures>, signal),
-		// A location exported before the scene tool may still have only its woods.
-		optional(fetch, urls.scene, collection, signal).then(
-			(s) => s ?? optional(fetch, urls.woods, collection, signal)
-		),
+		optional(fetch, urls.scene, collection, signal),
+		// Only woods, so one that can't be read leaves the scene's.
+		optional(fetch, urls.woods, collection, signal).catch((e) => {
+			if (signal?.aborted) throw e;
+			return null;
+		}),
 		optional(fetch, urls.glb, (r) => r.arrayBuffer(), signal)
 	]);
 	if (!features) throw new Error(`No data for location "${locationId}"`);
@@ -93,5 +112,12 @@ export async function fetchLocation(
 	const missing: LocationData['missing'] = [];
 	if (!scene) missing.push('scene');
 	if (!glb) missing.push('glb');
-	return { locationId, features, scene: scene ?? EMPTY, glb, missing };
+	return {
+		locationId,
+		features,
+		scene: scene ?? EMPTY,
+		woods: isCollection(woods) ? woods : null,
+		glb,
+		missing
+	};
 }

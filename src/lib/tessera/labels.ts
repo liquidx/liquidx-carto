@@ -10,7 +10,11 @@ import type { ClassStats } from './classify.ts';
 import { DEFAULT_CLASSES, isClass, labelId, type LabelClass } from './classes.ts';
 import { isModel, type ClassifierModel } from './model.ts';
 
-export type LabelFeature = Feature<Point | Polygon, { id: string; label: string }>;
+/** A label; one from a file of every resort's labels says which resort it was drawn at. */
+export type LabelFeature = Feature<
+	Point | Polygon,
+	{ id: string; label: string; locationId?: string }
+>;
 export type Box = [west: number, south: number, east: number, north: number];
 
 /** What a prediction from the page or `pnpm tessera-classifier predict` carries. */
@@ -70,6 +74,26 @@ export function labelsFile(
 }
 
 /**
+ * The labels of every resort as one file for `pnpm tessera-classifier train`, each marked with
+ * the resort it was drawn at, so a model learns from them all and the page can hand them back.
+ */
+export function everyLabelsFile(
+	byLocation: Record<string, LabelFeature[]>,
+	classes: LabelClass[]
+): FeatureCollection & { metadata: object } {
+	const ids = Object.keys(byLocation)
+		.filter((id) => byLocation[id].length)
+		.sort();
+	return {
+		type: 'FeatureCollection',
+		metadata: { locations: ids, exportedAt: new Date().toISOString(), classes },
+		features: ids.flatMap((locationId) =>
+			byLocation[locationId].map((f) => ({ ...f, properties: { ...f.properties, locationId } }))
+		)
+	};
+}
+
+/**
  * What a dropped file is: labels (features with a `label` naming a class, from this page or
  * written by hand), a prediction (features with `metadata.probability` or `source: tessera`),
  * or a model.
@@ -98,7 +122,10 @@ export function readDropped(
 				properties: {
 					id: String(f.properties.id ?? newId()),
 					// Labels from before the classes were renamed come back under the new names.
-					label: labelId(f.properties.label)
+					label: labelId(f.properties.label),
+					...(typeof f.properties.locationId === 'string' && {
+						locationId: f.properties.locationId
+					})
 				},
 				geometry: f.geometry
 			})),
@@ -151,6 +178,23 @@ export function store(locationId: string, labels: LabelFeature[]) {
 	} catch {
 		// Private windows and full storage: the labels still live until the page closes.
 	}
+}
+
+/** The labels kept here for every resort with any, by location id. */
+export function loadAllStored(): Record<string, LabelFeature[]> {
+	const out: Record<string, LabelFeature[]> = {};
+	try {
+		for (const prefix of [storageKey(''), oldKey('')])
+			for (const key of Object.keys(localStorage)) {
+				const id = key.slice(prefix.length);
+				if (!key.startsWith(prefix) || id in out) continue;
+				const labels = loadStored(id);
+				if (labels.length) out[id] = labels;
+			}
+	} catch {
+		// Blocked storage keeps nothing.
+	}
+	return out;
 }
 
 const MODELS_KEY = 'tessera-classifier:models';

@@ -45,6 +45,7 @@
 	import {
 		fetchLocation,
 		isLocationId,
+		woodsOf,
 		type LocationData,
 		type LocationFeatures
 	} from '$lib/diorama/location';
@@ -102,6 +103,7 @@
 				if (controller.signal.aborted) return;
 				location = next;
 				loading = false;
+				woodsFrom = next.woods ? 'file' : 'scene';
 				const url = new URL(window.location.href);
 				// A URL without an id means the local files; it only gets one once snowline is read.
 				if (!local && url.searchParams.get('locationId') !== id) {
@@ -135,18 +137,19 @@
 	const isRoad = kind('road');
 	const isCarpark = kind('carpark');
 	/**
-	 * Woods to plant instead of the scene's: a prediction from the Tessera Classifier or `pnpm
-	 * tessera-classifier predict`, loaded from disk. It belongs to the resort it was loaded for.
+	 * Woods to plant instead of the scene's: the resort's woods file, planted when it has one,
+	 * or a prediction from the Tessera Classifier loaded from disk in its place. A loaded one
+	 * belongs to the resort it was loaded for.
 	 */
 	let woodsOverride = $state.raw<(Prediction & { name: string }) | null>(null);
-	let woodsFrom = $state<'osm' | 'tessera'>('osm');
+	let woodsFrom = $state<'scene' | 'file'>('scene');
 	let woodsInput = $state<HTMLInputElement>();
 	let woodsMessage = $state('');
 	$effect(() => {
 		void locationId;
 		untrack(() => {
 			woodsOverride = null;
-			woodsFrom = 'osm';
+			woodsFrom = 'scene';
 			woodsMessage = '';
 		});
 	});
@@ -163,26 +166,34 @@
 			return;
 		}
 		woodsOverride = { ...result.prediction, name: file.name };
-		woodsFrom = 'tessera';
+		woodsFrom = 'file';
 		woodsMessage = '';
 	}
 	function removeWoods() {
 		woodsOverride = null;
-		woodsFrom = 'osm';
+		woodsFrom = location?.woods ? 'file' : 'scene';
 	}
-	/** Whether the override was predicted over another square than this scene's. */
+	/** The woods file to switch to: the loaded one, else the resort's own. */
+	const woodsFile = $derived(
+		woodsOverride ??
+			(location?.woods
+				? {
+						features: location.woods,
+						bounds: location.woods.metadata?.bounds,
+						source: location.woods.metadata?.source,
+						name: `${location.locationId}-woods.geojson`
+					}
+				: null)
+	);
+	/** Whether the woods file was made for another square than this scene's. */
 	const woodsElsewhere = $derived.by(() => {
-		const a = woodsOverride?.bounds;
+		const a = woodsFile?.bounds;
 		const b = (scene as { metadata?: { bounds?: number[] } }).metadata?.bounds;
 		return !!a && !!b && a.some((v, i) => Math.abs(v - b[i]) > 1e-4);
 	});
-	const woods = $derived<FeatureCollection>({
-		type: 'FeatureCollection',
-		features: (woodsFrom === 'tessera' && woodsOverride
-			? woodsOverride.features
-			: scene
-		).features.filter(isWood)
-	});
+	const woods = $derived<FeatureCollection>(
+		woodsOf(scene, woodsFrom === 'file' ? (woodsFile?.features ?? null) : null)
+	);
 	/** A lift's name for its label, marked ⛔ when it no longer runs. */
 	function liftName(f: Feature) {
 		const name = f.properties?.nameEn;
@@ -497,13 +508,14 @@
 		</div>
 		<div class="control">
 			<span class="label">woods</span>
-			{#if woodsOverride}
+			{#if woodsFile}
 				<Segmented
 					label="woods from"
-					options={[{ value: 'osm', label: 'openstreetmap' }, { value: 'tessera' }]}
+					options={[{ value: 'scene' }, { value: 'file', label: 'woods file' }]}
 					bind:value={woodsFrom}
 				/>
-			{:else}
+			{/if}
+			{#if !woodsOverride}
 				<Button size="sm" onclick={() => woodsInput?.click()}>load tessera woods</Button>
 			{/if}
 			<input
@@ -518,11 +530,12 @@
 			/>
 			{#if woodsMessage}
 				<span class="error">{woodsMessage}</span>
-			{:else if woodsOverride}
-				<span class="note">
-					{woodsOverride.name}{#if woodsElsewhere}: <span class="warn">made for another square</span
-						>{/if} ·
-					<button class="link" type="button" onclick={removeWoods}>remove</button>
+			{:else if woodsFile}
+				<span class="note" title={woodsFile.source}>
+					{woodsFile.name}{#if woodsElsewhere}: <span class="warn">made for another square</span
+						>{/if}{#if woodsOverride}
+						·
+						<button class="link" type="button" onclick={removeWoods}>remove</button>{/if}
 				</span>
 			{/if}
 		</div>

@@ -96,9 +96,11 @@ Overture's own (Microsoft and Google), with no OpenStreetMap id.
 
 ```sh
 pnpm tessera-classifier train ~/Downloads/appi-kogen-tessera-labels.geojson [more.geojson …]
+pnpm tessera-classifier train ~/Downloads/tessera-labels.geojson
 pnpm tessera-classifier predict static/diorama/appi-kogen-scene.geojson
 pnpm tessera-classifier predict https://content.snowline.jp/terrain/niseko-scene.geojson \
   --scene-out data/tessera-classifier/niseko-scene.geojson
+pnpm tessera-classifier predict-all [appi-kogen niseko …]
 ```
 
 [Tessera](https://geotessera.org) publishes a 128-number embedding for every 10 m pixel of land
@@ -117,14 +119,19 @@ file defines gets one of its own, unmapped. Labels from before the rename, `tree
 
 1. Label on the /tessera-classifier page: areas (or points) of each class, at least two of each
    and spread over the scene, and export them. The labels file is GeoJSON with a `label` on each
-   feature, which the geotessera `classify` examples read too.
+   feature, which the geotessera `classify` examples read too. The page keeps each resort's
+   labels apart; **export all _n_ resorts** writes them as one `tessera-labels.geojson`, each
+   label marked with its `locationId`, and dropping that file back on the page returns each
+   to its resort.
 2. `train` reads the embedding of every pixel under each area (up to 400 an area, `--per-area`)
    and at each point, and fits logistic regression on them scaled to unit length, a class against
    the rest, for every class with labels. Its L2 penalty is picked from five by how well it does
    on labels held out a whole label at a time: the honest number, as pixels of one area are too
    alike to test each other. The model is a JSON file of 128 weights and a bias a class, with the
-   classes it learned, `data/tessera-classifier/model.json` unless `-o` says otherwise; train on
-   the labels of several resorts at once to generalise.
+   classes it learned, `data/tessera-classifier/model.json` unless `-o` says otherwise. Train
+   on the labels of several resorts at once, the file of all of them or several of one each,
+   for one model that works across them all; the page's **train on _n_ resorts** does the same.
+   Models aren't merged: a model is only as general as the labels it was trained on.
 3. `predict` maps the chance of each class over the scene's square (its `metadata.bounds`),
    traces where a mapped class's crosses 0.5 (`--threshold`) with marching squares, drops areas
    and holes under 600 m² (`--min-area`), and writes the rest beside the scene as
@@ -133,10 +140,18 @@ file defines gets one of its own, unmapped. Labels from before the rename, `tree
    image in the metadata, and how they compare with the scene's own features of that kind.
    `--scene-out` writes the scene with its features of the mapped kinds swapped for these, which
    the dioramas read unchanged.
-4. To see the woods planted, use **load tessera woods** on the Snow Diorama page: it switches the
-   resort's trees between the OpenStreetMap woods and the file's, and warns when the file was
-   predicted over another resort's square. Nothing is uploaded; reload or change resort to drop it.
-5. Drop the prediction on the /tessera-classifier page to see where it went wrong, label more
+4. `predict-all` runs `predict` over every resort the app lists (`static/terrain-locations.json`,
+   or the ids given), reading `<id>-scene.geojson` from snowline's terrain files
+   (`../snowline-data/terrain`, `--dir`) and writing `<id>-woods.geojson` beside each.
+   Files already there are left alone unless `--force`, so a stopped run picks up where it
+   left off; a resort that fails is listed at the end. The embeddings it reads, about 50 MB a
+   resort, aren't kept unless `--cache`.
+5. The Snow Diorama and the Snowboard Sim plant trees in a resort's `<id>-woods.geojson`, once
+   uploaded, in place of its scene's woods; the Snow Diorama switches between the two to
+   compare, and warns when the file was made over another square than the scene's. Its
+   **load tessera woods** plants a prediction from disk instead, without uploading it; reload
+   or change resort to drop it.
+6. Drop the prediction on the /tessera-classifier page to see where it went wrong, label more
    there, and train again.
 
 Embeddings are read with [zarrita](https://github.com/manzt/zarrita.js) straight from the public

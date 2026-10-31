@@ -3,7 +3,8 @@
 	defined here, kept in the browser and written into the labels exported), and train a classifier of Tessera's embeddings on them, here or with
 	`pnpm tessera-classifier` (the same code). The resort's scene square, its OpenStreetMap woods
 	and its runs are read as the Snow Diorama reads them; the labels are kept in the browser per
-	resort and exported as GeoJSON, and the models, one per Tessera release and year to compare
+	resort and exported as GeoJSON, one resort's or every resort's at once, and the models, trained
+	on this resort's labels or every resort's, one per Tessera release and year to compare
 	them, are kept for every resort. A prediction on the map shows where the classifier and
 	OpenStreetMap disagree, which is where the next labels are worth drawing.
 -->
@@ -49,7 +50,9 @@
 		type TesseraVersion
 	} from '$lib/tessera/store';
 	import {
+		everyLabelsFile,
 		labelsFile,
+		loadAllStored,
 		loadClasses,
 		loadModels,
 		loadStored,
@@ -276,17 +279,36 @@
 		download(JSON.stringify(file, null, 1), fileName);
 	}
 
-	const canTrain = $derived(labelledClasses(labels, classes).length >= 2);
+	/** The labels of every resort with any, this one's as they are now. */
+	const everywhere = $derived.by(() => {
+		const all = { ...loadAllStored(), [locationId]: labels };
+		if (!labels.length) delete all[locationId];
+		return all;
+	});
+	const resortCount = $derived(Object.keys(everywhere).length);
+	let trainOn = $state<'here' | 'everywhere'>('here');
+	/** One model for every resort learns from the labels of them all. */
+	const trainLabels = $derived(
+		trainOn === 'everywhere' ? Object.values(everywhere).flat() : labels
+	);
+	const canTrain = $derived(labelledClasses(trainLabels, classes).length >= 2);
+
+	function exportEveryLabels() {
+		download(
+			JSON.stringify(everyLabelsFile(everywhere, classes), null, 1),
+			'tessera-labels.geojson'
+		);
+	}
 
 	async function train() {
 		busy = 'train';
 		progress = '';
 		try {
 			keep(
-				await trainModel(tesseraStore(version), labels, {
+				await trainModel(tesseraStore(version), trainLabels, {
 					classes,
 					year: Number(year),
-					names: [fileName],
+					names: trainOn === 'everywhere' ? Object.keys(everywhere).sort() : [fileName],
 					onprogress: (m) => (progress = m)
 				})
 			);
@@ -339,14 +361,24 @@
 						mergeClasses(classes, result.classes ?? [])
 					)
 				);
+				// Labels marked with their resort, from every resort's file, go back to it.
+				const elsewhere = Map.groupBy(
+					result.labels.filter((f) => f.properties.locationId),
+					(f) => f.properties.locationId!
+				);
+				for (const [id, more] of elsewhere) {
+					if (id === locationId || !isLocationId(id)) continue;
+					store(id, merged(loadStored(id), more));
+				}
+				const rest = result.labels.filter(
+					(f) => !f.properties.locationId || f.properties.locationId === locationId
+				);
 				// Labels for another resort switch to it; for this one they are added.
 				if (result.locationId && result.locationId !== locationId) {
 					go(result.locationId);
-					setLabels(result.labels);
-				} else {
-					const have = new Set(labels.map((f) => f.properties.id));
-					setLabels([...labels, ...result.labels.filter((f) => !have.has(f.properties.id))]);
-				}
+					setLabels(rest);
+				} else if (rest.length || !elsewhere.size) setLabels(merged(labels, rest));
+				else labels = loadStored(locationId);
 			} else if (result.type === 'prediction') {
 				prediction = result.prediction;
 				resultFile = null;
@@ -359,6 +391,17 @@
 				message = `${file.name} has no labels, prediction or model`;
 			}
 		}
+	}
+
+	/** The labels with the new ones added, by id, without the resort they came marked with. */
+	function merged(labels: LabelFeature[], more: LabelFeature[]) {
+		const have = new Set(labels.map((f) => f.properties.id));
+		return [
+			...labels,
+			...more
+				.filter((f) => !have.has(f.properties.id))
+				.map((f) => ({ ...f, properties: { id: f.properties.id, label: f.properties.label } }))
+		];
 	}
 
 	const pct = (v: number | null | undefined) => (v == null ? '–' : Math.round(v * 100));
@@ -525,6 +568,9 @@
 				<Button variant="primary" disabled={!labels.length} onclick={exportLabels}>
 					export labels
 				</Button>
+				{#if resortCount > 1}
+					<Button onclick={exportEveryLabels}>export all {resortCount} resorts</Button>
+				{/if}
 				{#if confirmClear}
 					<Button
 						variant="danger"
@@ -544,6 +590,20 @@
 					<Select label="tessera" options={RELEASE_OPTIONS} bind:value={version} />
 					<Select label="year" options={yearOptions} bind:value={year} />
 				</div>
+				{#if resortCount > 1 || trainOn === 'everywhere'}
+					<Segmented
+						label="train on"
+						options={[
+							{ value: 'here', label: 'this resort', count: labels.length },
+							{
+								value: 'everywhere',
+								label: `${resortCount} resorts`,
+								count: Object.values(everywhere).flat().length
+							}
+						]}
+						bind:value={trainOn}
+					/>
+				{/if}
 				{#if years && !years.length}
 					<div class="note">no tessera {TESSERA_RELEASES[version].label} embeddings here</div>
 				{/if}

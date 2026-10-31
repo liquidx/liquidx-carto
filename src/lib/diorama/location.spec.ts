@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { fetchLocation, isLocationId, locationUrls } from './location';
+import { fetchLocation, isLocationId, locationUrls, woodsOf } from './location';
 
 const collection = (n: number) => ({
 	type: 'FeatureCollection',
 	features: Array.from({ length: n }, () => ({
 		type: 'Feature',
-		properties: {},
+		properties: { kind: 'wood' },
 		geometry: { type: 'Point', coordinates: [0, 0] }
 	}))
 });
@@ -63,12 +63,30 @@ describe('location data', () => {
 		expect(data.missing).toEqual([]);
 	});
 
-	it('falls back to the woods file of a location without a scene', async () => {
+	it('plants the woods file in place of the woods of the scene', async () => {
+		const data = await fetchLocation('x', {
+			fetch: serve({
+				'x-ski-features.geojson': collection(2),
+				'x-scene.geojson': collection(3),
+				'x-woods.geojson': collection(1)
+			})
+		});
+		expect(data.scene.features).toHaveLength(3);
+		expect(woodsOf(data.scene, data.woods).features).toHaveLength(1);
+		const without = await fetchLocation('x', {
+			fetch: serve({ 'x-ski-features.geojson': collection(2), 'x-scene.geojson': collection(3) })
+		});
+		expect(without.woods).toBeNull();
+		expect(woodsOf(without.scene, without.woods).features).toHaveLength(3);
+	});
+
+	it('plants the woods file of a location without a scene', async () => {
 		const data = await fetchLocation('x', {
 			fetch: serve({ 'x-ski-features.geojson': collection(2), 'x-woods.geojson': collection(1) })
 		});
-		expect(data.scene.features).toHaveLength(1);
-		expect(data.missing).toEqual(['glb']);
+		expect(data.scene.features).toEqual([]);
+		expect(woodsOf(data.scene, data.woods).features).toHaveLength(1);
+		expect(data.missing).toEqual(['scene', 'glb']);
 	});
 
 	it('does without the scene and the glb', async () => {

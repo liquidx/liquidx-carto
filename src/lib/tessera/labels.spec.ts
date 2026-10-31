@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { DEFAULT_CLASSES, classesForLabels, idFor } from './classes';
-import { areaM2, readDropped, tally, type LabelFeature } from './labels';
+import { areaM2, everyLabelsFile, readDropped, tally, type LabelFeature } from './labels';
 
 /** A square of about 100 m a side at the equator. */
 const square = (lon: number, lat: number, d = 0.0009) => [
@@ -47,6 +47,26 @@ describe('readDropped', () => {
 		// Any class a label names is kept: the file may define it, or the page add it.
 		expect(result.labels.map((f) => f.properties.label)).toEqual(['woods', 'forest']);
 		expect(result.labels[0].properties.id).toBe('a');
+	});
+
+	it('reads back the labels of every resort, each marked with its resort', () => {
+		const point = (id: string, label: string): LabelFeature => ({
+			type: 'Feature',
+			properties: { id, label },
+			geometry: { type: 'Point', coordinates: [0, 0] }
+		});
+		const file = everyLabelsFile(
+			{ niseko: [point('a', 'woods')], appi: [point('b', 'open')], empty: [] },
+			DEFAULT_CLASSES
+		);
+		expect(file.metadata).toMatchObject({ locations: ['appi', 'niseko'] });
+		const result = readDropped(JSON.parse(JSON.stringify(file)));
+		if (result.type !== 'labels') throw new Error(result.type);
+		expect(result.locationId).toBeUndefined();
+		expect(result.labels.map((f) => [f.properties.id, f.properties.locationId])).toEqual([
+			['b', 'appi'],
+			['a', 'niseko']
+		]);
 	});
 
 	it('tells a prediction from a scene', () => {
